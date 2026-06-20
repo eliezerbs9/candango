@@ -20,7 +20,7 @@ const NAV_ITEMS = [
   { label: 'Contacts', href: '/contacts/people', icon: IconUsers },
   { label: 'Activities', href: '/activities', icon: IconCalendarEvent },
   { label: 'Reports', href: '/reports', icon: IconChartBar },
-  { label: 'Settings', href: '/settings/members', icon: IconSettings },
+  { label: 'Settings', href: '/settings/general', icon: IconSettings },
 ];
 
 export function NavBar() {

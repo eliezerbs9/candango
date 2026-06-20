@@ -20,5 +20,5 @@ export function useAuth() {
 /** Temporary mock used by UI-1 forms until the real API exists. */
 export function mockUserFromEmail(email: string): AuthUser {
   const name = email.split('@')[0] || 'User';
-  return { id: 'usr_mock', name, email, orgName: 'My Company' };
+  return { id: 'usr_mock', name, email, orgId: 'org_mock', orgName: 'My Company' };
 }
