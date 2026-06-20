@@ -4,9 +4,9 @@ import { useDroppable } from '@dnd-kit/core';
 import { Box, Group, Paper, Stack, Text } from '@mantine/core';
 import { DealCard } from './DealCard';
 import { Money } from '@/components/primitives/Money';
-import type { Deal, Stage } from '@/lib/types';
+import type { ApiDeal, ApiStage } from '@/lib/api/types';
 
-export function StageColumn({ stage, deals }: { stage: Stage; deals: Deal[] }) {
+export function StageColumn({ stage, deals }: { stage: ApiStage; deals: ApiDeal[] }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   const total = deals.reduce((sum, d) => sum + d.value, 0);
 

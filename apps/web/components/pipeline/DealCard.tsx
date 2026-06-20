@@ -1,12 +1,11 @@
 'use client';
 
 import { useDraggable } from '@dnd-kit/core';
-import { Card, Group, Text } from '@mantine/core';
+import { Card, Text } from '@mantine/core';
 import { Money } from '@/components/primitives/Money';
-import { companyName } from '@/lib/mock/data';
-import type { Deal } from '@/lib/types';
+import type { ApiDeal } from '@/lib/api/types';
 
-export function DealCard({ deal }: { deal: Deal }) {
+export function DealCard({ deal }: { deal: ApiDeal }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: deal.id });
 
   const style: React.CSSProperties = {
@@ -21,17 +20,9 @@ export function DealCard({ deal }: { deal: Deal }) {
       <Text fw={500} size="sm" lineClamp={2}>
         {deal.title}
       </Text>
-      <Text size="xs" c="dimmed" mt={2}>
-        {companyName(deal.companyId)}
+      <Text fw={600} size="sm" mt="xs">
+        <Money value={deal.value} currency={deal.currency} />
       </Text>
-      <Group justify="space-between" mt="xs">
-        <Text fw={600} size="sm">
-          <Money value={deal.value} currency={deal.currency} />
-        </Text>
-        <Text size="xs" c="dimmed">
-          {deal.owner}
-        </Text>
-      </Group>
     </Card>
   );
 }

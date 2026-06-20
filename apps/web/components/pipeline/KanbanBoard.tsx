@@ -1,30 +1,28 @@
 'use client';
 
-import { useState } from 'react';
 import { DndContext, type DragEndEvent, PointerSensor, closestCorners, useSensor, useSensors } from '@dnd-kit/core';
 import { Group } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import { StageColumn } from './StageColumn';
-import type { Deal, Stage } from '@/lib/types';
+import type { ApiDeal, ApiStage } from '@/lib/api/types';
 
-export function KanbanBoard({ stages, initialDeals }: { stages: Stage[]; initialDeals: Deal[] }) {
-  const [deals, setDeals] = useState<Deal[]>(initialDeals);
+export function KanbanBoard({
+  stages,
+  deals,
+  onMove,
+}: {
+  stages: ApiStage[];
+  deals: ApiDeal[];
+  onMove: (dealId: string, stageId: string) => void;
+}) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over) return;
-    const targetStageId = String(over.id);
-
-    setDeals((current) =>
-      current.map((d) =>
-        d.id === active.id && d.stageId !== targetStageId
-          ? { ...d, stageId: targetStageId, stageChangedAt: new Date(0).toISOString() }
-          : d,
-      ),
-    );
-    // Optimistic UI: in production this PATCHes /deals/{id}; rollback on error.
-    notifications.show({ message: 'Deal moved', color: 'green', autoClose: 1200 });
+    const dealId = String(active.id);
+    const stageId = String(over.id);
+    const deal = deals.find((d) => d.id === dealId);
+    if (deal && deal.stageId !== stageId) onMove(dealId, stageId);
   }
 
   return (

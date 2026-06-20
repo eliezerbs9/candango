@@ -47,6 +47,13 @@ export class PipelinesService {
 
   // --- Stages ---
 
+  listAllStages(orgId: string) {
+    return this.prisma.stage.findMany({
+      where: { orgId },
+      orderBy: [{ pipelineId: 'asc' }, { position: 'asc' }],
+    });
+  }
+
   async listStages(orgId: string, pipelineId: string) {
     await this.get(orgId, pipelineId);
     return this.prisma.stage.findMany({

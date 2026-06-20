@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateDealDto, UpdateDealDto } from './dto/deal.dto';
 
 export interface DealFilters {
+  pipelineId?: string;
   stageId?: string;
   status?: string;
   ownerUserId?: string;
@@ -18,6 +19,7 @@ export class DealsService {
       where: {
         orgId,
         deletedAt: null,
+        pipelineId: filters.pipelineId,
         stageId: filters.stageId,
         status: filters.status,
         ownerUserId: filters.ownerUserId,

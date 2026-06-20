@@ -1,27 +1,43 @@
-import { notFound } from 'next/navigation';
-import { Group } from '@mantine/core';
+'use client';
+
+import { useParams } from 'next/navigation';
+import { Center, Loader, Text } from '@mantine/core';
 import { PageHeader } from '@/components/primitives/PageHeader';
-import { KanbanBoard } from '@/components/pipeline/KanbanBoard';
 import { PipelineSwitcher } from '@/components/pipeline/PipelineSwitcher';
-import { dealsByPipeline, pipelines, stagesByPipeline } from '@/lib/mock/data';
+import { KanbanBoard } from '@/components/pipeline/KanbanBoard';
+import { useDeals, useMoveDeal, usePipelines, useStages } from '@/lib/api/hooks';
 
-export default async function PipelinePage({ params }: { params: Promise<{ pipelineId: string }> }) {
-  const { pipelineId } = await params;
-  const pipeline = pipelines.find((p) => p.id === pipelineId);
-  if (!pipeline) notFound();
+export default function PipelinePage() {
+  const params = useParams<{ pipelineId: string }>();
+  const pipelineId = params.pipelineId;
 
-  const stages = stagesByPipeline(pipelineId);
-  const deals = dealsByPipeline(pipelineId);
+  const { data: pipelines = [] } = usePipelines();
+  const { data: stages = [], isLoading: loadingStages } = useStages(pipelineId);
+  const { data: deals = [], isLoading: loadingDeals } = useDeals({ pipelineId });
+  const move = useMoveDeal(pipelineId);
 
   return (
     <>
       <PageHeader
         title="Pipelines"
         subtitle="Drag deals between stages"
-        actions={<PipelineSwitcher pipelines={pipelines} value={pipelineId} />}
+        actions={
+          pipelines.length > 0 ? <PipelineSwitcher pipelines={pipelines} value={pipelineId} /> : null
+        }
       />
-      <Group />
-      <KanbanBoard stages={stages} initialDeals={deals} />
+      {loadingStages || loadingDeals ? (
+        <Center mih="40vh">
+          <Loader />
+        </Center>
+      ) : stages.length === 0 ? (
+        <Text c="dimmed">This pipeline has no stages yet.</Text>
+      ) : (
+        <KanbanBoard
+          stages={stages}
+          deals={deals}
+          onMove={(id, stageId) => move.mutate({ id, stageId })}
+        />
+      )}
     </>
   );
 }

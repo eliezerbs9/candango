@@ -23,11 +23,12 @@ export class DealsController {
   @Get()
   list(
     @CurrentUser() u: AuthContext,
+    @Query('pipeline_id') pipelineId?: string,
     @Query('stage_id') stageId?: string,
     @Query('status') status?: string,
     @Query('owner_user_id') ownerUserId?: string,
   ) {
-    return this.svc.list(u.orgId, { stageId, status, ownerUserId });
+    return this.svc.list(u.orgId, { pipelineId, stageId, status, ownerUserId });
   }
 
   @Post()

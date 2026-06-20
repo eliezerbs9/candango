@@ -50,6 +50,11 @@ export class PipelinesController {
     return this.svc.remove(u.orgId, id);
   }
 
+  @Get('stages')
+  listAllStages(@CurrentUser() u: AuthContext) {
+    return this.svc.listAllStages(u.orgId);
+  }
+
   @Get('pipelines/:id/stages')
   listStages(@CurrentUser() u: AuthContext, @Param('id') id: string) {
     return this.svc.listStages(u.orgId, id);

@@ -2,9 +2,9 @@
 
 import { useRouter } from 'next/navigation';
 import { Select } from '@mantine/core';
-import type { Pipeline } from '@/lib/types';
+import type { ApiPipeline } from '@/lib/api/types';
 
-export function PipelineSwitcher({ pipelines, value }: { pipelines: Pipeline[]; value: string }) {
+export function PipelineSwitcher({ pipelines, value }: { pipelines: ApiPipeline[]; value: string }) {
   const router = useRouter();
   return (
     <Select
