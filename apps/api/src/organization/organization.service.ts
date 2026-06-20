@@ -7,6 +7,7 @@ const PUBLIC_FIELDS = {
   name: true,
   slug: true,
   plan: true,
+  logoUrl: true,
   onboardingState: true,
   createdAt: true,
 } as const;
@@ -29,7 +30,7 @@ export class OrganizationService {
     await this.get(orgId);
     return this.prisma.organization.update({
       where: { id: orgId },
-      data: { name: dto.name },
+      data: { name: dto.name, logoUrl: dto.logoUrl },
       select: PUBLIC_FIELDS,
     });
   }

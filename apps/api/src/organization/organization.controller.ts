@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser, type AuthContext } from '../auth/current-user.decorator';
 import { OrganizationService } from './organization.service';
 import { UpdateOrganizationDto } from './dto/organization.dto';
@@ -15,6 +16,7 @@ export class OrganizationController {
   }
 
   @Patch()
+  @UseGuards(AdminGuard)
   update(@CurrentUser() u: AuthContext, @Body() dto: UpdateOrganizationDto) {
     return this.svc.update(u.orgId, dto);
   }
