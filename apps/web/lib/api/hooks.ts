@@ -11,6 +11,7 @@ import { completeActivity, createActivity, getActivities } from './activities';
 import { getByRep, getPipelineReport, getWonLost } from './reports';
 import { deactivateUser, getRoles, getUsers, inviteUser, updateUser } from './members';
 import { getOrganization, updateOrganization } from './organization';
+import { getOnboarding, setOnboardingCompleted } from './onboarding';
 import type { ApiDeal } from './types';
 
 function useToken() {
@@ -273,5 +274,25 @@ export function useUpdateOrganization() {
   return useMutation({
     mutationFn: (body: { name?: string; logoUrl?: string }) => updateOrganization(token!, body),
     onSuccess: (data) => qc.setQueryData(['organization'], data),
+  });
+}
+
+// --- Onboarding ---
+
+export function useOnboarding() {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['onboarding'],
+    queryFn: () => getOnboarding(token!),
+    enabled: !!token,
+  });
+}
+
+export function useCompleteOnboarding() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (completed: boolean) => setOnboardingCompleted(token!, completed),
+    onSuccess: (data) => qc.setQueryData(['onboarding'], data),
   });
 }
