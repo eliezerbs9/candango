@@ -19,10 +19,32 @@ packages/     shared types / config                      (planned)
 Next.js + React 19 + TypeScript + **Mantine** · TanStack Query · Zustand · dnd-kit.
 
 ## Getting started
+
+### Frontend only (mock data)
 ```bash
 npm install          # installs all workspaces
 npm run dev          # starts apps/web on http://localhost:3000
 ```
+
+### Full stack (real API + Postgres)
+Requires a local PostgreSQL 16 (Docker `docker compose up -d`, or Homebrew below).
+
+```bash
+# 1) Postgres via Homebrew (one-time)
+brew install postgresql@16
+brew services start postgresql@16
+createdb candango
+
+# 2) API env + schema
+cp apps/api/.env.example apps/api/.env       # then set DATABASE_URL
+#   e.g. DATABASE_URL="postgresql://$USER@localhost:5432/candango?schema=public"
+npm --prefix apps/api run prisma:migrate     # applies migrations + generates client
+
+# 3) Run
+npm --prefix apps/api run start              # API on http://localhost:4000/v1
+npm --prefix apps/web run dev                # web on http://localhost:3000
+```
+Smoke test: `curl http://localhost:4000/v1/health`
 
 ## Status
 - [x] UI-0 — Frontend Foundation (app shell, theme, providers, data layer)
