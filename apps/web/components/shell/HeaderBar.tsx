@@ -3,6 +3,7 @@
 import { ActionIcon, Burger, Group, Text, useMantineColorScheme } from '@mantine/core';
 import { IconMoon, IconSun } from '@tabler/icons-react';
 import { Logo } from '@/components/brand/Logo';
+import { UserMenu } from './UserMenu';
 import { useAuth } from '@/lib/auth/useAuth';
 
 export function HeaderBar({ opened, onBurger }: { opened: boolean; onBurger: () => void }) {
@@ -29,6 +30,7 @@ export function HeaderBar({ opened, onBurger }: { opened: boolean; onBurger: () 
         >
           {colorScheme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
         </ActionIcon>
+        <UserMenu />
       </Group>
     </Group>
   );

@@ -5,6 +5,7 @@ import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '@/lib/auth/store';
 import { getAllStages, getPipelines, getStages } from './pipelines';
 import { getDeals, updateDeal, type DealFilters } from './deals';
+import { changePassword, getMe, updateProfile, type Profile } from './profile';
 import type { ApiDeal } from './types';
 
 function useToken() {
@@ -69,5 +70,30 @@ export function useMoveDeal(pipelineId: string) {
       notifications.show({ message: 'Could not move deal', color: 'red' });
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['deals'] }),
+  });
+}
+
+// --- Profile ---
+
+export function useProfile() {
+  const token = useToken();
+  return useQuery({ queryKey: ['me'], queryFn: () => getMe(token!), enabled: !!token });
+}
+
+export function useUpdateProfile() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<Pick<Profile, 'name' | 'phone' | 'avatarUrl'>>) =>
+      updateProfile(token!, body),
+    onSuccess: (data) => qc.setQueryData(['me'], data),
+  });
+}
+
+export function useChangePassword() {
+  const token = useToken();
+  return useMutation({
+    mutationFn: (body: { currentPassword: string; newPassword: string }) =>
+      changePassword(token!, body),
   });
 }

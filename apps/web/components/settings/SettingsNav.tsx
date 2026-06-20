@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Group } from '@mantine/core';
 
 const SECTIONS = [
+  { label: 'Profile', href: '/settings/profile' },
   { label: 'General', href: '/settings/general' },
   { label: 'Members', href: '/settings/members' },
   { label: 'Roles', href: '/settings/roles' },
