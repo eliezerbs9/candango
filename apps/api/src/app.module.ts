@@ -12,6 +12,7 @@ import { ActivitiesModule } from './activities/activities.module';
 import { ReportsModule } from './reports/reports.module';
 import { UsersModule } from './users/users.module';
 import { RolesModule } from './roles/roles.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -29,6 +30,7 @@ import { HealthController } from './health.controller';
     ReportsModule,
     UsersModule,
     RolesModule,
+    OnboardingModule,
   ],
   controllers: [HealthController],
 })
