@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateActivityDto, UpdateActivityDto } from './dto/activity.dto';
 
 @Injectable()
 export class ActivitiesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventEmitter2,
+  ) {}
 
   list(orgId: string) {
     return this.prisma.activity.findMany({
@@ -14,8 +18,8 @@ export class ActivitiesService {
     });
   }
 
-  create(orgId: string, assignedUserId: string, dto: CreateActivityDto) {
-    return this.prisma.activity.create({
+  async create(orgId: string, assignedUserId: string, dto: CreateActivityDto) {
+    const activity = await this.prisma.activity.create({
       data: {
         orgId,
         assignedUserId,
@@ -27,6 +31,8 @@ export class ActivitiesService {
         done: false,
       },
     });
+    this.events.emit('webhook.event', { orgId, type: 'activity.created', data: { activity } });
+    return activity;
   }
 
   async get(orgId: string, id: string) {

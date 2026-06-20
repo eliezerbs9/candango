@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePersonDto, UpdatePersonDto } from './dto/person.dto';
@@ -19,7 +20,10 @@ function shape(p: PersonRow) {
 
 @Injectable()
 export class PersonsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventEmitter2,
+  ) {}
 
   async list(orgId: string) {
     const rows = await this.prisma.person.findMany({
@@ -39,7 +43,9 @@ export class PersonsService {
         companyId: dto.companyId ?? null,
       },
     });
-    return shape(row);
+    const person = shape(row);
+    this.events.emit('webhook.event', { orgId, type: 'person.created', data: { person } });
+    return person;
   }
 
   async get(orgId: string, id: string) {

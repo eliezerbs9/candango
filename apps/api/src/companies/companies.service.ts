@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
 
 @Injectable()
 export class CompaniesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventEmitter2,
+  ) {}
 
   list(orgId: string) {
     return this.prisma.company.findMany({
@@ -14,11 +18,13 @@ export class CompaniesService {
     });
   }
 
-  create(orgId: string, dto: CreateCompanyDto) {
-    return this.prisma.company.create({
+  async create(orgId: string, dto: CreateCompanyDto) {
+    const company = await this.prisma.company.create({
       data: { orgId, name: dto.name, domain: dto.domain ?? null },
       select: { id: true, name: true, domain: true },
     });
+    this.events.emit('webhook.event', { orgId, type: 'company.created', data: { company } });
+    return company;
   }
 
   async get(orgId: string, id: string) {

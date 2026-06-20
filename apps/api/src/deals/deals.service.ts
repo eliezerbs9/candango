@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDealDto, UpdateDealDto } from './dto/deal.dto';
@@ -12,7 +13,14 @@ export interface DealFilters {
 
 @Injectable()
 export class DealsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventEmitter2,
+  ) {}
+
+  private emit(orgId: string, type: string, deal: unknown) {
+    this.events.emit('webhook.event', { orgId, type, data: { deal } });
+  }
 
   list(orgId: string, filters: DealFilters = {}) {
     return this.prisma.deal.findMany({
@@ -28,8 +36,8 @@ export class DealsService {
     });
   }
 
-  create(orgId: string, ownerUserId: string, dto: CreateDealDto) {
-    return this.prisma.deal.create({
+  async create(orgId: string, ownerUserId: string, dto: CreateDealDto) {
+    const deal = await this.prisma.deal.create({
       data: {
         orgId,
         ownerUserId,
@@ -45,6 +53,8 @@ export class DealsService {
         stageChangedAt: new Date(),
       },
     });
+    this.emit(orgId, 'deal.created', deal);
+    return deal;
   }
 
   async get(orgId: string, id: string) {
@@ -65,7 +75,9 @@ export class DealsService {
       data.stage = { connect: { id: dto.stageId } };
       data.stageChangedAt = new Date(); // moving stage resets the rotting timer
     }
-    return this.prisma.deal.update({ where: { id }, data });
+    const deal = await this.prisma.deal.update({ where: { id }, data });
+    if (dto.stageId) this.emit(orgId, 'deal.stage_changed', deal);
+    return deal;
   }
 
   async remove(orgId: string, id: string) {
@@ -75,14 +87,18 @@ export class DealsService {
 
   async win(orgId: string, id: string) {
     await this.get(orgId, id);
-    return this.prisma.deal.update({ where: { id }, data: { status: 'won' } });
+    const deal = await this.prisma.deal.update({ where: { id }, data: { status: 'won' } });
+    this.emit(orgId, 'deal.won', deal);
+    return deal;
   }
 
   async lose(orgId: string, id: string, lostReason?: string) {
     await this.get(orgId, id);
-    return this.prisma.deal.update({
+    const deal = await this.prisma.deal.update({
       where: { id },
       data: { status: 'lost', lostReason: lostReason ?? null },
     });
+    this.emit(orgId, 'deal.lost', deal);
+    return deal;
   }
 }
