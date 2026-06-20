@@ -6,6 +6,8 @@ import { useAuthStore } from '@/lib/auth/store';
 import { getAllStages, getPipelines, getStages } from './pipelines';
 import { createDeal, getDeals, loseDeal, updateDeal, winDeal, type DealFilters } from './deals';
 import { changePassword, getMe, updateProfile, type Profile } from './profile';
+import { createCompany, createPerson, getCompanies, getPersons } from './contacts';
+import { completeActivity, createActivity, getActivities } from './activities';
 import type { ApiDeal } from './types';
 
 function useToken() {
@@ -130,5 +132,62 @@ export function useLoseDeal() {
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason?: string }) => loseDeal(token!, id, reason),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['deals'] }),
+  });
+}
+
+// --- Contacts ---
+
+export function usePersons() {
+  const token = useToken();
+  return useQuery({ queryKey: ['persons'], queryFn: () => getPersons(token!), enabled: !!token });
+}
+
+export function useCompanies() {
+  const token = useToken();
+  return useQuery({ queryKey: ['companies'], queryFn: () => getCompanies(token!), enabled: !!token });
+}
+
+export function useCreatePerson() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; email?: string; phone?: string; companyId?: string }) =>
+      createPerson(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['persons'] }),
+  });
+}
+
+export function useCreateCompany() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; domain?: string }) => createCompany(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['companies'] }),
+  });
+}
+
+// --- Activities ---
+
+export function useActivities() {
+  const token = useToken();
+  return useQuery({ queryKey: ['activities'], queryFn: () => getActivities(token!), enabled: !!token });
+}
+
+export function useCreateActivity() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { type: 'call' | 'meeting' | 'task' | 'email'; subject: string; dueAt?: string }) =>
+      createActivity(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
+  });
+}
+
+export function useCompleteActivity() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => completeActivity(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
   });
 }
