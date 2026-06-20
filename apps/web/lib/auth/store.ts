@@ -3,10 +3,11 @@ import { persist } from 'zustand/middleware';
 
 export type AuthUser = {
   id: string;
-  name: string;
+  name: string | null;
   email: string;
   orgId: string;
   orgName: string;
+  role?: string;
 };
 
 type AuthState = {

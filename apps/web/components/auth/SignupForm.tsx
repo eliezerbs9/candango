@@ -1,15 +1,19 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Divider, PasswordInput, Stack, TextInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
-import { useAuth, mockUserFromEmail } from '@/lib/auth/useAuth';
+import { useAuth } from '@/lib/auth/useAuth';
+import { apiSignup } from '@/lib/api/auth';
+import { ApiError } from '@/lib/api/client';
 import { OAuthButton } from './OAuthButton';
 
 export function SignupForm() {
   const router = useRouter();
   const { signIn } = useAuth();
+  const [loading, setLoading] = useState(false);
 
   const form = useForm({
     initialValues: { orgName: '', email: '', password: '' },
@@ -20,33 +24,33 @@ export function SignupForm() {
     },
   });
 
-  // Mock provisioning until apps/api exists; routes into onboarding.
-  const handleSubmit = form.onSubmit((values) => {
-    const user = { ...mockUserFromEmail(values.email), orgName: values.orgName };
-    signIn('mock-token', user);
-    notifications.show({ message: 'Workspace created — 7-day trial started', color: 'green' });
-    router.push('/onboarding');
+  const handleSubmit = form.onSubmit(async (values) => {
+    setLoading(true);
+    try {
+      const { token, user } = await apiSignup(values);
+      signIn(token, user);
+      notifications.show({ message: 'Workspace created — 7-day trial started', color: 'green' });
+      router.push('/onboarding');
+    } catch (e) {
+      notifications.show({
+        message: e instanceof ApiError ? e.message : 'Sign-up failed',
+        color: 'red',
+      });
+    } finally {
+      setLoading(false);
+    }
   });
-
-  const handleGoogle = () => {
-    signIn('mock-google-token', mockUserFromEmail('you@gmail.com'));
-    router.push('/onboarding');
-  };
 
   return (
     <Stack gap="md">
-      <OAuthButton onClick={handleGoogle} />
+      <OAuthButton onClick={() => notifications.show({ message: 'Google sign-in coming soon' })} />
       <Divider label="or" labelPosition="center" />
       <form onSubmit={handleSubmit}>
         <Stack gap="sm">
-          <TextInput
-            label="Company name"
-            placeholder="Acme Inc."
-            {...form.getInputProps('orgName')}
-          />
+          <TextInput label="Company name" placeholder="Acme Inc." {...form.getInputProps('orgName')} />
           <TextInput label="Work email" placeholder="you@company.com" {...form.getInputProps('email')} />
           <PasswordInput label="Password" {...form.getInputProps('password')} />
-          <Button type="submit" fullWidth mt="xs">
+          <Button type="submit" fullWidth mt="xs" loading={loading}>
             Start free trial
           </Button>
         </Stack>
