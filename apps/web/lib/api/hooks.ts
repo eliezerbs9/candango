@@ -10,6 +10,7 @@ import { createCompany, createPerson, getCompanies, getPersons } from './contact
 import { completeActivity, createActivity, getActivities } from './activities';
 import { getByRep, getPipelineReport, getWonLost } from './reports';
 import { deactivateUser, getRoles, getUsers, inviteUser, updateUser } from './members';
+import { getOrganization, updateOrganization } from './organization';
 import type { ApiDeal } from './types';
 
 function useToken() {
@@ -252,5 +253,25 @@ export function useDeactivateUser() {
   return useMutation({
     mutationFn: (id: string) => deactivateUser(token!, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
+// --- Organization (workspace) ---
+
+export function useOrganization() {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['organization'],
+    queryFn: () => getOrganization(token!),
+    enabled: !!token,
+  });
+}
+
+export function useUpdateOrganization() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name?: string; logoUrl?: string }) => updateOrganization(token!, body),
+    onSuccess: (data) => qc.setQueryData(['organization'], data),
   });
 }

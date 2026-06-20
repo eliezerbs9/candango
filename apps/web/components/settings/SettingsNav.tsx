@@ -10,7 +10,6 @@ const SECTIONS = [
   { label: 'Members', href: '/settings/members' },
   { label: 'Roles', href: '/settings/roles' },
   { label: 'Billing', href: '/settings/billing' },
-  { label: 'Branding', href: '/settings/branding' },
   { label: 'API Keys', href: '/settings/api-keys' },
   { label: 'Webhooks', href: '/settings/webhooks' },
   { label: 'Integrations', href: '/settings/integrations' },
