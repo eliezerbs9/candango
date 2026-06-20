@@ -1,10 +1,12 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 
-/** The authenticated principal, derived from the JWT. Carries the tenant (orgId). */
+/** The authenticated principal, from a user JWT or an API key. Carries the tenant (orgId). */
 export interface AuthContext {
   userId: string;
   orgId: string;
   role: string;
+  authType?: 'user' | 'api_key';
+  scopes?: string[];
 }
 
 export const CurrentUser = createParamDecorator(
