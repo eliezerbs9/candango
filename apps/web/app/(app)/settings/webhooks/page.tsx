@@ -1,37 +1,144 @@
 'use client';
 
-import { Badge, Button, Code, Group, Stack, Switch, Text } from '@mantine/core';
-import { IconPlus } from '@tabler/icons-react';
+import { useState } from 'react';
+import {
+  ActionIcon,
+  Badge,
+  Button,
+  Center,
+  Code,
+  CopyButton,
+  Group,
+  Loader,
+  Modal,
+  MultiSelect,
+  Stack,
+  Switch,
+  Text,
+  TextInput,
+} from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
+import { IconPlus, IconTrash } from '@tabler/icons-react';
+import { PageHeader } from '@/components/primitives/PageHeader';
 import { DataTable, type Column } from '@/components/data/DataTable';
-import { webhooks, type WebhookRow } from '@/lib/mock/admin';
+import { ApiError } from '@/lib/api/client';
+import { useAuth } from '@/lib/auth/useAuth';
+import { useCreateWebhook, useDeleteWebhook, useUpdateWebhook, useWebhooks } from '@/lib/api/hooks';
+import type { Webhook } from '@/lib/api/webhooks';
 
-const columns: Column<WebhookRow>[] = [
-  { key: 'url', header: 'Endpoint', render: (w) => <Code>{w.url}</Code> },
-  {
-    key: 'events',
-    header: 'Events',
-    render: (w) => (
-      <Group gap={4}>
-        {w.events.map((e) => (
-          <Badge key={e} variant="light" size="sm" tt="none">
-            {e}
-          </Badge>
-        ))}
-      </Group>
-    ),
-  },
-  { key: 'active', header: 'Active', render: (w) => <Switch defaultChecked={w.active} aria-label="Active" /> },
+const EVENTS = [
+  'deal.created',
+  'deal.updated',
+  'deal.deleted',
+  'deal.stage_changed',
+  'deal.won',
+  'deal.lost',
+  'person.created',
+  'person.updated',
+  'company.created',
+  'activity.created',
+  'activity.completed',
 ];
 
 export default function WebhooksPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'Admin';
+  const { data: webhooks = [], isLoading } = useWebhooks(isAdmin);
+  const create = useCreateWebhook();
+  const update = useUpdateWebhook();
+  const del = useDeleteWebhook();
+
+  const [opened, ctl] = useDisclosure(false);
+  const [url, setUrl] = useState('');
+  const [events, setEvents] = useState<string[]>([]);
+  const [secret, setSecret] = useState<string | null>(null);
+
+  const fail = (e: unknown) =>
+    notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
+
+  const openCreate = () => {
+    setUrl('');
+    setEvents([]);
+    setSecret(null);
+    ctl.open();
+  };
+
+  const submit = () => {
+    if (!url.trim() || events.length === 0) {
+      notifications.show({ message: 'URL and at least one event are required', color: 'red' });
+      return;
+    }
+    create.mutate(
+      { url: url.trim(), eventTypes: events },
+      { onSuccess: (data) => setSecret(data.secret), onError: fail },
+    );
+  };
+
+  const columns: Column<Webhook>[] = [
+    { key: 'url', header: 'Endpoint', render: (w) => <Code>{w.url}</Code> },
+    {
+      key: 'events',
+      header: 'Events',
+      render: (w) => (
+        <Group gap={4}>
+          {w.eventTypes.map((e) => (
+            <Badge key={e} variant="light" size="sm" tt="none">
+              {e}
+            </Badge>
+          ))}
+        </Group>
+      ),
+    },
+    {
+      key: 'active',
+      header: 'Active',
+      render: (w) => (
+        <Switch
+          checked={w.isActive}
+          onChange={(e) => update.mutate({ id: w.id, isActive: e.currentTarget.checked }, { onError: fail })}
+          aria-label="Active"
+        />
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (w) => (
+        <ActionIcon variant="subtle" color="red" aria-label="Delete" onClick={() => del.mutate(w.id, { onError: fail })}>
+          <IconTrash size={16} />
+        </ActionIcon>
+      ),
+    },
+  ];
+
+  if (!isAdmin) {
+    return (
+      <Text c="dimmed" size="sm">
+        Only admins can manage webhooks.
+      </Text>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Center mih="40vh">
+        <Loader />
+      </Center>
+    );
+  }
+
   return (
     <>
       <Group justify="space-between" mb="md">
         <Text c="dimmed" size="sm">
-          Signed, retried event deliveries to your endpoints.
+          Signed event deliveries to your endpoints. (Delivery runs once the worker queue is wired.)
         </Text>
-        <Button leftSection={<IconPlus size={16} />}>Add webhook</Button>
+        <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
+          Add webhook
+        </Button>
       </Group>
+
       <DataTable
         columns={columns}
         data={webhooks}
@@ -39,7 +146,7 @@ export default function WebhooksPage() {
           <Stack gap={4}>
             <Code>{w.url}</Code>
             <Group gap={4}>
-              {w.events.map((e) => (
+              {w.eventTypes.map((e) => (
                 <Badge key={e} variant="light" size="sm" tt="none">
                   {e}
                 </Badge>
@@ -48,6 +155,52 @@ export default function WebhooksPage() {
           </Stack>
         )}
       />
+
+      <Modal opened={opened} onClose={ctl.close} title="Add webhook">
+        {secret ? (
+          <Stack>
+            <Text size="sm">
+              Save this signing secret now — you won't see it again. Use it to verify the{' '}
+              <Code>X-Candango-Signature</Code> header.
+            </Text>
+            <Code block>{secret}</Code>
+            <Group>
+              <CopyButton value={secret}>
+                {({ copied, copy }) => (
+                  <Button color={copied ? 'green' : 'candango'} onClick={copy}>
+                    {copied ? 'Copied' : 'Copy secret'}
+                  </Button>
+                )}
+              </CopyButton>
+              <Button variant="default" onClick={ctl.close}>
+                Done
+              </Button>
+            </Group>
+          </Stack>
+        ) : (
+          <Stack>
+            <TextInput
+              label="Endpoint URL"
+              placeholder="https://hooks.yourapp.com/candango"
+              required
+              value={url}
+              onChange={(e) => setUrl(e.currentTarget.value)}
+            />
+            <MultiSelect
+              label="Events"
+              placeholder="Pick events"
+              data={EVENTS}
+              value={events}
+              onChange={setEvents}
+              searchable
+              clearable
+            />
+            <Button onClick={submit} loading={create.isPending}>
+              Create
+            </Button>
+          </Stack>
+        )}
+      </Modal>
     </>
   );
 }

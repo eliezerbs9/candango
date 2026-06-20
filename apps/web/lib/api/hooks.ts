@@ -13,6 +13,7 @@ import { deactivateUser, getRoles, getUsers, inviteUser, updateUser } from './me
 import { getOrganization, updateOrganization } from './organization';
 import { getOnboarding, setOnboardingCompleted } from './onboarding';
 import { createApiKey, getApiKeys, revokeApiKey } from './apikeys';
+import { createWebhook, deleteWebhook, getWebhooks, updateWebhook } from './webhooks';
 import type { ApiDeal } from './types';
 
 function useToken() {
@@ -324,5 +325,44 @@ export function useRevokeApiKey() {
   return useMutation({
     mutationFn: (id: string) => revokeApiKey(token!, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['api-keys'] }),
+  });
+}
+
+// --- Webhooks ---
+
+export function useWebhooks(enabled = true) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['webhooks'],
+    queryFn: () => getWebhooks(token!),
+    enabled: !!token && enabled,
+  });
+}
+
+export function useCreateWebhook() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { url: string; eventTypes: string[] }) => createWebhook(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['webhooks'] }),
+  });
+}
+
+export function useUpdateWebhook() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; isActive?: boolean; eventTypes?: string[] }) =>
+      updateWebhook(token!, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['webhooks'] }),
+  });
+}
+
+export function useDeleteWebhook() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteWebhook(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['webhooks'] }),
   });
 }
