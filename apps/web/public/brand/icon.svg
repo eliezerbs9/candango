@@ -1,6 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
   <rect width="64" height="64" rx="15" fill="#d9552c"/>
-  <text x="32" y="34" text-anchor="middle" dominant-baseline="central"
-        font-family="'Bricolage Grotesque', system-ui, -apple-system, Arial, sans-serif"
-        font-size="44" font-weight="800" fill="#ffffff">C</text>
+  <path d="M41 23 A13 13 0 1 0 41 41" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>
 </svg>
