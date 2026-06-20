@@ -87,7 +87,7 @@ export default function ReportsPage() {
             h={280}
             data={byStage}
             dataKey="stage"
-            series={[{ name: 'value', label: 'Value ($)', color: 'indigo.6' }]}
+            series={[{ name: 'value', label: 'Value ($)', color: 'candango.6' }]}
             valueFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
           />
         </Card>

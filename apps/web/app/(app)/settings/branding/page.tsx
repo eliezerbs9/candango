@@ -24,7 +24,7 @@ export default function BrandingPage() {
       <Paper withBorder radius="md" p="md">
         <Group justify="space-between">
           <Group>
-            <Avatar src={logo} radius="md" size="lg" color="indigo">
+            <Avatar src={logo} radius="md" size="lg" color="candango">
               C
             </Avatar>
             <div>

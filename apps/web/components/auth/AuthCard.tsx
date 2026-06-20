@@ -1,5 +1,6 @@
-import { Anchor, Center, Paper, Stack, Text, Title } from '@mantine/core';
+import { Anchor, Center, Paper, Stack, Text } from '@mantine/core';
 import Link from 'next/link';
+import { Logo } from '@/components/brand/Logo';
 
 export function AuthCard({
   title,
@@ -17,9 +18,7 @@ export function AuthCard({
       <Paper withBorder shadow="sm" p="xl" radius="md" w={400} maw="100%">
         <Stack gap="lg">
           <Stack gap={4} align="center">
-            <Title order={3} c="indigo.6">
-              Candango
-            </Title>
+            <Logo size={30} />
             <Text fw={500}>{title}</Text>
             {subtitle ? (
               <Text c="dimmed" size="sm" ta="center">

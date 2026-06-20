@@ -31,8 +31,8 @@ export function SettingsNav() {
               borderRadius: 8,
               fontSize: 14,
               fontWeight: active ? 600 : 400,
-              color: active ? 'var(--mantine-color-indigo-7)' : 'var(--mantine-color-dimmed)',
-              background: active ? 'var(--mantine-color-indigo-0)' : 'transparent',
+              color: active ? 'var(--mantine-color-candango-7)' : 'var(--mantine-color-dimmed)',
+              background: active ? 'var(--mantine-color-candango-0)' : 'transparent',
             }}
           >
             {s.label}

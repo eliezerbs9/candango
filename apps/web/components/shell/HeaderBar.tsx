@@ -1,7 +1,8 @@
 'use client';
 
-import { ActionIcon, Burger, Group, Title, useMantineColorScheme } from '@mantine/core';
+import { ActionIcon, Burger, Group, useMantineColorScheme } from '@mantine/core';
 import { IconMoon, IconSun } from '@tabler/icons-react';
+import { Logo } from '@/components/brand/Logo';
 
 export function HeaderBar({ opened, onBurger }: { opened: boolean; onBurger: () => void }) {
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
@@ -10,9 +11,7 @@ export function HeaderBar({ opened, onBurger }: { opened: boolean; onBurger: () 
     <Group h="100%" px="md" justify="space-between">
       <Group gap="sm">
         <Burger opened={opened} onClick={onBurger} hiddenFrom="sm" size="sm" aria-label="Toggle navigation" />
-        <Title order={4} c="indigo.6">
-          Candango
-        </Title>
+        <Logo size={22} />
       </Group>
       <ActionIcon
         variant="default"

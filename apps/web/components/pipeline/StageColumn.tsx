@@ -25,7 +25,7 @@ export function StageColumn({ stage, deals }: { stage: Stage; deals: Deal[] }) {
       </Group>
       <Paper
         ref={setNodeRef}
-        bg={isOver ? 'indigo.0' : 'gray.0'}
+        bg={isOver ? 'candango.0' : 'gray.0'}
         p="xs"
         radius="md"
         mih={400}

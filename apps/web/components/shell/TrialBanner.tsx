@@ -17,8 +17,8 @@ export function TrialBanner({ daysLeft = 7 }: { daysLeft?: number | null }) {
       wrap="nowrap"
       px="md"
       py={8}
-      bg="indigo.0"
-      style={{ borderBottom: '1px solid var(--mantine-color-indigo-2)' }}
+      bg="candango.0"
+      style={{ borderBottom: '1px solid var(--mantine-color-candango-2)' }}
     >
       <Group gap="xs" wrap="nowrap">
         <IconClock size={16} />

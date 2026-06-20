@@ -81,7 +81,7 @@ export default function ApiKeysPage() {
             <Code block>{secret}</Code>
             <CopyButton value={secret}>
               {({ copied, copy }) => (
-                <Button color={copied ? 'green' : 'indigo'} onClick={copy}>
+                <Button color={copied ? 'green' : 'candango'} onClick={copy}>
                   {copied ? 'Copied' : 'Copy secret'}
                 </Button>
               )}
