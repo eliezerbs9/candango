@@ -34,6 +34,7 @@ Requires a local PostgreSQL 16 (Docker `docker compose up -d`, or Homebrew below
 brew install postgresql@16
 brew services start postgresql@16
 createdb candango
+brew install redis && brew services start redis   # for webhook delivery (BullMQ queue)
 
 # 2) API env + schema
 cp apps/api/.env.example apps/api/.env       # then set DATABASE_URL
