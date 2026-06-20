@@ -60,6 +60,8 @@ model User {
   orgId        String
   email        String
   name         String?
+  phone        String?
+  avatarUrl    String?  // data URL for now; object storage in production
   passwordHash String?
   status       String   @default("active") // active | invited | deactivated
   roleId       String?
