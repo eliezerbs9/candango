@@ -1,0 +1,25 @@
+# Local development infrastructure for Candango (host-agnostic — not production).
+# Usage: `docker compose up -d`  (requires Docker). No-Docker alternative: install
+# PostgreSQL 16 + Redis via Homebrew and point DATABASE_URL/REDIS_URL at them.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: candango-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: candango
+    ports:
+      - '5432:5432'
+    volumes:
+      - candango_pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: candango-redis
+    ports:
+      - '6379:6379'
+
+volumes:
+  candango_pgdata:

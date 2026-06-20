@@ -1,0 +1,835 @@
+openapi: 3.1.0
+info:
+  title: SalesCRM API
+  version: "1.0.0"
+  description: >
+    Public REST API for SalesCRM — a multi-tenant, Pipedrive-style sales CRM.
+    Authenticate with a user session JWT or a scoped API key (Bearer).
+    The tenant (organization) is derived from the credential and never passed by the client.
+    All money values are integer minor units (cents) plus a currency code.
+  license:
+    name: Proprietary
+servers:
+  - url: https://api.salescrm.example/v1
+    description: Production
+  - url: http://localhost:3000/v1
+    description: Local
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Deals
+  - name: Persons
+  - name: Companies
+  - name: Pipelines
+  - name: Stages
+  - name: Activities
+  - name: Webhooks
+  - name: API Keys
+  - name: Billing
+  - name: Branding
+  - name: Onboarding
+  - name: QuickBooks
+  - name: Reports
+
+paths:
+  /deals:
+    get:
+      tags: [Deals]
+      summary: List deals
+      security: [{ bearerAuth: ["deals:read"] }]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - { name: stage_id, in: query, schema: { type: string } }
+        - { name: owner_user_id, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [open, won, lost] } }
+        - { name: sort, in: query, schema: { type: string, example: "-updated_at" } }
+      responses:
+        '200':
+          description: Paged list of deals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Deal' } }
+                  next_cursor: { type: [string, "null"] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Deals]
+      summary: Create a deal
+      security: [{ bearerAuth: ["deals:write"] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DealCreate' }
+      responses:
+        '201':
+          description: Created
+          content: { application/json: { schema: { $ref: '#/components/schemas/Deal' } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /deals/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Deals]
+      summary: Get a deal
+      security: [{ bearerAuth: ["deals:read"] }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Deal' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Deals]
+      summary: Update a deal (including stage moves)
+      security: [{ bearerAuth: ["deals:write"] }]
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/DealUpdate' } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Deal' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Deals]
+      summary: Delete a deal
+      security: [{ bearerAuth: ["deals:delete"] }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /deals/{id}/win:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Deals]
+      summary: Mark a deal won (optionally convert QuickBooks estimates to invoices)
+      description: >
+        Marks the deal won. If QuickBooks is connected and the deal has estimates,
+        pass `estimate_ids` to convert the selected estimate(s) into QBO invoice(s).
+        When QuickBooks is not connected, the body is ignored and the deal is simply won.
+      security: [{ bearerAuth: ["deals:write"] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                estimate_ids:
+                  type: array
+                  items: { type: string }
+                  description: QuickBooks estimate ids to convert to invoices.
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Deal' } } } }
+
+  /deals/{id}/lose:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Deals]
+      summary: Mark a deal lost
+      security: [{ bearerAuth: ["deals:write"] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { lost_reason: { type: string } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Deal' } } } }
+
+  /persons:
+    get:
+      tags: [Persons]
+      summary: List persons
+      security: [{ bearerAuth: ["persons:read"] }]
+      parameters: [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Person' } }
+                  next_cursor: { type: [string, "null"] }
+    post:
+      tags: [Persons]
+      summary: Create a person
+      security: [{ bearerAuth: ["persons:write"] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PersonCreate' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Person' } } } }
+
+  /persons/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Persons]
+      summary: Get a person
+      security: [{ bearerAuth: ["persons:read"] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Person' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    patch:
+      tags: [Persons]
+      summary: Update a person
+      security: [{ bearerAuth: ["persons:write"] }]
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/PersonCreate' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Person' } } } } }
+    delete:
+      tags: [Persons]
+      summary: Delete a person
+      security: [{ bearerAuth: ["persons:write"] }]
+      responses: { '204': { description: Deleted } }
+
+  /companies:
+    get:
+      tags: [Companies]
+      summary: List companies
+      security: [{ bearerAuth: ["persons:read"] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Company' } }, next_cursor: { type: [string, "null"] } } } } } } }
+    post:
+      tags: [Companies]
+      summary: Create a company
+      security: [{ bearerAuth: ["persons:write"] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Company' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Company' } } } } }
+
+  /pipelines:
+    get:
+      tags: [Pipelines]
+      summary: List pipelines
+      security: [{ bearerAuth: ["deals:read"] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Pipeline' } } } } } }
+    post:
+      tags: [Pipelines]
+      summary: Create a pipeline
+      security: [{ bearerAuth: ["pipelines:manage"] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Pipeline' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Pipeline' } } } } }
+
+  /pipelines/{id}/stages:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Stages]
+      summary: List stages of a pipeline
+      security: [{ bearerAuth: ["deals:read"] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Stage' } } } } } }
+    post:
+      tags: [Stages]
+      summary: Add a stage
+      security: [{ bearerAuth: ["pipelines:manage"] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Stage' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Stage' } } } } }
+
+  /activities:
+    get:
+      tags: [Activities]
+      summary: List activities
+      security: [{ bearerAuth: ["deals:read"] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Activity' } }, next_cursor: { type: [string, "null"] } } } } } } }
+    post:
+      tags: [Activities]
+      summary: Create an activity (meeting types sync to Google Calendar)
+      security: [{ bearerAuth: ["deals:write"] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Activity' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Activity' } } } } }
+
+  /activities/{id}/complete:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Activities]
+      summary: Mark an activity complete
+      security: [{ bearerAuth: ["deals:write"] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Activity' } } } } }
+
+  /webhooks:
+    get:
+      tags: [Webhooks]
+      summary: List webhooks
+      security: [{ bearerAuth: ["webhooks:manage"] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Webhook' } } } } } }
+    post:
+      tags: [Webhooks]
+      summary: Register a webhook
+      security: [{ bearerAuth: ["webhooks:manage"] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WebhookCreate' } } } }
+      responses:
+        '201':
+          description: Created (secret returned once)
+          content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Webhook' }, { type: object, properties: { secret: { type: string, description: Shown once } } } ] } } }
+
+  /webhooks/{id}/ping:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Webhooks]
+      summary: Send a test event
+      security: [{ bearerAuth: ["webhooks:manage"] }]
+      responses: { '202': { description: Accepted } }
+
+  /webhooks/{id}/deliveries:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Webhooks]
+      summary: List delivery attempts
+      security: [{ bearerAuth: ["webhooks:manage"] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/WebhookDelivery' } } } } } }
+
+  /api-keys:
+    get:
+      tags: [API Keys]
+      summary: List API keys (prefixes only)
+      security: [{ bearerAuth: ["apikeys:manage"] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ApiKey' } } } } } }
+    post:
+      tags: [API Keys]
+      summary: Create an API key (secret returned once)
+      security: [{ bearerAuth: ["apikeys:manage"] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, scopes]
+              properties:
+                name: { type: string }
+                scopes: { type: array, items: { type: string } }
+                expires_at: { type: [string, "null"], format: date-time }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiKey'
+                  - type: object
+                    properties:
+                      secret: { type: string, description: Full key, shown only once }
+
+  /api-keys/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    delete:
+      tags: [API Keys]
+      summary: Revoke an API key
+      security: [{ bearerAuth: ["apikeys:manage"] }]
+      responses: { '204': { description: Revoked } }
+
+  /billing/subscription:
+    get:
+      tags: [Billing]
+      summary: Get current subscription
+      security: [{ bearerAuth: ["billing:manage"] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Subscription' } } } } }
+
+  /billing/checkout-session:
+    post:
+      tags: [Billing]
+      summary: Create a Stripe Checkout session to add a payment method / activate
+      security: [{ bearerAuth: ["billing:manage"] }]
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { type: object, properties: { checkout_url: { type: string, format: uri } } }
+
+  /billing/portal-session:
+    post:
+      tags: [Billing]
+      summary: Create a Stripe Billing Portal session
+      security: [{ bearerAuth: ["billing:manage"] }]
+      responses:
+        '201':
+          description: Created
+          content: { application/json: { schema: { type: object, properties: { portal_url: { type: string, format: uri } } } } }
+
+  /billing/invoices:
+    get:
+      tags: [Billing]
+      summary: List invoices (mirrored from Stripe)
+      security: [{ bearerAuth: ["billing:manage"] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Invoice' } } } } } }
+
+  /billing/cancel:
+    post:
+      tags: [Billing]
+      summary: Cancel the subscription (at period end by default)
+      security: [{ bearerAuth: ["billing:manage"] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Subscription' } } } } }
+
+  /webhooks/stripe:
+    post:
+      tags: [Billing]
+      summary: Inbound Stripe webhook receiver (signature-verified; not for customer use)
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
+      responses: { '200': { description: Acknowledged } }
+
+  /branding:
+    get:
+      tags: [Branding]
+      summary: Get organization branding
+      security: [{ bearerAuth: ["deals:read"] }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Branding' } } } } }
+    patch:
+      tags: [Branding]
+      summary: Update branding (logo_url, primary_color)
+      security: [{ bearerAuth: ["branding:manage"] }]
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/Branding' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Branding' } } } } }
+
+  /branding/logo/upload-url:
+    post:
+      tags: [Branding]
+      summary: Get a pre-signed URL to upload a logo directly to object storage
+      security: [{ bearerAuth: ["branding:manage"] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_type]
+              properties:
+                content_type: { type: string, enum: [image/png, image/jpeg, image/svg+xml, image/webp] }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  upload_url: { type: string, format: uri }
+                  asset_url: { type: string, format: uri, description: Final URL to store via PATCH /branding }
+
+  /onboarding/state:
+    get:
+      tags: [Onboarding]
+      summary: Get onboarding checklist state
+      security: [{ bearerAuth: ["deals:read"] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pipeline_created: { type: boolean }
+                  teammates_invited: { type: boolean }
+                  branding_set: { type: boolean }
+                  google_connected: { type: boolean }
+                  payment_added: { type: boolean }
+
+  /integrations/quickbooks/connect:
+    get:
+      tags: [QuickBooks]
+      summary: Start QuickBooks OAuth (per-tenant). Redirects to Intuit.
+      security: [{ bearerAuth: ["integrations:manage"] }]
+      responses:
+        '302': { description: Redirect to Intuit OAuth consent }
+
+  /integrations/quickbooks:
+    get:
+      tags: [QuickBooks]
+      summary: Get QuickBooks connection status
+      security: [{ bearerAuth: ["integrations:manage"] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [connected, reauth_required, disconnected] }
+                  realm_id: { type: [string, "null"] }
+    delete:
+      tags: [QuickBooks]
+      summary: Disconnect QuickBooks (core features keep working)
+      security: [{ bearerAuth: ["integrations:manage"] }]
+      responses:
+        '204': { description: Disconnected }
+
+  /deals/{id}/quickbooks:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [QuickBooks]
+      summary: Create/link the deal's QBO sub-customer under the client's parent Customer
+      description: >
+        Ensures the client (Company/Person) has a parent QBO Customer, then creates a
+        sub-customer (Job) named after the deal. Sets Ship To / Bill To and writes
+        deal_id + client_id into the QBO record's metadata. Requires QuickBooks connected.
+      security: [{ bearerAuth: ["deals:write", "integrations:manage"] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ship_to: { $ref: '#/components/schemas/Address' }
+                bill_to: { $ref: '#/components/schemas/Address' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  qb_subcustomer_id: { type: string }
+                  qb_parent_customer_id: { type: string }
+        '409': { description: QuickBooks not connected }
+
+  /deals/{id}/estimates:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [QuickBooks]
+      summary: List QuickBooks estimates synced for this deal
+      security: [{ bearerAuth: ["deals:read"] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/QuickBooksEstimate' } }
+
+  /reports/pipeline:
+    get:
+      tags: [Reports]
+      summary: Pipeline summary — totals by stage (count, value, weighted value)
+      security: [{ bearerAuth: ["reports:read"] }]
+      parameters:
+        - { name: pipeline_id, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        stage_id: { type: string }
+                        stage_name: { type: string }
+                        deal_count: { type: integer }
+                        total_value: { type: integer }
+                        weighted_value: { type: integer }
+
+  /reports/sales:
+    get:
+      tags: [Reports]
+      summary: Totals grouped by sales rep or stage
+      security: [{ bearerAuth: ["reports:read"] }]
+      parameters:
+        - { name: group_by, in: query, schema: { type: string, enum: [rep, stage] } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    group_key: { type: string, description: rep id or stage id }
+                    group_label: { type: string }
+                    open_deals: { type: integer }
+                    total_value: { type: integer }
+                    weighted_value: { type: integer }
+                    won_count: { type: integer }
+                    lost_count: { type: integer }
+                    win_rate: { type: number }
+
+  /reports/forecast:
+    get:
+      tags: [Reports]
+      summary: Weighted forecast by period
+      security: [{ bearerAuth: ["reports:read"] }]
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object } } } }
+
+  /reports/won-lost:
+    get:
+      tags: [Reports]
+      summary: Won/Lost outcomes over time
+      security: [{ bearerAuth: ["reports:read"] }]
+      parameters:
+        - { name: interval, in: query, schema: { type: string, enum: [week, month], default: month } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { type: object } } } } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT-or-APIKey
+      description: >
+        Provide either a user session JWT or an API key (sk_live_...).
+        The listed scopes (in OAuth2 style) document the permission required.
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, default: 50, maximum: 200 }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema: { type: string }
+      description: Safe-retry key for POST requests.
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid credential
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: Authenticated but missing scope or visibility
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Not found (or hidden by tenant scope)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationError:
+      description: Validation error
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, example: validation_error }
+            message: { type: string }
+            details: { type: array, items: { type: object } }
+
+    Deal:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        value: { type: integer, description: Minor units }
+        currency: { type: string, example: USD }
+        pipeline_id: { type: string }
+        stage_id: { type: string }
+        owner_user_id: { type: string }
+        primary_person_id: { type: [string, "null"] }
+        company_id: { type: [string, "null"] }
+        status: { type: string, enum: [open, won, lost] }
+        lost_reason: { type: [string, "null"] }
+        expected_close_date: { type: [string, "null"], format: date }
+        custom_fields: { type: object }
+        qb_subcustomer_id: { type: [string, "null"], description: QuickBooks sub-customer (Job) id }
+        ship_to: { $ref: '#/components/schemas/Address' }
+        bill_to: { $ref: '#/components/schemas/Address' }
+        value_overridden: { type: boolean, description: When true, QBO estimate sync will not overwrite value }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    DealCreate:
+      type: object
+      required: [title, pipeline_id, stage_id]
+      properties:
+        title: { type: string }
+        value: { type: integer, default: 0 }
+        currency: { type: string, default: USD }
+        pipeline_id: { type: string }
+        stage_id: { type: string }
+        primary_person_id: { type: string }
+        company_id: { type: string }
+        expected_close_date: { type: string, format: date }
+        custom_fields: { type: object }
+
+    DealUpdate:
+      type: object
+      properties:
+        title: { type: string }
+        value: { type: integer }
+        stage_id: { type: string }
+        owner_user_id: { type: string }
+        expected_close_date: { type: string, format: date }
+        custom_fields: { type: object }
+
+    Person:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        emails: { type: array, items: { type: object, properties: { value: { type: string }, label: { type: string } } } }
+        phones: { type: array, items: { type: object, properties: { value: { type: string }, label: { type: string } } } }
+        company_id: { type: [string, "null"] }
+        owner_user_id: { type: [string, "null"] }
+        custom_fields: { type: object }
+
+    PersonCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        emails: { type: array, items: { type: object } }
+        phones: { type: array, items: { type: object } }
+        company_id: { type: string }
+
+    Company:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        domain: { type: [string, "null"] }
+        address: { type: [string, "null"] }
+        owner_user_id: { type: [string, "null"] }
+
+    Pipeline:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        is_default: { type: boolean }
+        position: { type: integer }
+
+    Stage:
+      type: object
+      properties:
+        id: { type: string }
+        pipeline_id: { type: string }
+        name: { type: string }
+        position: { type: integer }
+        probability: { type: integer, minimum: 0, maximum: 100 }
+        rotting_days: { type: [integer, "null"] }
+
+    Activity:
+      type: object
+      properties:
+        id: { type: string }
+        deal_id: { type: [string, "null"] }
+        person_id: { type: [string, "null"] }
+        assigned_user_id: { type: [string, "null"] }
+        type: { type: string, enum: [call, meeting, task, email] }
+        subject: { type: string }
+        due_at: { type: [string, "null"], format: date-time }
+        duration_min: { type: [integer, "null"] }
+        done: { type: boolean }
+
+    Webhook:
+      type: object
+      properties:
+        id: { type: string }
+        url: { type: string, format: uri }
+        event_types: { type: array, items: { type: string } }
+        is_active: { type: boolean }
+
+    WebhookCreate:
+      type: object
+      required: [url, event_types]
+      properties:
+        url: { type: string, format: uri }
+        event_types: { type: array, items: { type: string }, example: [deal.won, deal.stage_changed] }
+
+    WebhookDelivery:
+      type: object
+      properties:
+        id: { type: string }
+        event_id: { type: string }
+        status: { type: string, enum: [pending, success, failed] }
+        attempt: { type: integer }
+        response_code: { type: [integer, "null"] }
+        next_retry_at: { type: [string, "null"], format: date-time }
+
+    ApiKey:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        prefix: { type: string, example: sk_live_abc }
+        scopes: { type: array, items: { type: string } }
+        last_used_at: { type: [string, "null"], format: date-time }
+        expires_at: { type: [string, "null"], format: date-time }
+        revoked_at: { type: [string, "null"], format: date-time }
+
+    Subscription:
+      type: object
+      properties:
+        status: { type: string, enum: [trialing, active, past_due, locked, canceled] }
+        seats: { type: integer }
+        price_per_seat: { type: integer, example: 3000, description: Cents per seat per month }
+        currency: { type: string, example: USD }
+        trial_ends_at: { type: [string, "null"], format: date-time }
+        current_period_end: { type: [string, "null"], format: date-time }
+
+    Invoice:
+      type: object
+      properties:
+        id: { type: string }
+        amount_due: { type: integer }
+        amount_paid: { type: integer }
+        currency: { type: string }
+        status: { type: string, enum: [draft, open, paid, void, uncollectible] }
+        period_start: { type: [string, "null"], format: date-time }
+        period_end: { type: [string, "null"], format: date-time }
+        hosted_invoice_url: { type: [string, "null"], format: uri }
+
+    Branding:
+      type: object
+      properties:
+        logo_url: { type: [string, "null"], format: uri }
+        logo_small_url: { type: [string, "null"], format: uri }
+        favicon_url: { type: [string, "null"], format: uri }
+        primary_color: { type: [string, "null"], example: "#2563EB" }
+        subdomain: { type: [string, "null"] }
+
+    Address:
+      type: object
+      description: Ship To (work site) or Bill To (payer) details; maps to QBO ShipAddr/BillAddr.
+      properties:
+        name: { type: string }
+        line1: { type: string }
+        line2: { type: string }
+        city: { type: string }
+        state: { type: string }
+        postal_code: { type: string }
+        country: { type: string }
+        email: { type: string }
+        phone: { type: string }
+
+    QuickBooksEstimate:
+      type: object
+      properties:
+        id: { type: string }
+        deal_id: { type: string }
+        qb_estimate_id: { type: string }
+        doc_number: { type: [string, "null"] }
+        total_amount: { type: integer, description: Cents }
+        currency: { type: string, example: USD }
+        status: { type: [string, "null"] }
+        txn_date: { type: [string, "null"], format: date }
+        is_latest: { type: boolean }

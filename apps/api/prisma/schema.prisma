@@ -1,0 +1,614 @@
+// SalesCRM — Prisma schema
+// Multi-tenant sales CRM. Every tenant-owned model carries `orgId` for row-level
+// isolation (see docs: Multi-Tenancy & Security). PostgreSQL is the primary store.
+//
+// Conventions:
+//   - All models use cuid() string IDs.
+//   - createdAt / updatedAt on every model; soft-delete via deletedAt where relevant.
+//   - Composite indexes lead with orgId.
+//   - Money stored as integer minor units (cents) + currency code.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy & Identity
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  plan            String   @default("trial") // trial | standard
+  onboardingState Json     @default("{}")     // { pipelineCreated, teammatesInvited, ... }
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  users        User[]
+  teams        Team[]
+  roles        Role[]
+  pipelines    Pipeline[]
+  stages       Stage[]
+  deals        Deal[]
+  persons      Person[]
+  companies    Company[]
+  activities   Activity[]
+  notes        Note[]
+  webhooks     Webhook[]
+  apiKeys      ApiKey[]
+  auditLogs    AuditLog[]
+  eventOutbox  EventOutbox[]
+  messages     Message[]
+  subscription Subscription?
+  invoices     Invoice[]
+  branding     OrganizationBranding?
+  quickbooksConnection QuickBooksConnection?
+  quickbooksCustomerLinks QuickBooksCustomerLink[]
+  quickbooksEstimates  QuickBooksEstimate[]
+  quickbooksInvoices   QuickBooksInvoice[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  orgId        String
+  email        String
+  name         String?
+  passwordHash String?
+  status       String   @default("active") // active | invited | deactivated
+  roleId       String?
+  teamId       String?
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  organization       Organization        @relation(fields: [orgId], references: [id])
+  role               Role?               @relation(fields: [roleId], references: [id])
+  team               Team?               @relation("TeamMembers", fields: [teamId], references: [id])
+  ownedDeals         Deal[]              @relation("DealOwner")
+  ownedPersons       Person[]            @relation("PersonOwner")
+  ownedCompanies     Company[]           @relation("CompanyOwner")
+  assignedActivities Activity[]          @relation("ActivityAssignee")
+  notes              Note[]
+  calendarConnection CalendarConnection?
+  mailboxConnection  MailboxConnection?
+  managedTeams       Team[]              @relation("TeamManager")
+
+  @@unique([orgId, email])
+  @@index([orgId, status])
+}
+
+model Team {
+  id            String   @id @default(cuid())
+  orgId         String
+  name          String
+  managerUserId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  manager      User?        @relation("TeamManager", fields: [managerUserId], references: [id])
+  members      User[]       @relation("TeamMembers")
+
+  @@index([orgId])
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  orgId       String?  // null for system roles
+  name        String
+  isSystem    Boolean  @default(false)
+  permissions Json     @default("[]") // scope strings: ["deals:read", ...]
+  visibility  String   @default("own") // own | team | org
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organization Organization? @relation(fields: [orgId], references: [id])
+  users        User[]
+
+  @@index([orgId])
+}
+
+// ---------------------------------------------------------------------------
+// Pipelines & Stages
+// ---------------------------------------------------------------------------
+
+model Pipeline {
+  id        String   @id @default(cuid())
+  orgId     String
+  name      String
+  isDefault Boolean  @default(false)
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  stages       Stage[]
+  deals        Deal[]
+
+  @@index([orgId])
+}
+
+model Stage {
+  id          String   @id @default(cuid())
+  orgId       String
+  pipelineId  String
+  name        String
+  position    Int      @default(0)
+  probability Int      @default(0) // 0-100
+  rottingDays Int?     // idle threshold; null = no rotting
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  pipeline     Pipeline     @relation(fields: [pipelineId], references: [id])
+  deals        Deal[]
+
+  @@index([orgId, pipelineId])
+}
+
+// ---------------------------------------------------------------------------
+// Deals, Contacts & Activities
+// ---------------------------------------------------------------------------
+
+model Deal {
+  id                 String   @id @default(cuid())
+  orgId              String
+  title              String
+  value              Int      @default(0) // minor units
+  currency           String   @default("USD")
+  pipelineId         String
+  stageId            String
+  ownerUserId        String
+  primaryPersonId    String?
+  companyId          String?
+  status             String   @default("open") // open | won | lost
+  lostReason         String?
+  expectedCloseDate  DateTime?
+  stageChangedAt     DateTime @default(now())
+  customFields       Json     @default("{}")
+  // QuickBooks (optional; null when QBO not connected)
+  qbSubcustomerId    String?  // QBO sub-customer (Job) id for this deal
+  shipTo             Json?    // work/job-site address -> QBO ShipAddr
+  billTo             Json?    // payer details -> QBO BillAddr
+  valueOverridden    Boolean  @default(false) // when true, estimate sync won't overwrite value
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  deletedAt          DateTime?
+
+  organization Organization      @relation(fields: [orgId], references: [id])
+  pipeline     Pipeline          @relation(fields: [pipelineId], references: [id])
+  stage        Stage             @relation(fields: [stageId], references: [id])
+  owner        User              @relation("DealOwner", fields: [ownerUserId], references: [id])
+  primaryPerson Person?          @relation("DealPrimaryPerson", fields: [primaryPersonId], references: [id])
+  company      Company?          @relation(fields: [companyId], references: [id])
+  participants DealParticipant[]
+  activities   Activity[]
+  notes        Note[]
+  messages     Message[]
+  qbEstimates  QuickBooksEstimate[]
+  qbInvoices   QuickBooksInvoice[]
+
+  @@index([orgId, stageId])
+  @@index([orgId, ownerUserId])
+  @@index([orgId, status])
+}
+
+model Person {
+  id           String   @id @default(cuid())
+  orgId        String
+  name         String
+  emails       Json     @default("[]") // [{ value, label }]
+  phones       Json     @default("[]")
+  companyId    String?
+  ownerUserId  String?
+  customFields Json     @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  organization     Organization      @relation(fields: [orgId], references: [id])
+  company          Company?          @relation(fields: [companyId], references: [id])
+  owner            User?             @relation("PersonOwner", fields: [ownerUserId], references: [id])
+  dealParticipants DealParticipant[]
+  primaryForDeals  Deal[]            @relation("DealPrimaryPerson")
+  activities       Activity[]
+  notes            Note[]
+  messages         Message[]
+
+  @@index([orgId])
+  @@index([orgId, companyId])
+}
+
+model Company {
+  id           String   @id @default(cuid())
+  orgId        String
+  name         String
+  domain       String?
+  address      String?
+  ownerUserId  String?
+  customFields Json     @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  owner        User?        @relation("CompanyOwner", fields: [ownerUserId], references: [id])
+  persons      Person[]
+  deals        Deal[]
+
+  @@index([orgId])
+  @@index([orgId, domain])
+}
+
+model DealParticipant {
+  dealId   String
+  personId String
+  role     String? // e.g. decision-maker, influencer
+
+  deal   Deal   @relation(fields: [dealId], references: [id])
+  person Person @relation(fields: [personId], references: [id])
+
+  @@id([dealId, personId])
+}
+
+model Activity {
+  id              String   @id @default(cuid())
+  orgId           String
+  dealId          String?
+  personId        String?
+  assignedUserId  String?
+  type            String   // call | meeting | task | email
+  subject         String
+  dueAt           DateTime?
+  durationMin     Int?
+  done            Boolean  @default(false)
+  calendarEventId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization  Organization   @relation(fields: [orgId], references: [id])
+  deal          Deal?          @relation(fields: [dealId], references: [id])
+  person        Person?        @relation(fields: [personId], references: [id])
+  assignee      User?          @relation("ActivityAssignee", fields: [assignedUserId], references: [id])
+  calendarEvent CalendarEvent?
+
+  @@index([orgId, dueAt])
+  @@index([orgId, dealId])
+}
+
+model Note {
+  id           String   @id @default(cuid())
+  orgId        String
+  dealId       String?
+  personId     String?
+  authorUserId String
+  body         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  deal         Deal?        @relation(fields: [dealId], references: [id])
+  person       Person?      @relation(fields: [personId], references: [id])
+  author       User         @relation(fields: [authorUserId], references: [id])
+
+  @@index([orgId, dealId])
+}
+
+// ---------------------------------------------------------------------------
+// Integrations: Calendar & Mailbox
+// ---------------------------------------------------------------------------
+
+model CalendarConnection {
+  id           String   @id @default(cuid())
+  orgId        String
+  userId       String   @unique
+  provider     String   @default("google")
+  accessToken  String   // encrypted at rest
+  refreshToken String   // encrypted at rest
+  tokenExpiry  DateTime?
+  syncToken    String?
+  watchChannelId String?
+  watchExpiry  DateTime?
+  status       String   @default("connected") // connected | reauth_required | disconnected
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([orgId])
+}
+
+model CalendarEvent {
+  id              String   @id @default(cuid())
+  orgId           String
+  activityId      String   @unique
+  externalEventId String
+  etag            String?
+  lastSyncedAt    DateTime?
+  syncDirection   String?  // inbound | outbound
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  activity Activity @relation(fields: [activityId], references: [id])
+
+  @@index([orgId, externalEventId])
+}
+
+model MailboxConnection {
+  id           String   @id @default(cuid())
+  orgId        String
+  userId       String   @unique
+  provider     String   @default("gmail")
+  accessToken  String   // encrypted at rest
+  refreshToken String   // encrypted at rest
+  historyId    String?
+  status       String   @default("connected")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([orgId])
+}
+
+model Message {
+  id                String   @id @default(cuid())
+  orgId             String
+  userId            String
+  direction         String   // in | out
+  providerMessageId String
+  threadId          String?
+  fromAddress       String
+  toAddresses       Json     @default("[]")
+  subject           String?
+  snippet           String?
+  personId          String?
+  dealId            String?
+  sentAt            DateTime?
+  createdAt         DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], map: "Message_org_fk")
+  person       Person?      @relation(fields: [personId], references: [id])
+  deal         Deal?        @relation(fields: [dealId], references: [id])
+
+  @@unique([userId, providerMessageId])
+  @@index([orgId, personId])
+  @@index([orgId, dealId])
+}
+
+// ---------------------------------------------------------------------------
+// Platform: Webhooks, API Keys, Events, Audit
+// ---------------------------------------------------------------------------
+
+model Webhook {
+  id         String   @id @default(cuid())
+  orgId      String
+  url        String
+  secret     String   // encrypted at rest; used for HMAC signing
+  eventTypes String[] // subscribed event types
+  isActive   Boolean  @default(true)
+  createdBy  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  organization Organization      @relation(fields: [orgId], references: [id])
+  deliveries   WebhookDelivery[]
+
+  @@index([orgId])
+}
+
+model WebhookDelivery {
+  id           String   @id @default(cuid())
+  orgId        String
+  webhookId    String
+  eventId      String
+  status       String   @default("pending") // pending | success | failed
+  attempt      Int      @default(0)
+  responseCode Int?
+  nextRetryAt  DateTime?
+  payload      Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  webhook Webhook @relation(fields: [webhookId], references: [id])
+
+  @@index([orgId, status])
+  @@index([webhookId])
+}
+
+model EventOutbox {
+  id          String    @id @default(cuid())
+  orgId       String
+  entityType  String
+  entityId    String
+  eventType   String
+  payload     Json
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, processedAt])
+  @@index([processedAt])
+}
+
+model ApiKey {
+  id         String   @id @default(cuid())
+  orgId      String
+  name       String
+  keyHash    String   @unique // SHA-256 of the secret
+  prefix     String   // first chars shown in UI, e.g. sk_live_abc
+  scopes     String[]
+  createdBy  String
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@index([orgId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  orgId      String
+  actorType  String   // user | api_key
+  actorId    String
+  action     String
+  targetType String?
+  targetId   String?
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Billing & Subscriptions (Stripe)
+// ---------------------------------------------------------------------------
+
+model Subscription {
+  id                   String   @id @default(cuid())
+  orgId                String   @unique
+  stripeCustomerId     String   @unique
+  stripeSubscriptionId String?  @unique
+  stripePriceId        String?
+  status               String   @default("trialing") // trialing | active | past_due | locked | canceled
+  seats                Int      @default(1)
+  pricePerSeat         Int      @default(3000) // $30.00 in cents
+  currency             String   @default("USD")
+  trialEndsAt          DateTime?
+  currentPeriodEnd     DateTime?
+  canceledAt           DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@index([status])
+}
+
+model Invoice {
+  id              String   @id @default(cuid())
+  orgId           String
+  stripeInvoiceId String   @unique
+  amountDue       Int
+  amountPaid      Int
+  currency        String   @default("USD")
+  status          String   // draft | open | paid | void | uncollectible
+  seats           Int?
+  periodStart     DateTime?
+  periodEnd       DateTime?
+  hostedInvoiceUrl String?
+  createdAt       DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Branding & Customization
+// ---------------------------------------------------------------------------
+
+model OrganizationBranding {
+  id           String   @id @default(cuid())
+  orgId        String   @unique
+  logoUrl      String?
+  logoSmallUrl String?
+  faviconUrl   String?
+  primaryColor String?  // hex, e.g. #2563EB
+  subdomain    String?  @unique
+  updatedBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// QuickBooks Integration (optional, per-tenant — system never depends on it)
+// ---------------------------------------------------------------------------
+
+model QuickBooksConnection {
+  id           String   @id @default(cuid())
+  orgId        String   @unique
+  realmId      String   // QBO company id
+  accessToken  String   // encrypted at rest
+  refreshToken String   // encrypted at rest
+  tokenExpiry  DateTime?
+  status       String   @default("connected") // connected | reauth_required | disconnected
+  connectedBy  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
+}
+
+// Links a client (Company or Person) to its QBO parent Customer.
+// The QBO account is tied to the CLIENT and reused across all that client's deals.
+model QuickBooksCustomerLink {
+  id           String   @id @default(cuid())
+  orgId        String
+  clientType   String   // company | person
+  clientId     String
+  qbCustomerId String   // QBO parent Customer id
+  createdAt    DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, clientType, clientId])
+  @@index([orgId])
+}
+
+// Mirror of QBO estimates for a deal's sub-customer. The is_latest row drives default deal value.
+model QuickBooksEstimate {
+  id           String   @id @default(cuid())
+  orgId        String
+  dealId       String
+  qbEstimateId String
+  docNumber    String?
+  totalAmount  Int      // cents
+  currency     String   @default("USD")
+  status       String?
+  txnDate      DateTime?
+  isLatest     Boolean  @default(false)
+  syncedAt     DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  deal         Deal         @relation(fields: [dealId], references: [id])
+
+  @@unique([orgId, qbEstimateId])
+  @@index([orgId, dealId])
+}
+
+// Invoices created in QBO when a deal is won (from selected estimates).
+model QuickBooksInvoice {
+  id                 String   @id @default(cuid())
+  orgId              String
+  dealId             String
+  qbInvoiceId        String
+  sourceQbEstimateId String?
+  docNumber          String?
+  totalAmount        Int      // cents
+  status             String?
+  syncedAt           DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  deal         Deal         @relation(fields: [dealId], references: [id])
+
+  @@unique([orgId, qbInvoiceId])
+  @@index([orgId, dealId])
+}
