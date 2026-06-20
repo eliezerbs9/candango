@@ -38,6 +38,21 @@ export class AuthService {
           status: 'active',
         },
       });
+
+      // Seed a default pipeline + stages so the workspace is usable immediately
+      // (see Tenant Onboarding: "a default is seeded").
+      const pipeline = await tx.pipeline.create({
+        data: { orgId: org.id, name: 'Sales Pipeline', isDefault: true, position: 0 },
+      });
+      await tx.stage.createMany({
+        data: [
+          { orgId: org.id, pipelineId: pipeline.id, name: 'Lead', position: 0, probability: 10 },
+          { orgId: org.id, pipelineId: pipeline.id, name: 'Qualified', position: 1, probability: 25 },
+          { orgId: org.id, pipelineId: pipeline.id, name: 'Proposal', position: 2, probability: 50 },
+          { orgId: org.id, pipelineId: pipeline.id, name: 'Negotiation', position: 3, probability: 75 },
+        ],
+      });
+
       return { org, user };
     });
 
