@@ -13,6 +13,7 @@ import { ReportsModule } from './reports/reports.module';
 import { UsersModule } from './users/users.module';
 import { RolesModule } from './roles/roles.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
+import { ApiKeysModule } from './api-keys/api-keys.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -31,6 +32,7 @@ import { HealthController } from './health.controller';
     UsersModule,
     RolesModule,
     OnboardingModule,
+    ApiKeysModule,
   ],
   controllers: [HealthController],
 })
