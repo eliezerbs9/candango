@@ -14,6 +14,7 @@ import { UsersModule } from './users/users.module';
 import { RolesModule } from './roles/roles.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -33,6 +34,7 @@ import { HealthController } from './health.controller';
     RolesModule,
     OnboardingModule,
     ApiKeysModule,
+    WebhooksModule,
   ],
   controllers: [HealthController],
 })
