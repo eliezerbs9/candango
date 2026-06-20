@@ -1,10 +1,13 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { Center, Loader, Text } from '@mantine/core';
+import { Button, Center, Group, Loader, Text } from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
+import { IconPlus } from '@tabler/icons-react';
 import { PageHeader } from '@/components/primitives/PageHeader';
 import { PipelineSwitcher } from '@/components/pipeline/PipelineSwitcher';
 import { KanbanBoard } from '@/components/pipeline/KanbanBoard';
+import { NewDealModal } from '@/components/deals/NewDealModal';
 import { useDeals, useMoveDeal, usePipelines, useStages } from '@/lib/api/hooks';
 
 export default function PipelinePage() {
@@ -15,6 +18,7 @@ export default function PipelinePage() {
   const { data: stages = [], isLoading: loadingStages } = useStages(pipelineId);
   const { data: deals = [], isLoading: loadingDeals } = useDeals({ pipelineId });
   const move = useMoveDeal(pipelineId);
+  const [modal, modalCtl] = useDisclosure(false);
 
   return (
     <>
@@ -22,7 +26,12 @@ export default function PipelinePage() {
         title="Pipelines"
         subtitle="Drag deals between stages"
         actions={
-          pipelines.length > 0 ? <PipelineSwitcher pipelines={pipelines} value={pipelineId} /> : null
+          <Group>
+            {pipelines.length > 0 ? <PipelineSwitcher pipelines={pipelines} value={pipelineId} /> : null}
+            <Button leftSection={<IconPlus size={16} />} onClick={modalCtl.open}>
+              New deal
+            </Button>
+          </Group>
         }
       />
       {loadingStages || loadingDeals ? (
@@ -38,6 +47,8 @@ export default function PipelinePage() {
           onMove={(id, stageId) => move.mutate({ id, stageId })}
         />
       )}
+
+      <NewDealModal opened={modal} onClose={modalCtl.close} defaultPipelineId={pipelineId} />
     </>
   );
 }

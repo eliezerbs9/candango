@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '@/lib/auth/store';
 import { getAllStages, getPipelines, getStages } from './pipelines';
-import { getDeals, updateDeal, type DealFilters } from './deals';
+import { createDeal, getDeals, loseDeal, updateDeal, winDeal, type DealFilters } from './deals';
 import { changePassword, getMe, updateProfile, type Profile } from './profile';
 import type { ApiDeal } from './types';
 
@@ -95,5 +95,40 @@ export function useChangePassword() {
   return useMutation({
     mutationFn: (body: { currentPassword: string; newPassword: string }) =>
       changePassword(token!, body),
+  });
+}
+
+// --- Deal mutations ---
+
+export function useCreateDeal() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      title: string;
+      value?: number;
+      currency?: string;
+      pipelineId: string;
+      stageId: string;
+    }) => createDeal(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['deals'] }),
+  });
+}
+
+export function useWinDeal() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => winDeal(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['deals'] }),
+  });
+}
+
+export function useLoseDeal() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) => loseDeal(token!, id, reason),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['deals'] }),
   });
 }
