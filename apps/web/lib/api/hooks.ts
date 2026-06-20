@@ -9,6 +9,7 @@ import { changePassword, getMe, updateProfile, type Profile } from './profile';
 import { createCompany, createPerson, getCompanies, getPersons } from './contacts';
 import { completeActivity, createActivity, getActivities } from './activities';
 import { getByRep, getPipelineReport, getWonLost } from './reports';
+import { deactivateUser, getRoles, getUsers, inviteUser, updateUser } from './members';
 import type { ApiDeal } from './types';
 
 function useToken() {
@@ -212,4 +213,44 @@ export function useByRep() {
 export function useWonLost() {
   const token = useToken();
   return useQuery({ queryKey: ['report', 'wonlost'], queryFn: () => getWonLost(token!), enabled: !!token });
+}
+
+// --- Members & Roles ---
+
+export function useUsers() {
+  const token = useToken();
+  return useQuery({ queryKey: ['users'], queryFn: () => getUsers(token!), enabled: !!token });
+}
+
+export function useRoles() {
+  const token = useToken();
+  return useQuery({ queryKey: ['roles'], queryFn: () => getRoles(token!), enabled: !!token });
+}
+
+export function useInviteUser() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { email: string; name?: string; roleId?: string }) => inviteUser(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
+export function useUpdateUser() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; roleId?: string; status?: string }) =>
+      updateUser(token!, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
+export function useDeactivateUser() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deactivateUser(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
 }

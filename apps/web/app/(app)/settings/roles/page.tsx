@@ -1,13 +1,23 @@
 'use client';
 
-import { Badge, Card, Group, Stack, Text } from '@mantine/core';
-import { roles } from '@/lib/mock/admin';
+import { Badge, Card, Center, Group, Loader, Stack, Text } from '@mantine/core';
+import { useRoles } from '@/lib/api/hooks';
 
 export default function RolesPage() {
+  const { data: roles = [], isLoading } = useRoles();
+
+  if (isLoading) {
+    return (
+      <Center mih="40vh">
+        <Loader />
+      </Center>
+    );
+  }
+
   return (
     <Stack>
       <Text c="dimmed" size="sm">
-        Built-in roles. Custom roles (scope matrix + visibility) arrive when wired to the API.
+        Roles in this workspace. Custom roles (editable scope matrix) come later.
       </Text>
       {roles.map((r) => (
         <Card key={r.id} withBorder radius="md" padding="md">
