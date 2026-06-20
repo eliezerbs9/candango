@@ -10,6 +10,8 @@ import { PersonsModule } from './persons/persons.module';
 import { CompaniesModule } from './companies/companies.module';
 import { ActivitiesModule } from './activities/activities.module';
 import { ReportsModule } from './reports/reports.module';
+import { UsersModule } from './users/users.module';
+import { RolesModule } from './roles/roles.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -25,6 +27,8 @@ import { HealthController } from './health.controller';
     CompaniesModule,
     ActivitiesModule,
     ReportsModule,
+    UsersModule,
+    RolesModule,
   ],
   controllers: [HealthController],
 })

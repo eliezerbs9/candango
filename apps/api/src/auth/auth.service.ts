@@ -25,8 +25,24 @@ export class AuthService {
       const org = await tx.organization.create({
         data: { name: dto.orgName, slug },
       });
-      const role = await tx.role.create({
+      const adminRole = await tx.role.create({
         data: { orgId: org.id, name: 'Admin', isSystem: false, permissions: ['*'], visibility: 'org' },
+      });
+      await tx.role.createMany({
+        data: [
+          {
+            orgId: org.id,
+            name: 'Manager',
+            permissions: ['deals:read', 'deals:write', 'persons:read', 'persons:write', 'pipelines:manage', 'reports:read'],
+            visibility: 'team',
+          },
+          {
+            orgId: org.id,
+            name: 'Rep',
+            permissions: ['deals:read', 'deals:write', 'persons:read', 'persons:write'],
+            visibility: 'own',
+          },
+        ],
       });
       const user = await tx.user.create({
         data: {
@@ -34,7 +50,7 @@ export class AuthService {
           email: dto.email,
           name: dto.name ?? null,
           passwordHash,
-          roleId: role.id,
+          roleId: adminRole.id,
           status: 'active',
         },
       });
