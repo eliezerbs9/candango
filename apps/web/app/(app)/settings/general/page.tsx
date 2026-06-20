@@ -30,13 +30,17 @@ export default function GeneralSettingsPage() {
 
   const [name, setName] = useState('');
   const [logo, setLogo] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState(false);
 
   useEffect(() => {
     if (org) {
       setName(org.name);
       setLogo(org.logoUrl);
+      setLogoError(false);
     }
   }, [org]);
+
+  const hasLogo = !!logo && !logoError;
 
   const fail = (e: unknown) =>
     notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
@@ -46,6 +50,7 @@ export default function GeneralSettingsPage() {
     try {
       const dataUrl = await fileToContainedDataUrl(file);
       setLogo(dataUrl);
+      setLogoError(false);
       update.mutate(
         { logoUrl: dataUrl },
         { onSuccess: () => notifications.show({ message: 'Logo updated', color: 'green' }), onError: fail },
@@ -79,8 +84,16 @@ export default function GeneralSettingsPage() {
       <Paper withBorder radius="md" p="md">
         <Group justify="space-between">
           <Group>
-            {logo ? (
-              <Image src={logo} h={48} w="auto" maw={140} fit="contain" alt="Workspace logo" />
+            {hasLogo ? (
+              <Image
+                src={logo as string}
+                h={48}
+                w="auto"
+                maw={140}
+                fit="contain"
+                alt="Workspace logo"
+                onError={() => setLogoError(true)}
+              />
             ) : (
               <Avatar radius="md" size="lg" color="candango">
                 {org.name.slice(0, 1).toUpperCase()}
