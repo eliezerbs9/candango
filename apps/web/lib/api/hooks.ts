@@ -8,6 +8,7 @@ import { createDeal, getDeals, loseDeal, updateDeal, winDeal, type DealFilters }
 import { changePassword, getMe, updateProfile, type Profile } from './profile';
 import { createCompany, createPerson, getCompanies, getPersons } from './contacts';
 import { completeActivity, createActivity, getActivities } from './activities';
+import { getByRep, getPipelineReport, getWonLost } from './reports';
 import type { ApiDeal } from './types';
 
 function useToken() {
@@ -190,4 +191,25 @@ export function useCompleteActivity() {
     mutationFn: (id: string) => completeActivity(token!, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
   });
+}
+
+// --- Reports ---
+
+export function usePipelineReport(pipelineId?: string) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['report', 'pipeline', pipelineId ?? null],
+    queryFn: () => getPipelineReport(token!, pipelineId),
+    enabled: !!token,
+  });
+}
+
+export function useByRep() {
+  const token = useToken();
+  return useQuery({ queryKey: ['report', 'rep'], queryFn: () => getByRep(token!), enabled: !!token });
+}
+
+export function useWonLost() {
+  const token = useToken();
+  return useQuery({ queryKey: ['report', 'wonlost'], queryFn: () => getWonLost(token!), enabled: !!token });
 }
