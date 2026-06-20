@@ -6,6 +6,9 @@ import { ProfileModule } from './profile/profile.module';
 import { OrganizationModule } from './organization/organization.module';
 import { PipelinesModule } from './pipelines/pipelines.module';
 import { DealsModule } from './deals/deals.module';
+import { PersonsModule } from './persons/persons.module';
+import { CompaniesModule } from './companies/companies.module';
+import { ActivitiesModule } from './activities/activities.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -17,6 +20,9 @@ import { HealthController } from './health.controller';
     OrganizationModule,
     PipelinesModule,
     DealsModule,
+    PersonsModule,
+    CompaniesModule,
+    ActivitiesModule,
   ],
   controllers: [HealthController],
 })
