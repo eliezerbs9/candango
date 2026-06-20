@@ -4,6 +4,7 @@ import { AppShell } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { HeaderBar } from './HeaderBar';
 import { NavBar } from './NavBar';
+import { TrialBanner } from './TrialBanner';
 
 export function AppShellLayout({ children }: { children: React.ReactNode }) {
   const [opened, { toggle }] = useDisclosure();
@@ -22,7 +23,10 @@ export function AppShellLayout({ children }: { children: React.ReactNode }) {
         <NavBar />
       </AppShell.Navbar>
 
-      <AppShell.Main>{children}</AppShell.Main>
+      <AppShell.Main>
+        <TrialBanner daysLeft={7} />
+        {children}
+      </AppShell.Main>
     </AppShell>
   );
 }
