@@ -12,6 +12,7 @@ import { getByRep, getPipelineReport, getWonLost } from './reports';
 import { deactivateUser, getRoles, getUsers, inviteUser, updateUser } from './members';
 import { getOrganization, updateOrganization } from './organization';
 import { getOnboarding, setOnboardingCompleted } from './onboarding';
+import { createApiKey, getApiKeys, revokeApiKey } from './apikeys';
 import type { ApiDeal } from './types';
 
 function useToken() {
@@ -294,5 +295,34 @@ export function useCompleteOnboarding() {
   return useMutation({
     mutationFn: (completed: boolean) => setOnboardingCompleted(token!, completed),
     onSuccess: (data) => qc.setQueryData(['onboarding'], data),
+  });
+}
+
+// --- API keys ---
+
+export function useApiKeys(enabled = true) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['api-keys'],
+    queryFn: () => getApiKeys(token!),
+    enabled: !!token && enabled,
+  });
+}
+
+export function useCreateApiKey() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; scopes: string[] }) => createApiKey(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['api-keys'] }),
+  });
+}
+
+export function useRevokeApiKey() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => revokeApiKey(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['api-keys'] }),
   });
 }

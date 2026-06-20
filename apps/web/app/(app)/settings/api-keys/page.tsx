@@ -2,47 +2,122 @@
 
 import { useState } from 'react';
 import {
+  ActionIcon,
   Badge,
   Button,
+  Center,
   Code,
   CopyButton,
   Group,
+  Loader,
   Modal,
+  MultiSelect,
   Stack,
   Text,
   TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconKey, IconPlus } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
+import { IconPlus, IconTrash } from '@tabler/icons-react';
+import { PageHeader } from '@/components/primitives/PageHeader';
 import { DataTable, type Column } from '@/components/data/DataTable';
-import { apiKeys, type ApiKeyRow } from '@/lib/mock/admin';
+import { ApiError } from '@/lib/api/client';
+import { useAuth } from '@/lib/auth/useAuth';
+import { useApiKeys, useCreateApiKey, useRevokeApiKey } from '@/lib/api/hooks';
+import type { ApiKey } from '@/lib/api/apikeys';
 
-const columns: Column<ApiKeyRow>[] = [
-  { key: 'name', header: 'Name', render: (k) => <Text fw={500}>{k.name}</Text> },
-  { key: 'prefix', header: 'Key', render: (k) => <Code>{k.prefix}…</Code> },
-  { key: 'lastUsed', header: 'Last used', render: (k) => k.lastUsed },
-  {
-    key: 'scopes',
-    header: 'Scopes',
-    render: (k) => (
-      <Group gap={4}>
-        {k.scopes.map((s) => (
-          <Badge key={s} variant="outline" color="gray" tt="none" size="sm">
-            {s}
-          </Badge>
-        ))}
-      </Group>
-    ),
-  },
+const SCOPES = [
+  'deals:read',
+  'deals:write',
+  'deals:delete',
+  'persons:read',
+  'persons:write',
+  'pipelines:manage',
+  'reports:read',
+  'webhooks:manage',
 ];
 
 export default function ApiKeysPage() {
-  const [opened, { open, close }] = useDisclosure(false);
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'Admin';
+  const { data: keys = [], isLoading } = useApiKeys(isAdmin);
+  const create = useCreateApiKey();
+  const revoke = useRevokeApiKey();
+
+  const [opened, ctl] = useDisclosure(false);
+  const [name, setName] = useState('');
+  const [scopes, setScopes] = useState<string[]>([]);
   const [secret, setSecret] = useState<string | null>(null);
 
-  const createKey = () => {
-    setSecret('sk_live_' + Math.abs(hashString('candango-demo')).toString(36).padEnd(32, '0'));
+  const fail = (e: unknown) =>
+    notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
+
+  const openCreate = () => {
+    setName('');
+    setScopes([]);
+    setSecret(null);
+    ctl.open();
   };
+
+  const submit = () => {
+    if (!name.trim()) {
+      notifications.show({ message: 'Name is required', color: 'red' });
+      return;
+    }
+    create.mutate(
+      { name: name.trim(), scopes },
+      { onSuccess: (data) => setSecret(data.secret), onError: fail },
+    );
+  };
+
+  const columns: Column<ApiKey>[] = [
+    { key: 'name', header: 'Name', render: (k) => <Text fw={500}>{k.name}</Text> },
+    { key: 'prefix', header: 'Key', render: (k) => <Code>{k.prefix}…</Code> },
+    {
+      key: 'scopes',
+      header: 'Scopes',
+      render: (k) => (
+        <Group gap={4}>
+          {k.scopes.length ? (
+            k.scopes.map((s) => (
+              <Badge key={s} variant="outline" color="gray" size="sm" tt="none">
+                {s}
+              </Badge>
+            ))
+          ) : (
+            <Text size="xs" c="dimmed">
+              none
+            </Text>
+          )}
+        </Group>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (k) => (
+        <ActionIcon variant="subtle" color="red" aria-label="Revoke" onClick={() => revoke.mutate(k.id, { onError: fail })}>
+          <IconTrash size={16} />
+        </ActionIcon>
+      ),
+    },
+  ];
+
+  if (!isAdmin) {
+    return (
+      <Text c="dimmed" size="sm">
+        Only admins can manage API keys.
+      </Text>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Center mih="40vh">
+        <Loader />
+      </Center>
+    );
+  }
 
   return (
     <>
@@ -50,20 +125,14 @@ export default function ApiKeysPage() {
         <Text c="dimmed" size="sm">
           Scoped credentials for programmatic access. The secret is shown once.
         </Text>
-        <Button
-          leftSection={<IconPlus size={16} />}
-          onClick={() => {
-            setSecret(null);
-            open();
-          }}
-        >
+        <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
           Create API key
         </Button>
       </Group>
 
       <DataTable
         columns={columns}
-        data={apiKeys}
+        data={keys}
         renderCard={(k) => (
           <Stack gap={2}>
             <Text fw={500}>{k.name}</Text>
@@ -72,37 +141,48 @@ export default function ApiKeysPage() {
         )}
       />
 
-      <Modal opened={opened} onClose={close} title="Create API key">
+      <Modal opened={opened} onClose={ctl.close} title="Create API key">
         {secret ? (
           <Stack>
-            <Text size="sm">
-              Copy this secret now — you won't be able to see it again.
-            </Text>
+            <Text size="sm">Copy this secret now — you won't be able to see it again.</Text>
             <Code block>{secret}</Code>
-            <CopyButton value={secret}>
-              {({ copied, copy }) => (
-                <Button color={copied ? 'green' : 'candango'} onClick={copy}>
-                  {copied ? 'Copied' : 'Copy secret'}
-                </Button>
-              )}
-            </CopyButton>
+            <Group>
+              <CopyButton value={secret}>
+                {({ copied, copy }) => (
+                  <Button color={copied ? 'green' : 'candango'} onClick={copy}>
+                    {copied ? 'Copied' : 'Copy secret'}
+                  </Button>
+                )}
+              </CopyButton>
+              <Button variant="default" onClick={ctl.close}>
+                Done
+              </Button>
+            </Group>
           </Stack>
         ) : (
           <Stack>
-            <TextInput label="Name" placeholder="Billing integration" leftSection={<IconKey size={16} />} />
-            <Text size="xs" c="dimmed">
-              Scope selection arrives when wired to the API.
-            </Text>
-            <Button onClick={createKey}>Create</Button>
+            <TextInput
+              label="Name"
+              placeholder="Billing integration"
+              required
+              value={name}
+              onChange={(e) => setName(e.currentTarget.value)}
+            />
+            <MultiSelect
+              label="Scopes"
+              placeholder="Pick scopes"
+              data={SCOPES}
+              value={scopes}
+              onChange={setScopes}
+              searchable
+              clearable
+            />
+            <Button onClick={submit} loading={create.isPending}>
+              Create
+            </Button>
           </Stack>
         )}
       </Modal>
     </>
   );
-}
-
-function hashString(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h << 5) - h + s.charCodeAt(i);
-  return h;
 }
