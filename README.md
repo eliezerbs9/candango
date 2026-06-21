@@ -43,6 +43,7 @@ npm --prefix apps/api run prisma:migrate     # applies migrations + generates cl
 
 # 3) Run
 npm --prefix apps/api run start              # API on http://localhost:4000/v1
+npm --prefix apps/workers run start          # webhook delivery worker (needs Redis)
 npm --prefix apps/web run dev                # web on http://localhost:3000
 ```
 Smoke test: `curl http://localhost:4000/v1/health`

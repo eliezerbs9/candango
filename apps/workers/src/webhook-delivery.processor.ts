@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Prisma } from '@prisma/client';
 import { createHmac } from 'node:crypto';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from './prisma.service';
 
 interface DeliveryJob {
   webhookId: string;
