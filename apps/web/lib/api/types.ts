@@ -32,4 +32,7 @@ export interface ApiDeal {
   lostReason: string | null;
   expectedCloseDate: string | null;
   stageChangedAt: string;
+  customFields: Record<string, unknown>;
+  shipTo: Record<string, unknown> | null;
+  billTo: Record<string, unknown> | null;
 }

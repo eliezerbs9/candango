@@ -18,7 +18,15 @@ export function getDeals(token: string, filters: DealFilters = {}) {
 
 export function createDeal(
   token: string,
-  body: { title: string; value?: number; currency?: string; pipelineId: string; stageId: string },
+  body: {
+    title: string;
+    value?: number;
+    currency?: string;
+    pipelineId: string;
+    stageId: string;
+    companyId?: string;
+    primaryPersonId?: string;
+  },
 ) {
   return apiFetch<ApiDeal>('/deals', { method: 'POST', token, body: JSON.stringify(body) });
 }
@@ -26,7 +34,18 @@ export function createDeal(
 export function updateDeal(
   token: string,
   id: string,
-  body: Partial<{ title: string; value: number; stageId: string; expectedCloseDate: string }>,
+  body: Partial<{
+    title: string;
+    value: number;
+    currency: string;
+    stageId: string;
+    companyId: string;
+    primaryPersonId: string;
+    expectedCloseDate: string;
+    customFields: Record<string, unknown>;
+    shipTo: Record<string, unknown>;
+    billTo: Record<string, unknown>;
+  }>,
 ) {
   return apiFetch<ApiDeal>(`/deals/${id}`, { method: 'PATCH', token, body: JSON.stringify(body) });
 }

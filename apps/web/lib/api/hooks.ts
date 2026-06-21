@@ -22,6 +22,8 @@ import {
   replayDelivery,
   updateWebhook,
 } from './webhooks';
+import { createCustomField, deleteCustomField, getCustomFields } from './customFields';
+import type { CustomFieldType } from './customFields';
 import type { ApiDeal } from './types';
 
 function useToken() {
@@ -126,6 +128,8 @@ export function useCreateDeal() {
       currency?: string;
       pipelineId: string;
       stageId: string;
+      companyId?: string;
+      primaryPersonId?: string;
     }) => createDeal(token!, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['deals'] }),
   });
@@ -136,6 +140,16 @@ export function useWinDeal() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => winDeal(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['deals'] }),
+  });
+}
+
+export function useUpdateDeal() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & Parameters<typeof updateDeal>[2]) =>
+      updateDeal(token!, id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['deals'] }),
   });
 }
@@ -395,5 +409,35 @@ export function useReplayDelivery() {
   return useMutation({
     mutationFn: (deliveryId: string) => replayDelivery(token!, deliveryId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['webhook-deliveries'] }),
+  });
+}
+
+// --- Custom fields (admin-defined) ---
+
+export function useCustomFields(entity: string) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['custom-fields', entity],
+    queryFn: () => getCustomFields(token!, entity),
+    enabled: !!token && !!entity,
+  });
+}
+
+export function useCreateCustomField() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { entity: string; label: string; type?: CustomFieldType; options?: string[] }) =>
+      createCustomField(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['custom-fields'] }),
+  });
+}
+
+export function useDeleteCustomField() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteCustomField(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['custom-fields'] }),
   });
 }
