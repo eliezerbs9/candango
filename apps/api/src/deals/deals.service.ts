@@ -76,6 +76,7 @@ export class DealsService {
       data.stageChangedAt = new Date(); // moving stage resets the rotting timer
     }
     const deal = await this.prisma.deal.update({ where: { id }, data });
+    this.emit(orgId, 'deal.updated', deal);
     if (dto.stageId) this.emit(orgId, 'deal.stage_changed', deal);
     return deal;
   }
@@ -83,6 +84,7 @@ export class DealsService {
   async remove(orgId: string, id: string) {
     await this.get(orgId, id);
     await this.prisma.deal.update({ where: { id }, data: { deletedAt: new Date() } });
+    this.emit(orgId, 'deal.deleted', { id });
   }
 
   async win(orgId: string, id: string) {

@@ -50,7 +50,9 @@ export class ActivitiesService {
 
   async complete(orgId: string, id: string) {
     await this.get(orgId, id);
-    return this.prisma.activity.update({ where: { id }, data: { done: true } });
+    const activity = await this.prisma.activity.update({ where: { id }, data: { done: true } });
+    this.events.emit('webhook.event', { orgId, type: 'activity.completed', data: { activity } });
+    return activity;
   }
 
   async remove(orgId: string, id: string) {

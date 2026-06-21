@@ -38,11 +38,13 @@ export class CompaniesService {
 
   async update(orgId: string, id: string, dto: UpdateCompanyDto) {
     await this.get(orgId, id);
-    return this.prisma.company.update({
+    const company = await this.prisma.company.update({
       where: { id },
       data: { name: dto.name, domain: dto.domain },
       select: { id: true, name: true, domain: true },
     });
+    this.events.emit('webhook.event', { orgId, type: 'company.updated', data: { company } });
+    return company;
   }
 
   async remove(orgId: string, id: string) {

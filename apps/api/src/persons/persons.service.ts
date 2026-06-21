@@ -63,11 +63,14 @@ export class PersonsService {
     if (dto.email !== undefined) data.emails = dto.email ? [dto.email] : [];
     if (dto.phone !== undefined) data.phones = dto.phone ? [dto.phone] : [];
     const row = await this.prisma.person.update({ where: { id }, data });
-    return shape(row);
+    const person = shape(row);
+    this.events.emit('webhook.event', { orgId, type: 'person.updated', data: { person } });
+    return person;
   }
 
   async remove(orgId: string, id: string) {
     await this.get(orgId, id);
     await this.prisma.person.update({ where: { id }, data: { deletedAt: new Date() } });
+    this.events.emit('webhook.event', { orgId, type: 'person.deleted', data: { id } });
   }
 }

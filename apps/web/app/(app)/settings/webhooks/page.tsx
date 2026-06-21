@@ -46,7 +46,9 @@ const EVENTS = [
   'deal.lost',
   'person.created',
   'person.updated',
+  'person.deleted',
   'company.created',
+  'company.updated',
   'activity.created',
   'activity.completed',
 ];
