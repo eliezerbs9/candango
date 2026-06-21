@@ -13,7 +13,15 @@ import { deactivateUser, getRoles, getUsers, inviteUser, updateUser } from './me
 import { getOrganization, updateOrganization } from './organization';
 import { getOnboarding, setOnboardingCompleted } from './onboarding';
 import { createApiKey, getApiKeys, revokeApiKey } from './apikeys';
-import { createWebhook, deleteWebhook, getWebhooks, updateWebhook } from './webhooks';
+import {
+  createWebhook,
+  deleteWebhook,
+  getDeliveries,
+  getWebhooks,
+  pingWebhook,
+  replayDelivery,
+  updateWebhook,
+} from './webhooks';
 import type { ApiDeal } from './types';
 
 function useToken() {
@@ -364,5 +372,28 @@ export function useDeleteWebhook() {
   return useMutation({
     mutationFn: (id: string) => deleteWebhook(token!, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['webhooks'] }),
+  });
+}
+
+export function useWebhookDeliveries(webhookId: string | null) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['webhook-deliveries', webhookId],
+    queryFn: () => getDeliveries(token!, webhookId!),
+    enabled: !!token && !!webhookId,
+  });
+}
+
+export function usePingWebhook() {
+  const token = useToken();
+  return useMutation({ mutationFn: (id: string) => pingWebhook(token!, id) });
+}
+
+export function useReplayDelivery() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (deliveryId: string) => replayDelivery(token!, deliveryId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['webhook-deliveries'] }),
   });
 }

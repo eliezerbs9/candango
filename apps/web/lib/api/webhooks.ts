@@ -31,3 +31,25 @@ export function updateWebhook(
 export function deleteWebhook(token: string, id: string) {
   return apiFetch<void>(`/webhooks/${id}`, { method: 'DELETE', token });
 }
+
+export interface WebhookDelivery {
+  id: string;
+  eventId: string;
+  status: 'success' | 'failed' | 'pending';
+  attempt: number;
+  responseCode: number | null;
+  createdAt: string;
+  payload: { type?: string } | null;
+}
+
+export function getDeliveries(token: string, webhookId: string) {
+  return apiFetch<WebhookDelivery[]>(`/webhooks/${webhookId}/deliveries`, { token });
+}
+
+export function pingWebhook(token: string, webhookId: string) {
+  return apiFetch<{ ok: boolean }>(`/webhooks/${webhookId}/ping`, { method: 'POST', token });
+}
+
+export function replayDelivery(token: string, deliveryId: string) {
+  return apiFetch<{ ok: boolean }>(`/webhooks/deliveries/${deliveryId}/replay`, { method: 'POST', token });
+}
