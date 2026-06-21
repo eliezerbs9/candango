@@ -1,6 +1,7 @@
 import {
   IsDateString,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Min,
@@ -38,6 +39,18 @@ export class CreateDealDto {
   @IsOptional()
   @IsDateString()
   expectedCloseDate?: string;
+
+  @IsOptional()
+  @IsObject()
+  shipTo?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  billTo?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  customFields?: Record<string, unknown>;
 }
 
 export class UpdateDealDto {
@@ -53,6 +66,10 @@ export class UpdateDealDto {
 
   @IsOptional()
   @IsString()
+  currency?: string;
+
+  @IsOptional()
+  @IsString()
   stageId?: string;
 
   @IsOptional()
@@ -60,8 +77,28 @@ export class UpdateDealDto {
   ownerUserId?: string;
 
   @IsOptional()
+  @IsString()
+  primaryPersonId?: string;
+
+  @IsOptional()
+  @IsString()
+  companyId?: string;
+
+  @IsOptional()
   @IsDateString()
   expectedCloseDate?: string;
+
+  @IsOptional()
+  @IsObject()
+  shipTo?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  billTo?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  customFields?: Record<string, unknown>;
 }
 
 export class LoseDealDto {

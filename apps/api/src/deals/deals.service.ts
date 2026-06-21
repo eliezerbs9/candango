@@ -49,6 +49,9 @@ export class DealsService {
         primaryPersonId: dto.primaryPersonId ?? null,
         companyId: dto.companyId ?? null,
         expectedCloseDate: dto.expectedCloseDate ? new Date(dto.expectedCloseDate) : null,
+        shipTo: dto.shipTo as Prisma.InputJsonValue | undefined,
+        billTo: dto.billTo as Prisma.InputJsonValue | undefined,
+        customFields: dto.customFields as Prisma.InputJsonValue | undefined,
         status: 'open',
         stageChangedAt: new Date(),
       },
@@ -65,14 +68,20 @@ export class DealsService {
 
   async update(orgId: string, id: string, dto: UpdateDealDto) {
     await this.get(orgId, id);
-    const data: Prisma.DealUpdateInput = {
+    const data: Prisma.DealUncheckedUpdateInput = {
       title: dto.title,
       value: dto.value,
+      currency: dto.currency,
     };
+    if (dto.ownerUserId) data.ownerUserId = dto.ownerUserId;
+    if (dto.primaryPersonId !== undefined) data.primaryPersonId = dto.primaryPersonId || null;
+    if (dto.companyId !== undefined) data.companyId = dto.companyId || null;
     if (dto.expectedCloseDate) data.expectedCloseDate = new Date(dto.expectedCloseDate);
-    if (dto.ownerUserId) data.owner = { connect: { id: dto.ownerUserId } };
+    if (dto.shipTo !== undefined) data.shipTo = dto.shipTo as Prisma.InputJsonValue;
+    if (dto.billTo !== undefined) data.billTo = dto.billTo as Prisma.InputJsonValue;
+    if (dto.customFields !== undefined) data.customFields = dto.customFields as Prisma.InputJsonValue;
     if (dto.stageId) {
-      data.stage = { connect: { id: dto.stageId } };
+      data.stageId = dto.stageId;
       data.stageChangedAt = new Date(); // moving stage resets the rotting timer
     }
     const deal = await this.prisma.deal.update({ where: { id }, data });

@@ -49,6 +49,7 @@ model Organization {
   messages     Message[]
   subscription Subscription?
   invoices     Invoice[]
+  customFieldDefinitions CustomFieldDefinition[]
   quickbooksConnection QuickBooksConnection?
   quickbooksCustomerLinks QuickBooksCustomerLink[]
   quickbooksEstimates  QuickBooksEstimate[]
@@ -519,6 +520,28 @@ model Invoice {
   organization Organization @relation(fields: [orgId], references: [id])
 
   @@index([orgId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Custom Fields (admin-defined schema; values live in each record's custom_fields jsonb)
+// ---------------------------------------------------------------------------
+
+model CustomFieldDefinition {
+  id        String   @id @default(cuid())
+  orgId     String
+  entity    String   // deal | person | company
+  key       String   // stable key used in the record's custom_fields jsonb
+  label     String
+  type      String   @default("text") // text | number | date | select
+  options   String[] // choices when type = select
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, entity, key])
+  @@index([orgId, entity])
 }
 
 // ---------------------------------------------------------------------------
