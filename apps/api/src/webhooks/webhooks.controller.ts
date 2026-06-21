@@ -30,6 +30,21 @@ export class WebhooksController {
     return this.svc.create(u.orgId, u.userId, dto);
   }
 
+  @Get(':id/deliveries')
+  deliveries(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.listDeliveries(u.orgId, id);
+  }
+
+  @Post(':id/ping')
+  ping(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.ping(u.orgId, id);
+  }
+
+  @Post('deliveries/:deliveryId/replay')
+  replay(@CurrentUser() u: AuthContext, @Param('deliveryId') deliveryId: string) {
+    return this.svc.replay(u.orgId, deliveryId);
+  }
+
   @Patch(':id')
   update(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() dto: UpdateWebhookDto) {
     return this.svc.update(u.orgId, id, dto);
