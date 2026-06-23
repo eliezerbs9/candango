@@ -20,7 +20,7 @@ Requirements describe *behavior*, not implementation status — keep done/in-pro
 
 **When a feature/step is implemented AND verified (relevant `tsc --noEmit` / build / smoke test pass), commit it in the same session — don't let work pile up uncommitted.** This rule is the standing authorization to commit without asking each time.
 
-- **Never commit on `main`** (the default branch). Create/switch to a feature branch first (e.g. `feat/<area>`).
+- **During development, work directly on `main`** — commit each verified feature straight to `main`; do **not** create feature branches for now, and keep all work merged into `main` (revisit this branching policy before production/release).
 - **One logical commit per feature/step**, not a giant batch. Conventional Commits with an app scope: `feat(api): …`, `feat(web): …`, `feat(workers): …`, `docs: …`.
 - Include the matching Prisma **migration** + `package.json`/lockfile changes in the same commit as the code that needs them.
 - Also commit the **vault doc updates** if the vault is under version control (it may be a separate repo — check).

@@ -1,12 +1,37 @@
 'use client';
 
-import { Badge, Button, Center, Checkbox, Group, Loader, Paper, Stack, Text } from '@mantine/core';
+import { useMemo, useState } from 'react';
+import { Calendar, dateFnsLocalizer, type View } from 'react-big-calendar';
+import { format, getDay, parse, startOfWeek } from 'date-fns';
+import { enUS } from 'date-fns/locale';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
+import {
+  ActionIcon,
+  Badge,
+  Button,
+  Center,
+  Checkbox,
+  Group,
+  Loader,
+  Paper,
+  SegmentedControl,
+  Stack,
+  Text,
+} from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconMapPin, IconPlus, IconVideo } from '@tabler/icons-react';
+import { IconChevronLeft, IconChevronRight, IconMapPin, IconPlus, IconVideo } from '@tabler/icons-react';
 import { PageHeader } from '@/components/primitives/PageHeader';
 import { ActivityForm } from '@/components/activities/ActivityForm';
 import { useActivities, useCompleteActivity } from '@/lib/api/hooks';
 import type { ActivityType, ApiActivity } from '@/lib/api/activities';
+
+const localizer = dateFnsLocalizer({
+  format,
+  parse,
+  startOfWeek,
+  getDay,
+  locales: { 'en-US': enUS },
+});
 
 const TYPE_COLORS: Record<ActivityType, string> = {
   call: 'blue',
@@ -15,19 +40,61 @@ const TYPE_COLORS: Record<ActivityType, string> = {
   email: 'teal',
 };
 
+type Mode = 'month' | 'week' | 'day' | 'list';
+
+interface CalEvent {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
+  allDay: boolean;
+  resource: ApiActivity;
+}
+
+/** Nav-only toolbar (the Month/Week/Day/List switcher lives in the page header). */
+function CalToolbar({ label, onNavigate }: { label: string; onNavigate: (a: 'PREV' | 'NEXT' | 'TODAY') => void }) {
+  return (
+    <Group justify="space-between" mb="sm">
+      <Group gap="xs">
+        <Button size="xs" variant="default" onClick={() => onNavigate('TODAY')}>
+          Today
+        </Button>
+        <ActionIcon variant="default" onClick={() => onNavigate('PREV')} aria-label="Previous">
+          <IconChevronLeft size={16} />
+        </ActionIcon>
+        <ActionIcon variant="default" onClick={() => onNavigate('NEXT')} aria-label="Next">
+          <IconChevronRight size={16} />
+        </ActionIcon>
+      </Group>
+      <Text fw={600}>{label}</Text>
+      <span style={{ width: 80 }} />
+    </Group>
+  );
+}
+
 function whenLabel(a: ApiActivity) {
-  if (a.startAt) {
-    const d = new Date(a.startAt);
-    return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-  }
+  if (a.startAt) return new Date(a.startAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   if (a.dueAt) return `Due ${a.dueAt.slice(0, 10)}`;
   return '—';
 }
 
 export default function ActivitiesPage() {
-  const { data: items = [], isLoading } = useActivities();
+  const { data: items = [], isLoading } = useActivities({ assignee: 'me' });
   const complete = useCompleteActivity();
   const [opened, ctl] = useDisclosure(false);
+  const [mode, setMode] = useState<Mode>('month');
+  const [date, setDate] = useState(new Date());
+
+  const events = useMemo<CalEvent[]>(
+    () =>
+      items.flatMap((a) => {
+        const start = a.startAt ? new Date(a.startAt) : a.dueAt ? new Date(a.dueAt) : null;
+        if (!start) return [];
+        const end = a.endAt ? new Date(a.endAt) : start;
+        return [{ id: a.id, title: a.subject, start, end, allDay: !a.startAt, resource: a }];
+      }),
+    [items],
+  );
 
   if (isLoading) {
     return (
@@ -41,61 +108,93 @@ export default function ActivitiesPage() {
     <>
       <PageHeader
         title="Activities"
-        subtitle="Your tasks, calls, meetings and emails"
+        subtitle="Calendar of your tasks, calls and meetings"
         actions={
-          <Button leftSection={<IconPlus size={16} />} onClick={ctl.open}>
-            New activity
-          </Button>
+          <Group>
+            <SegmentedControl
+              value={mode}
+              onChange={(v) => setMode(v as Mode)}
+              data={[
+                { value: 'month', label: 'Month' },
+                { value: 'week', label: 'Week' },
+                { value: 'day', label: 'Day' },
+                { value: 'list', label: 'List' },
+              ]}
+            />
+            <Button leftSection={<IconPlus size={16} />} onClick={ctl.open}>
+              New activity
+            </Button>
+          </Group>
         }
       />
 
-      <Stack gap="xs">
-        {items.map((a) => (
-          <Paper key={a.id} withBorder radius="md" p="sm">
-            <Group justify="space-between" wrap="nowrap" align="flex-start">
-              <Group gap="sm" wrap="nowrap" align="flex-start">
-                <Checkbox
-                  checked={a.done}
-                  onChange={() => {
-                    if (!a.done) complete.mutate(a.id);
-                  }}
-                  aria-label="Mark done"
-                  mt={2}
-                />
-                <div>
-                  <Text fw={500} td={a.done ? 'line-through' : undefined} c={a.done ? 'dimmed' : undefined}>
-                    {a.subject}
-                  </Text>
-                  <Group gap={8} mt={2}>
-                    <Text size="xs" c="dimmed">
-                      {whenLabel(a)}
+      {mode === 'list' ? (
+        <Stack gap="xs">
+          {items.map((a) => (
+            <Paper key={a.id} withBorder radius="md" p="sm">
+              <Group justify="space-between" wrap="nowrap" align="flex-start">
+                <Group gap="sm" wrap="nowrap" align="flex-start">
+                  <Checkbox
+                    checked={a.done}
+                    onChange={() => {
+                      if (!a.done) complete.mutate(a.id);
+                    }}
+                    aria-label="Mark done"
+                    mt={2}
+                  />
+                  <div>
+                    <Text fw={500} td={a.done ? 'line-through' : undefined} c={a.done ? 'dimmed' : undefined}>
+                      {a.subject}
                     </Text>
-                    {a.locationType === 'in_person' && a.location ? (
+                    <Group gap={8} mt={2}>
                       <Text size="xs" c="dimmed">
-                        <IconMapPin size={11} style={{ verticalAlign: -1 }} /> {a.location}
+                        {whenLabel(a)}
+                      </Text>
+                      {a.locationType === 'in_person' && a.location ? (
+                        <Text size="xs" c="dimmed">
+                          <IconMapPin size={11} style={{ verticalAlign: -1 }} /> {a.location}
+                        </Text>
+                      ) : null}
+                      {a.locationType === 'video' && a.conferenceUrl ? (
+                        <Text size="xs" c="blue" component="a" href={a.conferenceUrl} target="_blank">
+                          <IconVideo size={11} style={{ verticalAlign: -1 }} /> Join
+                        </Text>
+                      ) : null}
+                    </Group>
+                    {a.participants.length ? (
+                      <Text size="xs" c="dimmed" mt={2}>
+                        With {a.participants.map((p) => p.name).join(', ')}
                       </Text>
                     ) : null}
-                    {a.locationType === 'video' && a.conferenceUrl ? (
-                      <Text size="xs" c="blue" component="a" href={a.conferenceUrl} target="_blank">
-                        <IconVideo size={11} style={{ verticalAlign: -1 }} /> Join
-                      </Text>
-                    ) : null}
-                  </Group>
-                  {a.participants.length ? (
-                    <Text size="xs" c="dimmed" mt={2}>
-                      With {a.participants.map((p) => p.name).join(', ')}
-                    </Text>
-                  ) : null}
-                </div>
+                  </div>
+                </Group>
+                <Badge color={TYPE_COLORS[a.type]} variant="light" tt="capitalize">
+                  {a.type}
+                </Badge>
               </Group>
-              <Badge color={TYPE_COLORS[a.type]} variant="light" tt="capitalize">
-                {a.type}
-              </Badge>
-            </Group>
-          </Paper>
-        ))}
-        {items.length === 0 ? <Text c="dimmed">No activities yet.</Text> : null}
-      </Stack>
+            </Paper>
+          ))}
+          {items.length === 0 ? <Text c="dimmed">No activities yet.</Text> : null}
+        </Stack>
+      ) : (
+        <div style={{ height: '72vh' }}>
+          <Calendar
+            localizer={localizer}
+            events={events}
+            view={mode as View}
+            onView={(v) => setMode(v as Mode)}
+            date={date}
+            onNavigate={setDate}
+            views={['month', 'week', 'day']}
+            components={{ toolbar: CalToolbar }}
+            popup
+            eventPropGetter={(e: CalEvent) => ({
+              style: { backgroundColor: `var(--mantine-color-${TYPE_COLORS[e.resource.type]}-6)`, border: 'none' },
+            })}
+            style={{ height: '100%' }}
+          />
+        </div>
+      )}
 
       <ActivityForm opened={opened} onClose={ctl.close} />
     </>
