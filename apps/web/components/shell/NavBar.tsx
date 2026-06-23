@@ -10,6 +10,7 @@ import {
   IconCurrencyDollar,
   IconGauge,
   IconLayoutKanban,
+  IconMail,
   IconSettings,
   IconUser,
   IconUsers,
@@ -36,6 +37,7 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   { label: 'Activities', href: '/activities', icon: IconCalendarEvent },
+  { label: 'Email', href: '/emails', icon: IconMail },
   { label: 'Reports', href: '/reports', icon: IconChartBar },
   { label: 'Settings', href: '/settings/general', icon: IconSettings },
 ];

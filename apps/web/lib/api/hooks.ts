@@ -195,6 +195,15 @@ export function useDealMessages(dealId: string) {
   });
 }
 
+export function useInbox() {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['messages', { mine: true }],
+    queryFn: () => getMessages(token!, { mine: true }),
+    enabled: !!token,
+  });
+}
+
 /** Move a deal to another stage, with optimistic update of the pipeline's board. */
 export function useMoveDeal(pipelineId: string) {
   const token = useToken();
