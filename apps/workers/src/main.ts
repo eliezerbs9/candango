@@ -6,7 +6,7 @@ async function bootstrap() {
   const app = await NestFactory.createApplicationContext(WorkerModule);
   app.enableShutdownHooks();
   // eslint-disable-next-line no-console
-  console.log('Candango workers running — consuming queues "webhook-delivery", "email"');
+  console.log('Candango workers running — consuming queues "webhook-delivery", "email", "calendar-sync"');
 }
 
 void bootstrap();

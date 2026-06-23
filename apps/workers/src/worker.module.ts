@@ -4,6 +4,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { PrismaService } from './prisma.service';
 import { WebhookDeliveryProcessor } from './webhook-delivery.processor';
 import { EmailProcessor } from './email.processor';
+import { CalendarSyncProcessor } from './calendar-sync.processor';
 
 @Module({
   imports: [
@@ -17,7 +18,8 @@ import { EmailProcessor } from './email.processor';
     }),
     BullModule.registerQueue({ name: 'webhook-delivery' }),
     BullModule.registerQueue({ name: 'email' }),
+    BullModule.registerQueue({ name: 'calendar-sync' }),
   ],
-  providers: [PrismaService, WebhookDeliveryProcessor, EmailProcessor],
+  providers: [PrismaService, WebhookDeliveryProcessor, EmailProcessor, CalendarSyncProcessor],
 })
 export class WorkerModule {}

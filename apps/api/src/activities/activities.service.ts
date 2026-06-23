@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityFilters, CreateActivityDto, UpdateActivityDto } from './dto/activity.dto';
@@ -35,7 +37,25 @@ export class ActivitiesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: EventEmitter2,
+    @InjectQueue('calendar-sync') private readonly calendarQueue: Queue,
   ) {}
+
+  private static readonly QUEUE_OPTS = {
+    attempts: 5,
+    backoff: { type: 'exponential' as const, delay: 20_000 },
+    removeOnComplete: 200,
+    removeOnFail: 1000,
+  };
+
+  /** Enqueue an outbound Google Calendar upsert (the worker no-ops if the user isn't connected). */
+  private syncUpsert(activityId: string) {
+    return this.calendarQueue.add('sync', { op: 'upsert', activityId }, ActivitiesService.QUEUE_OPTS);
+  }
+
+  /** Enqueue deletion of an already-synced Google event (self-contained — the activity may be gone). */
+  private syncDelete(userId: string, externalEventId: string) {
+    return this.calendarQueue.add('sync', { op: 'delete', userId, externalEventId }, ActivitiesService.QUEUE_OPTS);
+  }
 
   /** Persons that belong to this tenant (filter to prevent cross-tenant links). */
   private async validPersonIds(orgId: string, ids?: string[]): Promise<string[]> {
@@ -106,6 +126,7 @@ export class ActivitiesService {
     });
     const activity = shape(row);
     this.events.emit('webhook.event', { orgId, type: 'activity.created', data: { activity } });
+    if (row.type === 'meeting') await this.syncUpsert(row.id);
     return activity;
   }
 
@@ -148,6 +169,7 @@ export class ActivitiesService {
     const row = await this.prisma.activity.findFirstOrThrow({ where: { id }, include: withParticipants });
     const activity = shape(row);
     this.events.emit('webhook.event', { orgId, type: 'activity.updated', data: { activity } });
+    if (row.type === 'meeting') await this.syncUpsert(id);
     return activity;
   }
 
@@ -161,6 +183,15 @@ export class ActivitiesService {
 
   async remove(orgId: string, id: string) {
     await this.get(orgId, id);
+    // If this meeting was synced to Google, remove the event first (FK + cleanup).
+    const synced = await this.prisma.activity.findFirst({
+      where: { id, orgId },
+      select: { assignedUserId: true, calendarEvent: { select: { externalEventId: true } } },
+    });
+    if (synced?.calendarEvent && synced.assignedUserId) {
+      await this.syncDelete(synced.assignedUserId, synced.calendarEvent.externalEventId);
+      await this.prisma.calendarEvent.delete({ where: { activityId: id } });
+    }
     await this.prisma.activity.delete({ where: { id } });
   }
 }
