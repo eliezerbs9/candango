@@ -33,6 +33,33 @@ export function deactivateUser(token: string, id: string) {
   return apiFetch<void>(`/users/${id}`, { method: 'DELETE', token });
 }
 
+export interface ScopeOption {
+  value: string;
+  label: string;
+}
+
+export interface RoleBody {
+  name: string;
+  visibility: 'own' | 'team' | 'org';
+  scopes: string[];
+}
+
 export function getRoles(token: string) {
   return apiFetch<ApiRole[]>('/roles', { token });
+}
+
+export function getScopeCatalog(token: string) {
+  return apiFetch<ScopeOption[]>('/roles/scopes', { token });
+}
+
+export function createRole(token: string, body: RoleBody) {
+  return apiFetch<ApiRole>('/roles', { method: 'POST', token, body: JSON.stringify(body) });
+}
+
+export function updateRole(token: string, id: string, body: Partial<RoleBody>) {
+  return apiFetch<ApiRole>(`/roles/${id}`, { method: 'PATCH', token, body: JSON.stringify(body) });
+}
+
+export function deleteRole(token: string, id: string) {
+  return apiFetch<void>(`/roles/${id}`, { method: 'DELETE', token });
 }

@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsArray, IsEmail, IsObject, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class CreatePersonDto {
   @IsString()
@@ -14,8 +14,13 @@ export class CreatePersonDto {
   phone?: string;
 
   @IsOptional()
-  @IsString()
-  companyId?: string;
+  @IsArray()
+  @IsString({ each: true })
+  companyIds?: string[];
+
+  @IsOptional()
+  @IsObject()
+  customFields?: Record<string, unknown>;
 }
 
 export class UpdatePersonDto {
@@ -33,6 +38,11 @@ export class UpdatePersonDto {
   phone?: string;
 
   @IsOptional()
-  @IsString()
-  companyId?: string;
+  @IsArray()
+  @IsString({ each: true })
+  companyIds?: string[];
+
+  @IsOptional()
+  @IsObject()
+  customFields?: Record<string, unknown>;
 }

@@ -3,13 +3,49 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '@/lib/auth/store';
-import { getAllStages, getPipelines, getStages } from './pipelines';
+import {
+  createStage,
+  deleteStage,
+  getAllStages,
+  getPipelines,
+  getStages,
+  updateStage,
+} from './pipelines';
 import { createDeal, getDeals, loseDeal, updateDeal, winDeal, type DealFilters } from './deals';
 import { changePassword, getMe, updateProfile, type Profile } from './profile';
-import { createCompany, createPerson, getCompanies, getPersons } from './contacts';
-import { completeActivity, createActivity, getActivities } from './activities';
+import {
+  createCompany,
+  createPerson,
+  deleteCompany,
+  deletePerson,
+  getCompanies,
+  getPersons,
+  updateCompany,
+  updatePerson,
+  type CompanyBody,
+  type PersonBody,
+} from './contacts';
+import {
+  completeActivity,
+  createActivity,
+  getActivities,
+  updateActivity,
+  type ActivityBody,
+  type ActivityFilters,
+} from './activities';
 import { getByRep, getPipelineReport, getWonLost } from './reports';
-import { deactivateUser, getRoles, getUsers, inviteUser, updateUser } from './members';
+import {
+  createRole,
+  deactivateUser,
+  deleteRole,
+  getRoles,
+  getScopeCatalog,
+  getUsers,
+  inviteUser,
+  updateRole,
+  updateUser,
+  type RoleBody,
+} from './members';
 import { getOrganization, updateOrganization } from './organization';
 import { getOnboarding, setOnboardingCompleted } from './onboarding';
 import { createApiKey, getApiKeys, revokeApiKey } from './apikeys';
@@ -23,6 +59,7 @@ import {
   updateWebhook,
 } from './webhooks';
 import { createCustomField, deleteCustomField, getCustomFields } from './customFields';
+import { disconnectGoogle, getGoogleConnectUrl, getGoogleStatus } from './integrations';
 import type { CustomFieldType } from './customFields';
 import type { ApiDeal } from './types';
 
@@ -54,6 +91,37 @@ export function useAllStages() {
     queryKey: ['stages', 'all'],
     queryFn: () => getAllStages(token!),
     enabled: !!token,
+  });
+}
+
+// --- Stage (pipeline column) mutations ---
+
+export function useCreateStage(pipelineId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; position?: number; probability?: number }) =>
+      createStage(token!, pipelineId, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['stages'] }),
+  });
+}
+
+export function useUpdateStage() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; name?: string; position?: number; probability?: number }) =>
+      updateStage(token!, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['stages'] }),
+  });
+}
+
+export function useDeleteStage() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteStage(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['stages'] }),
   });
 }
 
@@ -179,8 +247,26 @@ export function useCreatePerson() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { name: string; email?: string; phone?: string; companyId?: string }) =>
-      createPerson(token!, body),
+    mutationFn: (body: PersonBody) => createPerson(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['persons'] }),
+  });
+}
+
+export function useUpdatePerson() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & Partial<PersonBody>) =>
+      updatePerson(token!, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['persons'] }),
+  });
+}
+
+export function useDeletePerson() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deletePerson(token!, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['persons'] }),
   });
 }
@@ -189,24 +275,56 @@ export function useCreateCompany() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { name: string; domain?: string }) => createCompany(token!, body),
+    mutationFn: (body: CompanyBody) => createCompany(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['companies'] }),
+  });
+}
+
+export function useUpdateCompany() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & Partial<CompanyBody>) =>
+      updateCompany(token!, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['companies'] }),
+  });
+}
+
+export function useDeleteCompany() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteCompany(token!, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['companies'] }),
   });
 }
 
 // --- Activities ---
 
-export function useActivities() {
+export function useActivities(filters: ActivityFilters = {}) {
   const token = useToken();
-  return useQuery({ queryKey: ['activities'], queryFn: () => getActivities(token!), enabled: !!token });
+  return useQuery({
+    queryKey: ['activities', filters],
+    queryFn: () => getActivities(token!, filters),
+    enabled: !!token,
+  });
 }
 
 export function useCreateActivity() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { type: 'call' | 'meeting' | 'task' | 'email'; subject: string; dueAt?: string }) =>
-      createActivity(token!, body),
+    mutationFn: (body: ActivityBody) => createActivity(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
+  });
+}
+
+export function useUpdateActivity() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & Partial<ActivityBody> & { done?: boolean }) =>
+      updateActivity(token!, id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
   });
 }
@@ -251,6 +369,43 @@ export function useUsers() {
 export function useRoles() {
   const token = useToken();
   return useQuery({ queryKey: ['roles'], queryFn: () => getRoles(token!), enabled: !!token });
+}
+
+export function useScopeCatalog() {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['scope-catalog'],
+    queryFn: () => getScopeCatalog(token!),
+    enabled: !!token,
+    staleTime: Infinity,
+  });
+}
+
+export function useCreateRole() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: RoleBody) => createRole(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['roles'] }),
+  });
+}
+
+export function useUpdateRole() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & Partial<RoleBody>) => updateRole(token!, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['roles'] }),
+  });
+}
+
+export function useDeleteRole() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteRole(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['roles'] }),
+  });
 }
 
 export function useInviteUser() {
@@ -409,6 +564,31 @@ export function useReplayDelivery() {
   return useMutation({
     mutationFn: (deliveryId: string) => replayDelivery(token!, deliveryId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['webhook-deliveries'] }),
+  });
+}
+
+// --- Integrations (Google) ---
+
+export function useGoogleStatus() {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['integrations', 'google'],
+    queryFn: () => getGoogleStatus(token!),
+    enabled: !!token,
+  });
+}
+
+export function useConnectGoogle() {
+  const token = useToken();
+  return useMutation({ mutationFn: () => getGoogleConnectUrl(token!) });
+}
+
+export function useDisconnectGoogle() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => disconnectGoogle(token!),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['integrations', 'google'] }),
   });
 }
 

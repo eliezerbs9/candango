@@ -4,7 +4,16 @@ import { useEffect, useState } from 'react';
 import { Button, Modal, NumberInput, Select, Stack, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { ApiError } from '@/lib/api/client';
-import { useCompanies, useCreateDeal, usePersons, usePipelines, useStages } from '@/lib/api/hooks';
+import { CreatableSelect } from '@/components/common/CreatableSelect';
+import {
+  useCompanies,
+  useCreateCompany,
+  useCreateDeal,
+  useCreatePerson,
+  usePersons,
+  usePipelines,
+  useStages,
+} from '@/lib/api/hooks';
 
 export function NewDealModal({
   opened,
@@ -19,6 +28,8 @@ export function NewDealModal({
   const { data: companies = [] } = useCompanies();
   const { data: persons = [] } = usePersons();
   const create = useCreateDeal();
+  const createCompany = useCreateCompany();
+  const createPerson = useCreatePerson();
 
   const [pipelineId, setPipelineId] = useState<string | null>(null);
   const [stageId, setStageId] = useState<string | null>(null);
@@ -81,23 +92,31 @@ export function NewDealModal({
           required
         />
         <NumberInput label="Value (USD)" min={0} prefix="$" thousandSeparator="," value={value} onChange={setValue} />
-        <Select
+        <CreatableSelect
           label="Company"
-          placeholder="No company"
-          data={companies.map((c) => ({ value: c.id, label: c.name }))}
+          placeholder="Search or create a company"
+          options={companies.map((c) => ({ value: c.id, label: c.name }))}
           value={companyId}
           onChange={setCompanyId}
-          searchable
-          clearable
+          onCreate={async (name) => {
+            const c = await createCompany.mutateAsync({ name });
+            return { value: c.id, label: c.name };
+          }}
         />
-        <Select
+        <CreatableSelect
           label="Primary contact"
-          placeholder="No contact"
-          data={persons.map((p) => ({ value: p.id, label: p.name }))}
+          placeholder="Search or create a contact"
+          options={persons.map((p) => ({ value: p.id, label: p.name }))}
           value={primaryPersonId}
           onChange={setPrimaryPersonId}
-          searchable
-          clearable
+          onCreate={async (name) => {
+            // If a company is selected, link the new contact to it.
+            const p = await createPerson.mutateAsync({
+              name,
+              companyIds: companyId ? [companyId] : undefined,
+            });
+            return { value: p.id, label: p.name };
+          }}
         />
         <Select
           label="Pipeline"

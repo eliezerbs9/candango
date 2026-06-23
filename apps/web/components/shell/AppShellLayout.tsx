@@ -24,7 +24,7 @@ export function AppShellLayout({ children }: { children: React.ReactNode }) {
       </AppShell.Navbar>
 
       <AppShell.Main>
-        <TrialBanner daysLeft={7} />
+        <TrialBanner />
         {children}
       </AppShell.Main>
     </AppShell>

@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { PrismaService } from './prisma.service';
 import { WebhookDeliveryProcessor } from './webhook-delivery.processor';
+import { EmailProcessor } from './email.processor';
 
 @Module({
   imports: [
@@ -15,7 +16,8 @@ import { WebhookDeliveryProcessor } from './webhook-delivery.processor';
       },
     }),
     BullModule.registerQueue({ name: 'webhook-delivery' }),
+    BullModule.registerQueue({ name: 'email' }),
   ],
-  providers: [PrismaService, WebhookDeliveryProcessor],
+  providers: [PrismaService, WebhookDeliveryProcessor, EmailProcessor],
 })
 export class WorkerModule {}

@@ -1,13 +1,22 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Button, Divider, Drawer, Group, NumberInput, Select, Stack, Text, TextInput } from '@mantine/core';
+import { Button, Divider, Drawer, Group, NumberInput, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { StatusBadge } from '@/components/primitives/StatusBadge';
+import { CreatableSelect } from '@/components/common/CreatableSelect';
 import { AddressFields, type Address } from './AddressFields';
 import { CustomFieldsEditor } from './CustomFieldsEditor';
 import { ApiError } from '@/lib/api/client';
-import { useCompanies, useLoseDeal, usePersons, useUpdateDeal, useWinDeal } from '@/lib/api/hooks';
+import {
+  useCompanies,
+  useCreateCompany,
+  useCreatePerson,
+  useLoseDeal,
+  usePersons,
+  useUpdateDeal,
+  useWinDeal,
+} from '@/lib/api/hooks';
 import type { ApiDeal } from '@/lib/api/types';
 
 interface DealForm {
@@ -35,6 +44,8 @@ export function DealDetailDrawer({
   const update = useUpdateDeal();
   const win = useWinDeal();
   const lose = useLoseDeal();
+  const createCompany = useCreateCompany();
+  const createPerson = useCreatePerson();
 
   const [form, setForm] = useState<DealForm | null>(null);
 
@@ -106,23 +117,30 @@ export function DealDetailDrawer({
             value={form.value}
             onChange={(v) => setForm({ ...form, value: v })}
           />
-          <Select
+          <CreatableSelect
             label="Company"
-            placeholder="No company"
-            data={companies.map((c) => ({ value: c.id, label: c.name }))}
+            placeholder="Search or create a company"
+            options={companies.map((c) => ({ value: c.id, label: c.name }))}
             value={form.companyId}
             onChange={(v) => setForm({ ...form, companyId: v })}
-            searchable
-            clearable
+            onCreate={async (name) => {
+              const c = await createCompany.mutateAsync({ name });
+              return { value: c.id, label: c.name };
+            }}
           />
-          <Select
+          <CreatableSelect
             label="Primary contact"
-            placeholder="No contact"
-            data={persons.map((p) => ({ value: p.id, label: p.name }))}
+            placeholder="Search or create a contact"
+            options={persons.map((p) => ({ value: p.id, label: p.name }))}
             value={form.primaryPersonId}
             onChange={(v) => setForm({ ...form, primaryPersonId: v })}
-            searchable
-            clearable
+            onCreate={async (name) => {
+              const p = await createPerson.mutateAsync({
+                name,
+                companyIds: form.companyId ? [form.companyId] : undefined,
+              });
+              return { value: p.id, label: p.name };
+            }}
           />
           <TextInput
             type="date"

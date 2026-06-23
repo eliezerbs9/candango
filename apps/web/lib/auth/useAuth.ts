@@ -1,6 +1,6 @@
 'use client';
 
-import { useAuthStore, type AuthUser } from './store';
+import { useAuthStore } from './store';
 
 export function useAuth() {
   const token = useAuthStore((s) => s.token);
@@ -15,10 +15,4 @@ export function useAuth() {
     signIn,
     signOut,
   };
-}
-
-/** Temporary mock used by UI-1 forms until the real API exists. */
-export function mockUserFromEmail(email: string): AuthUser {
-  const name = email.split('@')[0] || 'User';
-  return { id: 'usr_mock', name, email, orgId: 'org_mock', orgName: 'My Company' };
 }

@@ -19,8 +19,7 @@ type AuthState = {
 
 /**
  * Auth store. Persisted to localStorage so a refresh keeps the session.
- * NOTE: UI-1 uses a mock token until the API (apps/api) lands; replace
- * `signIn` callers with real `/auth/login` once the backend exists.
+ * Holds the real JWT + user from `/auth/login` / `/auth/signup` / accept-invite.
  */
 export const useAuthStore = create<AuthState>()(
   persist(

@@ -68,6 +68,7 @@ model User {
   roleId       String?
   teamId       String?
   lastLoginAt  DateTime?
+  emailVerifiedAt DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   deletedAt    DateTime?
@@ -83,9 +84,27 @@ model User {
   calendarConnection CalendarConnection?
   mailboxConnection  MailboxConnection?
   managedTeams       Team[]              @relation("TeamManager")
+  authTokens         AuthToken[]
 
   @@unique([orgId, email])
   @@index([orgId, status])
+}
+
+/// Single-use, hashed tokens for member invites, password resets, and email verification.
+/// Only the SHA-256 hash is stored; the raw token is emailed via Brevo (see Transactional Email).
+model AuthToken {
+  id        String    @id @default(cuid())
+  orgId     String
+  userId    String
+  type      String    // invite | password_reset | email_verify
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, type])
 }
 
 model Team {
@@ -211,7 +230,6 @@ model Person {
   name         String
   emails       Json     @default("[]") // [{ value, label }]
   phones       Json     @default("[]")
-  companyId    String?
   ownerUserId  String?
   customFields Json     @default("{}")
   createdAt    DateTime @default(now())
@@ -219,16 +237,16 @@ model Person {
   deletedAt    DateTime?
 
   organization     Organization      @relation(fields: [orgId], references: [id])
-  company          Company?          @relation(fields: [companyId], references: [id])
   owner            User?             @relation("PersonOwner", fields: [ownerUserId], references: [id])
+  companyLinks     CompanyContact[]  // a person can be a contact at many companies
   dealParticipants DealParticipant[]
   primaryForDeals  Deal[]            @relation("DealPrimaryPerson")
   activities       Activity[]
+  activityParticipations ActivityParticipant[]
   notes            Note[]
   messages         Message[]
 
   @@index([orgId])
-  @@index([orgId, companyId])
 }
 
 model Company {
@@ -237,19 +255,34 @@ model Company {
   name         String
   domain       String?
   address      String?
+  phone        String?
   ownerUserId  String?
   customFields Json     @default("{}")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   deletedAt    DateTime?
 
-  organization Organization @relation(fields: [orgId], references: [id])
-  owner        User?        @relation("CompanyOwner", fields: [ownerUserId], references: [id])
-  persons      Person[]
+  organization Organization     @relation(fields: [orgId], references: [id])
+  owner        User?            @relation("CompanyOwner", fields: [ownerUserId], references: [id])
+  contacts     CompanyContact[] // contact people at this company
   deals        Deal[]
 
   @@index([orgId])
   @@index([orgId, domain])
+}
+
+/// Many-to-many link between a Company and its contact People. A person can be
+/// a contact at one or more companies (see Deals, Contacts & Activities).
+model CompanyContact {
+  companyId String
+  personId  String
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  person  Person  @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, personId])
+  @@index([personId])
 }
 
 model DealParticipant {
@@ -272,17 +305,23 @@ model Activity {
   type            String   // call | meeting | task | email
   subject         String
   dueAt           DateTime?
+  startAt         DateTime?
+  endAt           DateTime?
+  location        String?
+  locationType    String?  // in_person | video | phone | none
+  conferenceUrl   String?
   durationMin     Int?
   done            Boolean  @default(false)
   calendarEventId String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  organization  Organization   @relation(fields: [orgId], references: [id])
-  deal          Deal?          @relation(fields: [dealId], references: [id])
-  person        Person?        @relation(fields: [personId], references: [id])
-  assignee      User?          @relation("ActivityAssignee", fields: [assignedUserId], references: [id])
+  organization  Organization          @relation(fields: [orgId], references: [id])
+  deal          Deal?                 @relation(fields: [dealId], references: [id])
+  person        Person?               @relation(fields: [personId], references: [id])
+  assignee      User?                 @relation("ActivityAssignee", fields: [assignedUserId], references: [id])
   calendarEvent CalendarEvent?
+  participants  ActivityParticipant[]
 
   @@index([orgId, dueAt])
   @@index([orgId, dealId])
@@ -328,6 +367,19 @@ model CalendarConnection {
   user User @relation(fields: [userId], references: [id])
 
   @@index([orgId])
+}
+
+/// People attending/involved in an activity (beyond the primary person).
+/// Defaults to the deal's people on creation; editable. See FR-3.4.
+model ActivityParticipant {
+  activityId String
+  personId   String
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  person   Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@id([activityId, personId])
+  @@index([personId])
 }
 
 model CalendarEvent {

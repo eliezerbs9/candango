@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiAuthGuard } from '../auth/api-auth.guard';
@@ -22,8 +23,22 @@ export class ActivitiesController {
 
   @Get()
   @Scopes('deals:read')
-  list(@CurrentUser() u: AuthContext) {
-    return this.svc.list(u.orgId);
+  list(
+    @CurrentUser() u: AuthContext,
+    @Query('deal_id') dealId?: string,
+    @Query('assignee') assignee?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('type') type?: string,
+  ) {
+    return this.svc.list(u.orgId, {
+      dealId,
+      // `assignee=me` scopes to the caller (used by the per-rep calendar).
+      assignedUserId: assignee === 'me' ? u.userId : assignee,
+      from,
+      to,
+      type,
+    });
   }
 
   @Post()

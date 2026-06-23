@@ -18,6 +18,7 @@ import { OnboardingModule } from './onboarding/onboarding.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { CustomFieldsModule } from './custom-fields/custom-fields.module';
+import { IntegrationsModule } from './integrations/integrations.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -47,6 +48,7 @@ import { HealthController } from './health.controller';
     ApiKeysModule,
     WebhooksModule,
     CustomFieldsModule,
+    IntegrationsModule,
   ],
   controllers: [HealthController],
 })

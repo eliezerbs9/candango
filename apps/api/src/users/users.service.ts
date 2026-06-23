@@ -5,7 +5,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
+import { TokensService } from '../tokens/tokens.service';
 import { InviteUserDto, UpdateUserDto } from './dto/user.dto';
+
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 type UserRow = {
   id: string;
@@ -27,7 +31,11 @@ const shape = (u: UserRow) => ({
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+    private readonly tokens: TokensService,
+  ) {}
 
   async list(orgId: string) {
     const users = await this.prisma.user.findMany({
@@ -58,8 +66,13 @@ export class UsersService {
         roleId: dto.roleId ?? null,
         status: 'invited',
       },
-      include: { role: true },
+      include: { role: true, organization: { select: { name: true } } },
     });
+
+    // Email the invite link so the person can set a password and join.
+    const token = await this.tokens.issue(orgId, user.id, 'invite', INVITE_TTL_MS);
+    await this.mail.sendInvite(user.email, user.name, user.organization.name, token);
+
     return shape(user);
   }
 
