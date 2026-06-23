@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, HttpCode, Query, Res, UseGuards } from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -49,5 +49,14 @@ export class IntegrationsController {
   @HttpCode(204)
   disconnect(@CurrentUser() u: AuthContext) {
     return this.google.disconnect(u.userId);
+  }
+
+  /** Trigger a Gmail capture for the current user (also runs on connect + on a poll). */
+  @UseGuards(JwtAuthGuard)
+  @Post('sync-email')
+  @HttpCode(202)
+  async syncEmail(@CurrentUser() u: AuthContext) {
+    await this.google.syncEmail(u.userId);
+    return { queued: true };
   }
 }

@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { google } from 'googleapis';
 import { PrismaService } from '../prisma/prisma.service';
 import { encryptToken } from './crypto.util';
@@ -28,7 +30,13 @@ export class GoogleOAuthService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly jwt: JwtService,
+    @InjectQueue('gmail-sync') private readonly gmailQueue: Queue,
   ) {}
+
+  /** Kick off a Gmail capture for the user (on connect or on demand). */
+  syncEmail(userId: string) {
+    return this.gmailQueue.add('sync-user', { userId }, { removeOnComplete: 200, removeOnFail: 500 });
+  }
 
   private oauthClient() {
     const clientId = this.config.get<string>('GOOGLE_CLIENT_ID');
@@ -111,6 +119,7 @@ export class GoogleOAuthService {
       },
     });
 
+    await this.syncEmail(userId); // initial Gmail backfill
     return { orgId };
   }
 

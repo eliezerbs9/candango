@@ -1,4 +1,4 @@
-import { google, type calendar_v3, type tasks_v1 } from 'googleapis';
+import { google, type calendar_v3, type gmail_v1, type tasks_v1 } from 'googleapis';
 import { decryptToken } from './crypto.util';
 
 interface TokenPair {
@@ -26,4 +26,8 @@ export function calendarFor(conn: TokenPair): calendar_v3.Calendar {
 
 export function tasksFor(conn: TokenPair): tasks_v1.Tasks {
   return google.tasks({ version: 'v1', auth: oauthFor(conn) });
+}
+
+export function gmailFor(conn: TokenPair): gmail_v1.Gmail {
+  return google.gmail({ version: 'v1', auth: oauthFor(conn) });
 }
