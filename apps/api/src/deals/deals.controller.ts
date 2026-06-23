@@ -48,7 +48,13 @@ export class DealsController {
   @Patch(':id')
   @Scopes('deals:write')
   update(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() dto: UpdateDealDto) {
-    return this.svc.update(u.orgId, id, dto);
+    return this.svc.update(u.orgId, id, dto, u.userId);
+  }
+
+  @Get(':id/stage-history')
+  @Scopes('deals:read')
+  stageHistory(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.stageHistory(u.orgId, id);
   }
 
   @Delete(':id')

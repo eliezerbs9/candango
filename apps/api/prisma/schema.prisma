@@ -216,6 +216,7 @@ model Deal {
   activities   Activity[]
   notes        Note[]
   messages     Message[]
+  stageEvents  DealStageEvent[]
   qbEstimates  QuickBooksEstimate[]
   qbInvoices   QuickBooksInvoice[]
 
@@ -325,6 +326,21 @@ model Activity {
 
   @@index([orgId, dueAt])
   @@index([orgId, dealId])
+}
+
+/// Stage-change history for a deal (FR-3.10). Logged on creation and every move.
+model DealStageEvent {
+  id              String   @id @default(cuid())
+  orgId           String
+  dealId          String
+  fromStageId     String?
+  toStageId       String
+  changedByUserId String?
+  createdAt       DateTime @default(now())
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId, createdAt])
 }
 
 model Note {

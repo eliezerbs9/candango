@@ -22,6 +22,31 @@ export class DealsService {
     this.events.emit('webhook.event', { orgId, type, data: { deal } });
   }
 
+  private logStage(orgId: string, dealId: string, fromStageId: string | null, toStageId: string, userId?: string) {
+    return this.prisma.dealStageEvent.create({
+      data: { orgId, dealId, fromStageId, toStageId, changedByUserId: userId ?? null },
+    });
+  }
+
+  /** The stages a deal passed through (oldest first), with stage names resolved. */
+  async stageHistory(orgId: string, id: string) {
+    await this.get(orgId, id);
+    const events = await this.prisma.dealStageEvent.findMany({
+      where: { orgId, dealId: id },
+      orderBy: { createdAt: 'asc' },
+    });
+    const ids = [...new Set(events.flatMap((e) => [e.fromStageId, e.toStageId]).filter(Boolean))] as string[];
+    const stages = await this.prisma.stage.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
+    const nameOf = (sid: string | null) => (sid ? (stages.find((s) => s.id === sid)?.name ?? null) : null);
+    return events.map((e) => ({
+      id: e.id,
+      fromStage: e.fromStageId ? { id: e.fromStageId, name: nameOf(e.fromStageId) } : null,
+      toStage: { id: e.toStageId, name: nameOf(e.toStageId) },
+      changedByUserId: e.changedByUserId,
+      createdAt: e.createdAt,
+    }));
+  }
+
   list(orgId: string, filters: DealFilters = {}) {
     return this.prisma.deal.findMany({
       where: {
@@ -56,6 +81,7 @@ export class DealsService {
         stageChangedAt: new Date(),
       },
     });
+    await this.logStage(orgId, deal.id, null, deal.stageId, ownerUserId);
     this.emit(orgId, 'deal.created', deal);
     return deal;
   }
@@ -66,8 +92,8 @@ export class DealsService {
     return deal;
   }
 
-  async update(orgId: string, id: string, dto: UpdateDealDto) {
-    await this.get(orgId, id);
+  async update(orgId: string, id: string, dto: UpdateDealDto, currentUserId?: string) {
+    const before = await this.get(orgId, id);
     const data: Prisma.DealUncheckedUpdateInput = {
       title: dto.title,
       value: dto.value,
@@ -85,8 +111,11 @@ export class DealsService {
       data.stageChangedAt = new Date(); // moving stage resets the rotting timer
     }
     const deal = await this.prisma.deal.update({ where: { id }, data });
+    if (dto.stageId && dto.stageId !== before.stageId) {
+      await this.logStage(orgId, id, before.stageId, dto.stageId, currentUserId);
+      this.emit(orgId, 'deal.stage_changed', deal);
+    }
     this.emit(orgId, 'deal.updated', deal);
-    if (dto.stageId) this.emit(orgId, 'deal.stage_changed', deal);
     return deal;
   }
 

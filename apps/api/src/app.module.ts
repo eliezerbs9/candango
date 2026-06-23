@@ -19,6 +19,8 @@ import { ApiKeysModule } from './api-keys/api-keys.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { CustomFieldsModule } from './custom-fields/custom-fields.module';
 import { IntegrationsModule } from './integrations/integrations.module';
+import { NotesModule } from './notes/notes.module';
+import { MessagesModule } from './messages/messages.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -49,6 +51,8 @@ import { HealthController } from './health.controller';
     WebhooksModule,
     CustomFieldsModule,
     IntegrationsModule,
+    NotesModule,
+    MessagesModule,
   ],
   controllers: [HealthController],
 })
