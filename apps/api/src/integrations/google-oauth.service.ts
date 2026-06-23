@@ -8,6 +8,7 @@ import { encryptToken } from './crypto.util';
 /** One consent grants both Calendar and Gmail; we store a connection for each. */
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/tasks',
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.send',
   'openid',

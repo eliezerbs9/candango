@@ -1,4 +1,4 @@
-import { google, type calendar_v3 } from 'googleapis';
+import { google, type calendar_v3, type tasks_v1 } from 'googleapis';
 import { decryptToken } from './crypto.util';
 
 interface TokenPair {
@@ -6,8 +6,8 @@ interface TokenPair {
   refreshToken: string;
 }
 
-/** A Google Calendar client authed as the connection's user (auto-refreshes via the refresh token). */
-export function calendarFor(conn: TokenPair): calendar_v3.Calendar {
+/** OAuth2 client authed as the connection's user (auto-refreshes via the refresh token). */
+function oauthFor(conn: TokenPair) {
   const oauth2 = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
@@ -17,5 +17,13 @@ export function calendarFor(conn: TokenPair): calendar_v3.Calendar {
     refresh_token: conn.refreshToken ? decryptToken(conn.refreshToken) : undefined,
     access_token: conn.accessToken ? decryptToken(conn.accessToken) : undefined,
   });
-  return google.calendar({ version: 'v3', auth: oauth2 });
+  return oauth2;
+}
+
+export function calendarFor(conn: TokenPair): calendar_v3.Calendar {
+  return google.calendar({ version: 'v3', auth: oauthFor(conn) });
+}
+
+export function tasksFor(conn: TokenPair): tasks_v1.Tasks {
+  return google.tasks({ version: 'v1', auth: oauthFor(conn) });
 }

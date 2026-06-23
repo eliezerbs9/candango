@@ -52,9 +52,9 @@ export class ActivitiesService {
     return this.calendarQueue.add('sync', { op: 'upsert', activityId }, ActivitiesService.QUEUE_OPTS);
   }
 
-  /** Enqueue deletion of an already-synced Google event (self-contained — the activity may be gone). */
-  private syncDelete(userId: string, externalEventId: string) {
-    return this.calendarQueue.add('sync', { op: 'delete', userId, externalEventId }, ActivitiesService.QUEUE_OPTS);
+  /** Enqueue deletion of an already-synced Google item (self-contained — the activity may be gone). */
+  private syncDelete(userId: string, kind: 'event' | 'task', externalId: string) {
+    return this.calendarQueue.add('sync', { op: 'delete', userId, kind, externalId }, ActivitiesService.QUEUE_OPTS);
   }
 
   /** Persons that belong to this tenant (filter to prevent cross-tenant links). */
@@ -126,7 +126,7 @@ export class ActivitiesService {
     });
     const activity = shape(row);
     this.events.emit('webhook.event', { orgId, type: 'activity.created', data: { activity } });
-    if (row.type === 'meeting') await this.syncUpsert(row.id);
+    await this.syncUpsert(row.id); // meeting → Calendar event; others → Google Task
     return activity;
   }
 
@@ -169,7 +169,7 @@ export class ActivitiesService {
     const row = await this.prisma.activity.findFirstOrThrow({ where: { id }, include: withParticipants });
     const activity = shape(row);
     this.events.emit('webhook.event', { orgId, type: 'activity.updated', data: { activity } });
-    if (row.type === 'meeting') await this.syncUpsert(id);
+    await this.syncUpsert(id);
     return activity;
   }
 
@@ -186,11 +186,19 @@ export class ActivitiesService {
     // If this meeting was synced to Google, remove the event first (FK + cleanup).
     const synced = await this.prisma.activity.findFirst({
       where: { id, orgId },
-      select: { assignedUserId: true, calendarEvent: { select: { externalEventId: true } } },
+      select: {
+        assignedUserId: true,
+        googleTaskId: true,
+        calendarEvent: { select: { externalEventId: true } },
+      },
     });
-    if (synced?.calendarEvent && synced.assignedUserId) {
-      await this.syncDelete(synced.assignedUserId, synced.calendarEvent.externalEventId);
-      await this.prisma.calendarEvent.delete({ where: { activityId: id } });
+    if (synced?.assignedUserId) {
+      if (synced.calendarEvent) {
+        await this.syncDelete(synced.assignedUserId, 'event', synced.calendarEvent.externalEventId);
+        await this.prisma.calendarEvent.delete({ where: { activityId: id } });
+      } else if (synced.googleTaskId) {
+        await this.syncDelete(synced.assignedUserId, 'task', synced.googleTaskId);
+      }
     }
     await this.prisma.activity.delete({ where: { id } });
   }
