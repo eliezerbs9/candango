@@ -11,7 +11,18 @@ import {
   getStages,
   updateStage,
 } from './pipelines';
-import { createDeal, getDeals, loseDeal, updateDeal, winDeal, type DealFilters } from './deals';
+import {
+  createDeal,
+  getDeal,
+  getDeals,
+  getStageHistory,
+  loseDeal,
+  updateDeal,
+  winDeal,
+  type DealFilters,
+} from './deals';
+import { createNote, deleteNote, getNotes } from './notes';
+import { getMessages } from './messages';
 import { changePassword, getMe, updateProfile, type Profile } from './profile';
 import {
   createCompany,
@@ -134,6 +145,56 @@ export function useDeals(filters: DealFilters = {}) {
   });
 }
 
+export function useDeal(id: string) {
+  const token = useToken();
+  return useQuery({ queryKey: ['deal', id], queryFn: () => getDeal(token!, id), enabled: !!token && !!id });
+}
+
+export function useStageHistory(dealId: string) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['stage-history', dealId],
+    queryFn: () => getStageHistory(token!, dealId),
+    enabled: !!token && !!dealId,
+  });
+}
+
+export function useNotes(dealId?: string, personId?: string) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['notes', { dealId, personId }],
+    queryFn: () => getNotes(token!, { dealId, personId }),
+    enabled: !!token && (!!dealId || !!personId),
+  });
+}
+
+export function useCreateNote() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { body: string; dealId?: string; personId?: string }) => createNote(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notes'] }),
+  });
+}
+
+export function useDeleteNote() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteNote(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notes'] }),
+  });
+}
+
+export function useDealMessages(dealId: string) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['messages', { dealId }],
+    queryFn: () => getMessages(token!, { dealId }),
+    enabled: !!token && !!dealId,
+  });
+}
+
 /** Move a deal to another stage, with optimistic update of the pipeline's board. */
 export function useMoveDeal(pipelineId: string) {
   const token = useToken();
@@ -208,7 +269,10 @@ export function useWinDeal() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => winDeal(token!, id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['deals'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deals'] });
+      qc.invalidateQueries({ queryKey: ['deal'] });
+    },
   });
 }
 
@@ -218,7 +282,11 @@ export function useUpdateDeal() {
   return useMutation({
     mutationFn: ({ id, ...body }: { id: string } & Parameters<typeof updateDeal>[2]) =>
       updateDeal(token!, id, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['deals'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deals'] });
+      qc.invalidateQueries({ queryKey: ['deal'] });
+      qc.invalidateQueries({ queryKey: ['stage-history'] });
+    },
   });
 }
 
@@ -227,7 +295,10 @@ export function useLoseDeal() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason?: string }) => loseDeal(token!, id, reason),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['deals'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deals'] });
+      qc.invalidateQueries({ queryKey: ['deal'] });
+    },
   });
 }
 

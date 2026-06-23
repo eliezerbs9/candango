@@ -7,6 +7,22 @@ export interface DealFilters {
   status?: string;
 }
 
+export interface StageEvent {
+  id: string;
+  fromStage: { id: string; name: string | null } | null;
+  toStage: { id: string; name: string | null };
+  changedByUserId: string | null;
+  createdAt: string;
+}
+
+export function getDeal(token: string, id: string) {
+  return apiFetch<ApiDeal>(`/deals/${id}`, { token });
+}
+
+export function getStageHistory(token: string, id: string) {
+  return apiFetch<StageEvent[]>(`/deals/${id}/stage-history`, { token });
+}
+
 export function getDeals(token: string, filters: DealFilters = {}) {
   const qs = new URLSearchParams();
   if (filters.pipelineId) qs.set('pipeline_id', filters.pipelineId);

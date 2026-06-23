@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button, Center, Group, Loader, Stack, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconPlus } from '@tabler/icons-react';
@@ -9,17 +9,17 @@ import { DataTable, type Column } from '@/components/data/DataTable';
 import { Money } from '@/components/primitives/Money';
 import { StatusBadge } from '@/components/primitives/StatusBadge';
 import { NewDealModal } from '@/components/deals/NewDealModal';
-import { DealDetailDrawer } from '@/components/deals/DealDetailDrawer';
 import { useAllStages, useDeals } from '@/lib/api/hooks';
 import type { ApiDeal } from '@/lib/api/types';
 
 export default function DealsPage() {
+  const router = useRouter();
   const { data: deals = [], isLoading } = useDeals();
   const { data: stages = [] } = useAllStages();
   const stageName = (id: string) => stages.find((s) => s.id === id)?.name ?? '—';
 
   const [modal, modalCtl] = useDisclosure(false);
-  const [selected, setSelected] = useState<ApiDeal | null>(null);
+  const open = (d: ApiDeal) => router.push(`/deals/${d.id}`);
 
   const columns: Column<ApiDeal>[] = [
     { key: 'title', header: 'Deal', render: (d) => <Text fw={500}>{d.title}</Text> },
@@ -51,7 +51,7 @@ export default function DealsPage() {
       <DataTable
         columns={columns}
         data={deals}
-        onRowClick={(d) => setSelected(d)}
+        onRowClick={open}
         renderCard={(d) => (
           <Stack gap={4}>
             <Group justify="space-between">
@@ -66,8 +66,6 @@ export default function DealsPage() {
       />
 
       <NewDealModal opened={modal} onClose={modalCtl.close} />
-
-      <DealDetailDrawer deal={selected} stageName={stageName} onClose={() => setSelected(null)} />
     </>
   );
 }
