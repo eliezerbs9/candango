@@ -72,6 +72,12 @@ function CalToolbar({ label, onNavigate }: { label: string; onNavigate: (a: 'PRE
   );
 }
 
+/** Parse the date part of an ISO string as LOCAL midnight (avoids the UTC→local day shift). */
+function dateOnlyLocal(iso: string) {
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function whenLabel(a: ApiActivity) {
   if (a.startAt) return new Date(a.startAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   if (a.dueAt) return `Due ${a.dueAt.slice(0, 10)}`;
@@ -88,7 +94,9 @@ export default function ActivitiesPage() {
   const events = useMemo<CalEvent[]>(
     () =>
       items.flatMap((a) => {
-        const start = a.startAt ? new Date(a.startAt) : a.dueAt ? new Date(a.dueAt) : null;
+        // Tasks carry a date-only `dueAt` (stored as UTC midnight). Render it on that
+        // calendar date in LOCAL time — `new Date(iso)` would shift it a day in negative offsets.
+        const start = a.startAt ? new Date(a.startAt) : a.dueAt ? dateOnlyLocal(a.dueAt) : null;
         if (!start) return [];
         const end = a.endAt ? new Date(a.endAt) : start;
         return [{ id: a.id, title: a.subject, start, end, allDay: !a.startAt, resource: a }];
