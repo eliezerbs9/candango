@@ -6,7 +6,7 @@ import { Button, Divider, PasswordInput, Stack, TextInput } from '@mantine/core'
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { useAuth } from '@/lib/auth/useAuth';
-import { apiSignup } from '@/lib/api/auth';
+import { apiSignup, googleLoginUrl } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/client';
 import { OAuthButton } from './OAuthButton';
 
@@ -43,7 +43,7 @@ export function SignupForm() {
 
   return (
     <Stack gap="md">
-      <OAuthButton onClick={() => notifications.show({ message: 'Google sign-in coming soon' })} />
+      <OAuthButton onClick={() => { window.location.href = googleLoginUrl(); }} />
       <Divider label="or" labelPosition="center" />
       <form onSubmit={handleSubmit}>
         <Stack gap="sm">

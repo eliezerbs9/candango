@@ -8,6 +8,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { ApiAuthGuard } from './api-auth.guard';
+import { GoogleAuthService } from './google-auth.service';
 
 @Module({
   imports: [
@@ -23,7 +24,7 @@ import { ApiAuthGuard } from './api-auth.guard';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, ApiAuthGuard],
+  providers: [AuthService, JwtStrategy, ApiAuthGuard, GoogleAuthService],
   exports: [ApiAuthGuard, JwtModule],
 })
 export class AuthModule {}

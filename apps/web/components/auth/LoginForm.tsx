@@ -1,19 +1,48 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Divider, PasswordInput, Stack, TextInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { useAuth } from '@/lib/auth/useAuth';
-import { apiLogin } from '@/lib/api/auth';
+import { apiLogin, apiMe, googleLoginUrl } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/client';
 import { OAuthButton } from './OAuthButton';
 
 export function LoginForm() {
   const router = useRouter();
+  const params = useSearchParams();
   const { signIn } = useAuth();
   const [loading, setLoading] = useState(false);
+
+  // Handle the return from "Sign in with Google" (the API redirects here with ?token / ?error).
+  useEffect(() => {
+    const token = params.get('token');
+    const error = params.get('error');
+    if (error) {
+      notifications.show({
+        color: 'red',
+        message:
+          error === 'google'
+            ? 'Google sign-in failed — no account matches that email. Use email sign-in or ask an admin for an invite.'
+            : 'Sign-in failed.',
+      });
+      router.replace('/login');
+    } else if (token) {
+      apiMe(token)
+        .then((user) => {
+          signIn(token, user);
+          notifications.show({ message: 'Signed in', color: 'green' });
+          router.replace('/dashboard');
+        })
+        .catch(() => {
+          notifications.show({ color: 'red', message: 'Sign-in failed.' });
+          router.replace('/login');
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
 
   const form = useForm({
     initialValues: { email: '', password: '' },
@@ -42,7 +71,7 @@ export function LoginForm() {
 
   return (
     <Stack gap="md">
-      <OAuthButton onClick={() => notifications.show({ message: 'Google sign-in coming soon' })} />
+      <OAuthButton onClick={() => { window.location.href = googleLoginUrl(); }} />
       <Divider label="or" labelPosition="center" />
       <form onSubmit={handleSubmit}>
         <Stack gap="sm">

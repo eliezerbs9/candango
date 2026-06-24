@@ -29,6 +29,11 @@ export function apiMe(token: string) {
   return apiFetch<AuthUser>('/auth/me', { token });
 }
 
+/** Full URL of the "Sign in with Google" entry point (a browser redirect, not fetch). */
+export function googleLoginUrl() {
+  return `${process.env.NEXT_PUBLIC_API_URL ?? '/v1'}/auth/google`;
+}
+
 export function apiForgotPassword(body: { email: string }) {
   return apiFetch<{ ok: true }>('/auth/forgot-password', {
     method: 'POST',

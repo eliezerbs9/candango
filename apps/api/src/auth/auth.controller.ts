@@ -1,5 +1,8 @@
-import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { Response } from 'express';
 import { AuthService } from './auth.service';
+import { GoogleAuthService } from './google-auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import {
@@ -13,7 +16,35 @@ import { CurrentUser, type AuthContext } from './current-user.decorator';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly googleAuth: GoogleAuthService,
+    private readonly config: ConfigService,
+  ) {}
+
+  /** Step 1 of "Sign in with Google": redirect the browser to Google's consent screen. */
+  @Get('google')
+  async google(@Res() res: Response) {
+    return res.redirect(await this.googleAuth.authUrl());
+  }
+
+  /** Step 2: Google redirects here; on success we hand the app JWT back to the web app. */
+  @Get('google/callback')
+  async googleCallback(
+    @Query('code') code: string | undefined,
+    @Query('state') state: string | undefined,
+    @Query('error') error: string | undefined,
+    @Res() res: Response,
+  ) {
+    const appUrl = this.config.get<string>('APP_URL') ?? 'http://localhost:3000';
+    if (error || !code || !state) return res.redirect(`${appUrl}/login?error=google`);
+    try {
+      const { token } = await this.googleAuth.handleCallback(code, state);
+      return res.redirect(`${appUrl}/login?token=${encodeURIComponent(token)}`);
+    } catch {
+      return res.redirect(`${appUrl}/login?error=google`);
+    }
+  }
 
   @Post('signup')
   signup(@Body() dto: SignupDto) {
