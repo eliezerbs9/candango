@@ -36,11 +36,14 @@ import {
   useCreateCompany,
   useCreatePerson,
   useDeal,
+  useDealEstimates,
   useLoseDeal,
   usePersons,
+  useQuickbooksStatus,
   useUpdateDeal,
   useWinDeal,
 } from '@/lib/api/hooks';
+import { WinConvertModal } from '@/components/deals/quickbooks/WinConvertModal';
 
 interface DealForm {
   title: string;
@@ -64,7 +67,10 @@ export default function DealDetailPage() {
   const lose = useLoseDeal();
   const createCompany = useCreateCompany();
   const createPerson = useCreatePerson();
+  const { data: qb } = useQuickbooksStatus();
+  const { data: dealEstimates = [] } = useDealEstimates(id);
   const [emailOpen, emailCtl] = useDisclosure(false);
+  const [winConvertOpen, winConvertCtl] = useDisclosure(false);
 
   const [form, setForm] = useState<DealForm | null>(null);
 
@@ -148,6 +154,7 @@ export default function DealDetailPage() {
       </Group>
 
       <ComposeEmail opened={emailOpen} onClose={emailCtl.close} defaultDealId={deal.id} />
+      <WinConvertModal dealId={deal.id} currency={deal.currency} opened={winConvertOpen} onClose={winConvertCtl.close} />
 
       <Grid gutter="lg">
         {/* Timeline (main) */}
@@ -221,7 +228,19 @@ export default function DealDetailPage() {
                 <>
                   <Divider />
                   <Group>
-                    <Button color="teal" loading={win.isPending} onClick={() => win.mutate(deal.id)}>
+                    <Button
+                      color="teal"
+                      loading={win.isPending}
+                      onClick={() =>
+                        win.mutate(deal.id, {
+                          onSuccess: () => {
+                            const openEst = dealEstimates.filter((e) => e.status !== 'closed');
+                            if (qb?.connected && deal.qbSubcustomerId && openEst.length > 0) winConvertCtl.open();
+                          },
+                          onError: fail,
+                        })
+                      }
+                    >
                       Mark won
                     </Button>
                     <Button
