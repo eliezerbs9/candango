@@ -2,7 +2,6 @@ import { Controller, Delete, Get, HttpCode, Query, Res, UseGuards } from '@nestj
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser, type AuthContext } from '../auth/current-user.decorator';
 import { QuickbooksOAuthService } from './quickbooks-oauth.service';
 
@@ -13,8 +12,8 @@ export class QuickbooksController {
     private readonly config: ConfigService,
   ) {}
 
-  /** Admin starts the connect flow; returns the Intuit consent URL. */
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  /** Start the connect flow; returns the Intuit consent URL. (Admin/integrations:manage gating is a future refinement.) */
+  @UseGuards(JwtAuthGuard)
   @Get('connect')
   async connect(@CurrentUser() u: AuthContext) {
     return { url: await this.qbo.authUrl(u.userId, u.orgId) };
@@ -46,7 +45,7 @@ export class QuickbooksController {
     return this.qbo.status(u.orgId);
   }
 
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard)
   @Delete()
   @HttpCode(204)
   disconnect(@CurrentUser() u: AuthContext) {
