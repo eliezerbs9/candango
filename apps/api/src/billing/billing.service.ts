@@ -192,17 +192,23 @@ export class BillingService {
       (s as unknown as { current_period_end?: number }).current_period_end ??
       (item as unknown as { current_period_end?: number } | undefined)?.current_period_end ??
       null;
+    const status = this.mapStatus(s.status);
     await this.prisma.subscription.update({
       where: { id: sub.id },
       data: {
         stripeSubscriptionId: s.id,
         stripePriceId: item?.price.id ?? null,
-        status: this.mapStatus(s.status),
+        status,
         seats: item?.quantity ?? sub.seats,
         currentPeriodEnd: tsToDate(periodEnd),
         canceledAt: tsToDate(s.canceled_at),
         trialEndsAt: tsToDate(s.trial_end) ?? sub.trialEndsAt,
       },
+    });
+    // Keep org.plan in sync so any plan-gated UI reflects the subscription.
+    await this.prisma.organization.update({
+      where: { id: sub.orgId },
+      data: { plan: status === 'active' ? 'standard' : 'trial' },
     });
   }
 
