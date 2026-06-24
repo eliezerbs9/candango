@@ -102,7 +102,7 @@ import {
   setInvoiceStatus,
   updateDealEstimate,
   updateDealInvoice,
-  applyEstimateAsValue,
+  includeEstimatesInValue,
   type LinkAccountInput,
 } from './quickbooks';
 import type { CustomFieldType } from './customFields';
@@ -945,12 +945,16 @@ export function useSetEstimateStatus(dealId: string) {
   });
 }
 
-export function useEstimateAsDealValue(dealId: string) {
+export function useIncludeEstimatesInValue(dealId: string) {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (estimateId: string) => applyEstimateAsValue(token!, dealId, estimateId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['deal', dealId] }),
+    mutationFn: ({ estimateIds, include }: { estimateIds: string[]; include: boolean }) =>
+      includeEstimatesInValue(token!, dealId, estimateIds, include),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deal', dealId] });
+      qc.invalidateQueries({ queryKey: ['estimates', dealId] });
+    },
   });
 }
 

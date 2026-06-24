@@ -674,6 +674,7 @@ model DealEstimate {
   qbId        String?   // QBO Estimate.Id (null for native)
   qbSyncToken String?   // QBO SyncToken (required for QBO updates)
   qbSyncedAt  DateTime?
+  includeInValue Boolean @default(false) // counts toward the deal value when marked
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?

@@ -79,6 +79,16 @@ export class ConvertToInvoiceDto {
   txnDate?: string;
 }
 
+export class IncludeInValueDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  estimateIds!: string[];
+
+  @IsBoolean()
+  include!: boolean;
+}
+
 export class UpdateDocStatusDto {
   @IsString()
   @IsIn(['draft', 'sent', 'accepted', 'rejected', 'closed', 'paid', 'void'])

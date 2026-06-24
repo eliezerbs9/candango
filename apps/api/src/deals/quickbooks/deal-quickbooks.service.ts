@@ -211,6 +211,7 @@ export class DealQuickbooksService {
         },
         include: { lines: lineSelect },
       });
+      await this.recomputeDealValue(orgId, dealId);
       return shapeDoc(row);
     }
     const row = await this.prisma.dealEstimate.update({
@@ -223,15 +224,42 @@ export class DealQuickbooksService {
       },
       include: { lines: lineSelect },
     });
+    await this.recomputeDealValue(orgId, dealId);
     return shapeDoc(row);
   }
 
-  /** Push an estimate's total onto the deal value (explicit, user-triggered pricing). */
-  async useEstimateAsValue(orgId: string, dealId: string, estimateId: string) {
-    const est = await this.prisma.dealEstimate.findFirst({ where: { id: estimateId, orgId, dealId } });
-    if (!est) throw new NotFoundException('Estimate not found');
-    await this.prisma.deal.update({ where: { id: dealId }, data: { value: est.totalAmount, valueOverridden: true } });
-    return { value: est.totalAmount };
+  /** Mark/unmark estimates so they count toward the deal value, then recompute. */
+  async includeEstimatesInValue(orgId: string, dealId: string, estimateIds: string[], include: boolean) {
+    await this.requireDeal(orgId, dealId);
+    await this.prisma.dealEstimate.updateMany({
+      where: { id: { in: estimateIds }, orgId, dealId },
+      data: { includeInValue: include },
+    });
+    return this.recomputeDealValue(orgId, dealId);
+  }
+
+  /**
+   * Deal value = every non-void invoice (always — an invoice is a made sale) + every estimate
+   * explicitly marked for value (excluding closed/rejected). Only overrides the value when there
+   * is at least one such document; otherwise the manually-entered value is left alone.
+   */
+  async recomputeDealValue(orgId: string, dealId: string) {
+    const [invoices, estimates] = await Promise.all([
+      this.prisma.dealInvoice.findMany({
+        where: { orgId, dealId, deletedAt: null, status: { not: 'void' } },
+        select: { totalAmount: true },
+      }),
+      this.prisma.dealEstimate.findMany({
+        where: { orgId, dealId, deletedAt: null, includeInValue: true, status: { notIn: ['closed', 'rejected'] } },
+        select: { totalAmount: true },
+      }),
+    ]);
+    const sum = (xs: { totalAmount: number }[]) => xs.reduce((s, x) => s + x.totalAmount, 0);
+    const value = sum(invoices) + sum(estimates);
+    if (invoices.length || estimates.length) {
+      await this.prisma.deal.update({ where: { id: dealId }, data: { value, valueOverridden: true } });
+    }
+    return { value };
   }
 
   async setEstimateStatus(orgId: string, dealId: string, estimateId: string, status: string) {
@@ -244,9 +272,11 @@ export class DealQuickbooksService {
         data: { status, qbSyncToken: doc.syncToken, qbSyncedAt: new Date() },
         include: { lines: lineSelect },
       });
+      await this.recomputeDealValue(orgId, dealId);
       return shapeDoc(row);
     }
     const row = await this.prisma.dealEstimate.update({ where: { id: estimateId }, data: { status }, include: { lines: lineSelect } });
+    await this.recomputeDealValue(orgId, dealId);
     return shapeDoc(row);
   }
 
@@ -325,6 +355,7 @@ export class DealQuickbooksService {
       where: { id: { in: estimates.map((e) => e.id) } },
       data: { status: 'closed' },
     });
+    await this.recomputeDealValue(orgId, dealId); // the new invoice always counts toward the value
     this.events.emit('webhook.event', { orgId, type: 'quickbooks.invoice_created', data: { dealId, invoiceId: row.id } });
     return shapeDoc(row);
   }
@@ -348,6 +379,7 @@ export class DealQuickbooksService {
       },
       include: { lines: lineSelect },
     });
+    await this.recomputeDealValue(orgId, dealId);
     return shapeDoc(row);
   }
 
@@ -355,6 +387,7 @@ export class DealQuickbooksService {
     const inv = await this.prisma.dealInvoice.findFirst({ where: { id: invoiceId, orgId, dealId } });
     if (!inv) throw new NotFoundException('Invoice not found');
     const row = await this.prisma.dealInvoice.update({ where: { id: invoiceId }, data: { status }, include: { lines: lineSelect } });
+    await this.recomputeDealValue(orgId, dealId); // void invoices drop out of the value
     return shapeDoc(row);
   }
 
@@ -420,6 +453,7 @@ type DocRow = {
   qbId: string | null;
   sourceEstimateId?: string | null;
   sourceEstimateIds?: string[];
+  includeInValue?: boolean;
   createdAt: Date;
   lines: {
     id: string;
@@ -447,6 +481,7 @@ function shapeDoc(d: DocRow) {
     qbId: d.qbId,
     sourceEstimateId: d.sourceEstimateId ?? null,
     sourceEstimateIds: d.sourceEstimateIds ?? [],
+    includeInValue: d.includeInValue ?? false,
     createdAt: d.createdAt,
     lines: d.lines.map((l) => ({
       id: l.id,

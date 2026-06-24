@@ -65,6 +65,7 @@ export interface DealDoc {
   qbId: string | null;
   sourceEstimateId: string | null;
   sourceEstimateIds?: string[];
+  includeInValue?: boolean;
   createdAt: string;
   lines: DealDocLine[];
 }

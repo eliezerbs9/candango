@@ -1,0 +1,1 @@
+ALTER TABLE "DealEstimate" ADD COLUMN "includeInValue" BOOLEAN NOT NULL DEFAULT false;

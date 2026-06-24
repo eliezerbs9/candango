@@ -50,10 +50,11 @@ export function setEstimateStatus(token: string, dealId: string, estimateId: str
   });
 }
 
-export function applyEstimateAsValue(token: string, dealId: string, estimateId: string) {
-  return apiFetch<{ value: number }>(`/deals/${dealId}/estimates/${estimateId}/use-as-value`, {
+export function includeEstimatesInValue(token: string, dealId: string, estimateIds: string[], include: boolean) {
+  return apiFetch<{ value: number }>(`/deals/${dealId}/estimates/include-in-value`, {
     method: 'POST',
     token,
+    body: JSON.stringify({ estimateIds, include }),
   });
 }
 

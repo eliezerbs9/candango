@@ -4,12 +4,12 @@ import { useState } from 'react';
 import { Alert, Badge, Button, Card, Divider, Group, Stack, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconFileInvoice, IconInfoCircle, IconPlus, IconReceipt } from '@tabler/icons-react';
+import { IconCurrencyDollar, IconFileInvoice, IconInfoCircle, IconPlus, IconReceipt } from '@tabler/icons-react';
 import {
   useCreateEstimate,
   useDealEstimates,
   useDealInvoices,
-  useEstimateAsDealValue,
+  useIncludeEstimatesInValue,
   useQbItems,
   useQuickbooksStatus,
   useSetEstimateStatus,
@@ -31,6 +31,9 @@ const INVOICE_STATUSES = ['draft', 'sent', 'paid', 'void'];
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
 
+const openPrint = (kind: 'estimate' | 'invoice', doc: DealDoc) =>
+  window.open(`/print/${kind}/${doc.dealId}/${doc.id}`, '_blank');
+
 export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const { data: qb } = useQuickbooksStatus();
   const [linkOpen, linkCtl] = useDisclosure(false);
@@ -41,6 +44,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const connected = !!qb?.connected;
   const linked = !!deal.qbSubcustomerId;
   const mode: 'native' | 'link' | 'qbo' = !connected ? 'native' : linked ? 'qbo' : 'link';
+  const canSelect = mode !== 'link';
 
   const estimates = useDealEstimates(deal.id);
   const invoices = useDealInvoices(deal.id);
@@ -50,7 +54,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const updateInvoice = useUpdateInvoice(deal.id);
   const setEstStatus = useSetEstimateStatus(deal.id);
   const setInvStatus = useSetInvoiceStatus(deal.id);
-  const useAsValue = useEstimateAsDealValue(deal.id);
+  const includeInValue = useIncludeEstimatesInValue(deal.id);
 
   const [estEditing, setEstEditing] = useState<DealDoc | null>(null);
   const [invEditing, setInvEditing] = useState<DealDoc | null>(null);
@@ -88,11 +92,15 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const submitEstimate = (input: CreateDocInput) =>
     estEditing ? updateEstimate.mutateAsync({ id: estEditing.id, body: input }) : createEstimate.mutateAsync(input);
 
-  const applyAsValue = (id: string) =>
-    useAsValue.mutate(id, {
-      onSuccess: () => notifications.show({ message: 'Deal value updated from estimate', color: 'green' }),
-      onError: fail,
-    });
+  const setInValue = (ids: string[], include: boolean) =>
+    includeInValue.mutate(
+      { estimateIds: ids, include },
+      {
+        onSuccess: () =>
+          notifications.show({ message: include ? 'Added to deal value' : 'Removed from deal value', color: 'green' }),
+        onError: fail,
+      },
+    );
 
   return (
     <Card withBorder radius="md" padding="lg">
@@ -124,6 +132,18 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         <Group justify="space-between">
           <Text fw={500}>Estimates</Text>
           <Group gap="xs">
+            {canSelect && (
+              <Button
+                size="xs"
+                variant="light"
+                leftSection={<IconCurrencyDollar size={14} />}
+                disabled={selected.size === 0}
+                loading={includeInValue.isPending}
+                onClick={() => setInValue([...selected], true)}
+              >
+                Use as deal value{selected.size ? ` (${selected.size})` : ''}
+              </Button>
+            )}
             {mode === 'qbo' && (
               <Button
                 size="xs"
@@ -147,23 +167,31 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
           docs={estimateDocs}
           statuses={ESTIMATE_STATUSES}
           onSetStatus={(id, status) => setEstStatus.mutate({ id, status }, { onError: fail })}
-          onUseAsValue={applyAsValue}
+          onToggleInValue={(id, include) => setInValue([id], include)}
+          onPrint={(doc) => openPrint('estimate', doc)}
           onOpen={(doc) => setView({ doc, kind: 'Estimate' })}
-          selectedIds={mode === 'qbo' ? selected : undefined}
-          onToggleSelect={mode === 'qbo' ? toggleSelect : undefined}
+          selectedIds={canSelect ? selected : undefined}
+          onToggleSelect={canSelect ? toggleSelect : undefined}
           emptyText={mode === 'link' ? 'Link the deal to add estimates.' : 'No estimates yet.'}
         />
 
-        {/* Invoices — only when connected to QuickBooks; created only by converting estimates */}
+        {/* Invoices — only when connected; created only by converting estimates; always in the deal value */}
         {mode === 'qbo' && (
           <>
             <Divider />
-            <Text fw={500}>Invoices</Text>
+            <Group justify="space-between">
+              <Text fw={500}>Invoices</Text>
+              <Text size="xs" c="dimmed">
+                Always counted in the deal value
+              </Text>
+            </Group>
             <DocList
               docs={invoices.data ?? []}
               statuses={INVOICE_STATUSES}
               onSetStatus={(id, status) => setInvStatus.mutate({ id, status }, { onError: fail })}
+              onPrint={(doc) => openPrint('invoice', doc)}
               onOpen={(doc) => setView({ doc, kind: 'Invoice' })}
+              alwaysInValue
               emptyText="No invoices yet — select estimate(s) above and convert them."
             />
           </>

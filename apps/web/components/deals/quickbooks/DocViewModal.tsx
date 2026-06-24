@@ -1,7 +1,7 @@
 'use client';
 
 import { Badge, Button, Divider, Group, Modal, Stack, Table, Text } from '@mantine/core';
-import { IconPencil } from '@tabler/icons-react';
+import { IconPencil, IconPrinter } from '@tabler/icons-react';
 import { Money } from '@/components/primitives/Money';
 import type { DealDoc } from '@/lib/api/types';
 
@@ -93,19 +93,31 @@ export function DocViewModal({
         {doc.notes && (
           <>
             <Divider />
-            <Text size="sm" c="dimmed">
-              {doc.notes}
-            </Text>
+            <div>
+              <Text size="xs" c="dimmed" fw={600}>
+                MEMO
+              </Text>
+              <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+                {doc.notes}
+              </Text>
+            </div>
           </>
         )}
 
-        {onEdit && (
-          <Group justify="flex-end" mt="xs">
+        <Group justify="flex-end" mt="xs">
+          <Button
+            variant="default"
+            leftSection={<IconPrinter size={16} />}
+            onClick={() => window.open(`/print/${kind.toLowerCase()}/${doc.dealId}/${doc.id}`, '_blank')}
+          >
+            Print
+          </Button>
+          {onEdit && (
             <Button variant="light" leftSection={<IconPencil size={16} />} onClick={onEdit}>
               Edit
             </Button>
-          </Group>
-        )}
+          )}
+        </Group>
       </Stack>
     </Modal>
   );

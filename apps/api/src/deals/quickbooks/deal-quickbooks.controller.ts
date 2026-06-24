@@ -3,7 +3,13 @@ import { ApiAuthGuard } from '../../auth/api-auth.guard';
 import { Scopes } from '../../auth/scopes.decorator';
 import { CurrentUser, type AuthContext } from '../../auth/current-user.decorator';
 import { DealQuickbooksService } from './deal-quickbooks.service';
-import { ConvertToInvoiceDto, CreateDocDto, LinkQuickbooksDto, UpdateDocStatusDto } from './dto/quickbooks.dto';
+import {
+  ConvertToInvoiceDto,
+  CreateDocDto,
+  IncludeInValueDto,
+  LinkQuickbooksDto,
+  UpdateDocStatusDto,
+} from './dto/quickbooks.dto';
 
 @UseGuards(ApiAuthGuard)
 @Controller('deals/:id')
@@ -70,10 +76,10 @@ export class DealQuickbooksController {
     return this.svc.updateEstimate(u.orgId, id, eid, dto);
   }
 
-  @Post('estimates/:eid/use-as-value')
+  @Post('estimates/include-in-value')
   @Scopes('deals:write')
-  useEstimateAsValue(@CurrentUser() u: AuthContext, @Param('id') id: string, @Param('eid') eid: string) {
-    return this.svc.useEstimateAsValue(u.orgId, id, eid);
+  includeEstimatesInValue(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() dto: IncludeInValueDto) {
+    return this.svc.includeEstimatesInValue(u.orgId, id, dto.estimateIds, dto.include);
   }
 
   // --- Invoices ---
