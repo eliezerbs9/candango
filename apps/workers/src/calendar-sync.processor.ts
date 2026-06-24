@@ -278,14 +278,15 @@ export class CalendarSyncProcessor extends WorkerHost implements OnModuleInit {
       return;
     }
 
-    // New external event → import only when a known contact is an attendee (skip personal events).
+    // New event on the rep's calendar → import it as a meeting on their Activities calendar.
+    // Link to a CRM contact + their open deal when an attendee matches; otherwise import unlinked.
+    if (!startAt) return;
     const emails = (ev.attendees ?? [])
       .map((a) => a.email?.toLowerCase())
       .filter((e): e is string => !!e);
     const personId = emails.map((e) => personByEmail.get(e)).find(Boolean) ?? null;
-    if (!personId || !startAt) return;
+    const dealId = personId ? await this.resolveDeal(conn.orgId, personId) : null;
 
-    const dealId = await this.resolveDeal(conn.orgId, personId);
     await this.prisma.activity.create({
       data: {
         orgId: conn.orgId,
@@ -300,7 +301,7 @@ export class CalendarSyncProcessor extends WorkerHost implements OnModuleInit {
         personId,
         dealId,
         calendarEventId: externalId,
-        participants: { create: [{ personId }] },
+        participants: personId ? { create: [{ personId }] } : undefined,
         calendarEvent: {
           create: {
             orgId: conn.orgId,
