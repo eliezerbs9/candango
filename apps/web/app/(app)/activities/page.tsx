@@ -34,10 +34,12 @@ const localizer = dateFnsLocalizer({
   locales: { 'en-US': enUS },
 });
 
+// Calm, neutral palette — meetings (the bulk of the calendar) are neutral gray; the rest are
+// soft accents. No pink, and brand terracotta is reserved for buttons.
 const TYPE_COLORS: Record<ActivityType, string> = {
   call: 'blue',
-  meeting: 'grape',
-  task: 'orange',
+  meeting: 'gray',
+  task: 'yellow',
   email: 'teal',
 };
 
