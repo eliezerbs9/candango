@@ -7,7 +7,6 @@ import {
   IconBuilding,
   IconCalendarEvent,
   IconChartBar,
-  IconCurrencyDollar,
   IconGauge,
   IconLayoutKanban,
   IconMail,
@@ -25,8 +24,7 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: IconGauge },
-  { label: 'Pipelines', href: '/pipelines', icon: IconLayoutKanban },
-  { label: 'Deals', href: '/deals', icon: IconCurrencyDollar },
+  { label: 'Deals', href: '/deals', icon: IconLayoutKanban },
   {
     label: 'Contacts',
     href: '/contacts',
