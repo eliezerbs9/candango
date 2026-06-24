@@ -5,6 +5,7 @@ import { Calendar, dateFnsLocalizer, type View } from 'react-big-calendar';
 import { format, getDay, parse, startOfWeek } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
+import './calendar.css';
 import {
   ActionIcon,
   Badge,
@@ -185,7 +186,7 @@ export default function ActivitiesPage() {
           {items.length === 0 ? <Text c="dimmed">No activities yet.</Text> : null}
         </Stack>
       ) : (
-        <div style={{ height: '72vh' }}>
+        <div style={{ height: '82vh' }}>
           <Calendar
             localizer={localizer}
             events={events}
@@ -196,9 +197,17 @@ export default function ActivitiesPage() {
             views={['month', 'week', 'day']}
             components={{ toolbar: CalToolbar }}
             popup
-            eventPropGetter={(e: CalEvent) => ({
-              style: { backgroundColor: `var(--mantine-color-${TYPE_COLORS[e.resource.type]}-6)`, border: 'none' },
-            })}
+            eventPropGetter={(e: CalEvent) => {
+              const c = TYPE_COLORS[e.resource.type];
+              return {
+                style: {
+                  backgroundColor: `var(--mantine-color-${c}-1)`,
+                  color: `var(--mantine-color-${c}-9)`,
+                  border: `1px solid var(--mantine-color-${c}-2)`,
+                  borderLeft: `3px solid var(--mantine-color-${c}-4)`,
+                },
+              };
+            }}
             style={{ height: '100%' }}
           />
         </div>
