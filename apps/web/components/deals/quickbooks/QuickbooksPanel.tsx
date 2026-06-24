@@ -36,14 +36,23 @@ import { DocEditorModal } from './DocEditorModal';
 import { DocViewModal } from './DocViewModal';
 import { LinkAccountModal } from './LinkAccountModal';
 import { ConvertToInvoiceModal } from './ConvertToInvoiceModal';
-import { SendDocModal } from './SendDocModal';
 import { MoveStageModal } from './MoveStageModal';
+import { ComposeEmail } from '@/components/email/ComposeEmail';
+import type { EmailAttachment } from '@/lib/api/messages';
 
 const ESTIMATE_STATUSES = ['draft', 'sent', 'accepted', 'rejected', 'closed'];
 const INVOICE_STATUSES = ['draft', 'sent', 'paid', 'void'];
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
+
+const blobToBase64 = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(',')[1] ?? '');
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 
 export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const token = useAuthStore((s) => s.token);
@@ -75,7 +84,13 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const [view, setView] = useState<{ doc: DealDoc; kind: 'Estimate' | 'Invoice' } | null>(null);
   const [estSel, setEstSel] = useState<Set<string>>(new Set());
   const [invSel, setInvSel] = useState<Set<string>>(new Set());
-  const [send, setSend] = useState<{ docs: DealDoc[]; kind: 'estimate' | 'invoice' } | null>(null);
+  const [composeOpen, composeCtl] = useDisclosure(false);
+  const [compose, setCompose] = useState<{
+    subject: string;
+    attachments: EmailAttachment[];
+    kind: 'estimate' | 'invoice';
+    docIds: string[];
+  } | null>(null);
 
   const itemList = mode === 'qbo' ? items.data : undefined;
   const estimateDocs = estimates.data ?? [];
@@ -127,6 +142,29 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
       );
     } else {
       docs.forEach((doc) => window.open(`/print/${kind}/${deal.id}/${doc.id}`, '_blank'));
+    }
+  };
+
+  // Open our email composer with the QBO PDF(s) attached and the contact prefilled.
+  const startSend = async (docs: DealDoc[], kind: 'estimate' | 'invoice') => {
+    if (!docs.length) return;
+    try {
+      const attachments = await Promise.all(
+        docs.map(async (d) => ({
+          filename: `${kind}-${d.docNumber ?? d.id}.pdf`,
+          mimeType: 'application/pdf',
+          contentBase64: await blobToBase64(await fetchDocPdf(token!, deal.id, kind, d.id)),
+        })),
+      );
+      const label = kind === 'invoice' ? 'Invoice' : 'Estimate';
+      const subject =
+        docs.length === 1
+          ? `${label}${docs[0].docNumber ? ` #${docs[0].docNumber}` : ''} — ${deal.title}`
+          : `${docs.length} ${label.toLowerCase()}s — ${deal.title}`;
+      setCompose({ subject, attachments, kind, docIds: docs.map((d) => d.id) });
+      composeCtl.open();
+    } catch (e) {
+      fail(e);
     }
   };
 
@@ -206,7 +244,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
               </Button>
             )}
             {mode === 'qbo' && (
-              <Button size="xs" variant="light" leftSection={<IconSend size={14} />} onClick={() => setSend({ docs: selEstimates, kind: 'estimate' })}>
+              <Button size="xs" variant="light" leftSection={<IconSend size={14} />} onClick={() => startSend(selEstimates, 'estimate')}>
                 Send
               </Button>
             )}
@@ -242,7 +280,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
                 <Button size="xs" variant="light" color="gray" leftSection={<IconX size={14} />} onClick={() => markInvoices([...invSel], false)}>
                   Remove from value
                 </Button>
-                <Button size="xs" variant="light" leftSection={<IconSend size={14} />} onClick={() => setSend({ docs: selInvoices, kind: 'invoice' })}>
+                <Button size="xs" variant="light" leftSection={<IconSend size={14} />} onClick={() => startSend(selInvoices, 'invoice')}>
                   Send
                 </Button>
                 <Button size="xs" variant="light" leftSection={<IconPrinter size={14} />} onClick={() => printMany(selInvoices, 'invoice')}>
@@ -283,14 +321,20 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         onConverted={() => setEstSel(new Set())}
       />
 
-      <SendDocModal
-        dealId={deal.id}
-        docs={send?.docs ?? []}
-        kind={send?.kind ?? 'estimate'}
-        opened={!!send}
-        onClose={() => setSend(null)}
+      <ComposeEmail
+        opened={composeOpen}
+        onClose={composeCtl.close}
+        defaultDealId={deal.id}
+        defaultSubject={compose?.subject}
+        initialAttachments={compose?.attachments}
         onSent={() => {
-          if (send?.kind === 'invoice') stageCtl.open();
+          if (!compose) return;
+          compose.docIds.forEach((id) =>
+            compose.kind === 'invoice'
+              ? setInvStatus.mutate({ id, status: 'sent' }, { onError: fail })
+              : setEstStatus.mutate({ id, status: 'sent' }, { onError: fail }),
+          );
+          if (compose.kind === 'invoice') stageCtl.open();
         }}
       />
 

@@ -44,10 +44,18 @@ export function getMessages(token: string, filters: MessageFilters = {}) {
   return apiFetch<MessagesPage>(`/messages${suffix}`, { token });
 }
 
+export interface EmailAttachment {
+  filename: string;
+  mimeType: string;
+  contentBase64: string;
+}
+
 export interface SendBody {
   to: string[];
   subject: string;
   body: string;
+  html?: boolean;
+  attachments?: EmailAttachment[];
   dealId?: string;
   threadId?: string;
   inReplyTo?: string;

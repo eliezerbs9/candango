@@ -1,4 +1,26 @@
-import { ArrayNotEmpty, IsArray, IsOptional, IsString, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  ArrayNotEmpty,
+  IsArray,
+  IsBoolean,
+  IsOptional,
+  IsString,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+
+export class AttachmentDto {
+  @IsString()
+  @MinLength(1)
+  filename!: string;
+
+  @IsString()
+  @MinLength(1)
+  mimeType!: string;
+
+  @IsString()
+  contentBase64!: string;
+}
 
 export class SendMessageDto {
   @IsArray()
@@ -12,6 +34,17 @@ export class SendMessageDto {
 
   @IsString()
   body!: string;
+
+  /** body is HTML (rich-text composer) */
+  @IsOptional()
+  @IsBoolean()
+  html?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AttachmentDto)
+  attachments?: AttachmentDto[];
 
   @IsOptional()
   @IsString()

@@ -106,10 +106,15 @@ export class MessagesService {
     const gmail = gmailClientFor(conn);
     const from = (await gmail.users.getProfile({ userId: 'me' })).data.emailAddress ?? '';
 
-    const headers = [`To: ${dto.to.join(', ')}`, `From: ${from}`, `Subject: ${dto.subject}`];
-    if (dto.inReplyTo) headers.push(`In-Reply-To: ${dto.inReplyTo}`, `References: ${dto.inReplyTo}`);
-    headers.push('Content-Type: text/plain; charset="UTF-8"', '', dto.body);
-    const raw = Buffer.from(headers.join('\r\n')).toString('base64url');
+    const raw = buildMime({
+      to: dto.to,
+      from,
+      subject: dto.subject,
+      body: dto.body,
+      html: dto.html,
+      inReplyTo: dto.inReplyTo,
+      attachments: dto.attachments,
+    });
 
     const sent = await gmail.users.messages.send({
       userId: 'me',
@@ -135,7 +140,7 @@ export class MessagesService {
         fromAddress: from,
         toAddresses: dto.to as Prisma.InputJsonValue,
         subject: dto.subject,
-        snippet: dto.body.slice(0, 200),
+        snippet: (dto.html ? dto.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : dto.body).slice(0, 200),
         folder: 'sent',
         labels: ['SENT'], // the next Gmail sync refreshes with the real labels (e.g. + INBOX for self-emails)
         personId,
@@ -202,4 +207,50 @@ export class MessagesService {
     const { text, html } = extractBody(full.data.payload ?? undefined);
     return { html: html || null, text: text || null };
   }
+}
+
+/** Build a base64url-encoded RFC822 message; multipart/mixed when there are attachments. */
+function buildMime(opts: {
+  to: string[];
+  from: string;
+  subject: string;
+  body: string;
+  html?: boolean;
+  inReplyTo?: string;
+  attachments?: { filename: string; mimeType: string; contentBase64: string }[];
+}): string {
+  const contentType = opts.html ? 'text/html' : 'text/plain';
+  const top = [`To: ${opts.to.join(', ')}`, `From: ${opts.from}`, `Subject: ${opts.subject}`, 'MIME-Version: 1.0'];
+  if (opts.inReplyTo) top.push(`In-Reply-To: ${opts.inReplyTo}`, `References: ${opts.inReplyTo}`);
+
+  const attachments = opts.attachments ?? [];
+  if (attachments.length === 0) {
+    top.push(`Content-Type: ${contentType}; charset="UTF-8"`, '', opts.body);
+    return Buffer.from(top.join('\r\n')).toString('base64url');
+  }
+
+  const boundary = `candango_${Date.now().toString(36)}`;
+  top.push(`Content-Type: multipart/mixed; boundary="${boundary}"`, '');
+  const parts: string[] = [
+    `--${boundary}`,
+    `Content-Type: ${contentType}; charset="UTF-8"`,
+    'Content-Transfer-Encoding: 7bit',
+    '',
+    opts.body,
+    '',
+  ];
+  for (const att of attachments) {
+    const wrapped = att.contentBase64.replace(/(.{76})/g, '$1\r\n');
+    parts.push(
+      `--${boundary}`,
+      `Content-Type: ${att.mimeType}; name="${att.filename}"`,
+      'Content-Transfer-Encoding: base64',
+      `Content-Disposition: attachment; filename="${att.filename}"`,
+      '',
+      wrapped,
+      '',
+    );
+  }
+  parts.push(`--${boundary}--`);
+  return Buffer.from([...top, parts.join('\r\n')].join('\r\n')).toString('base64url');
 }
