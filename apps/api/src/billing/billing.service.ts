@@ -29,6 +29,23 @@ export class BillingService {
   private priceId() {
     return this.config.get<string>('STRIPE_PRICE_ID') ?? '';
   }
+
+  private resolvedPrice: string | null = null;
+  /** Accept either a price id (`price_…`) or a product id (`prod_…`, resolved to its active price). */
+  private async resolvePriceId(): Promise<string> {
+    const id = this.priceId();
+    if (!id) throw new BadRequestException('STRIPE_PRICE_ID is not configured');
+    if (id.startsWith('price_')) return id;
+    if (this.resolvedPrice) return this.resolvedPrice;
+    if (id.startsWith('prod_')) {
+      const prices = await this.stripe.require().prices.list({ product: id, active: true, limit: 1 });
+      const price = prices.data[0];
+      if (!price) throw new BadRequestException(`No active price found for product ${id}`);
+      this.resolvedPrice = price.id;
+      return price.id;
+    }
+    return id;
+  }
   private appUrl() {
     return this.config.get<string>('APP_URL') ?? 'http://localhost:3000';
   }
@@ -107,11 +124,11 @@ export class BillingService {
   async checkout(orgId: string) {
     const sub = await this.ensure(orgId);
     const stripe = this.stripe.require();
-    if (!this.priceId()) throw new BadRequestException('STRIPE_PRICE_ID is not configured');
+    const price = await this.resolvePriceId();
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer: sub.stripeCustomerId,
-      line_items: [{ price: this.priceId(), quantity: await this.activeSeats(orgId) }],
+      line_items: [{ price, quantity: await this.activeSeats(orgId) }],
       allow_promotion_codes: true,
       subscription_data: { metadata: { orgId } },
       success_url: `${this.appUrl()}/settings/billing?checkout=success`,
