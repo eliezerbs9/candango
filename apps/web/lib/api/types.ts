@@ -35,4 +35,50 @@ export interface ApiDeal {
   customFields: Record<string, unknown>;
   shipTo: Record<string, unknown> | null;
   billTo: Record<string, unknown> | null;
+  qbSubcustomerId: string | null;
+}
+
+export type DocSource = 'native' | 'quickbooks';
+
+export interface DealDocLine {
+  id: string;
+  position: number;
+  description: string;
+  quantity: number;
+  unitPrice: number; // minor units
+  amount: number; // minor units
+}
+
+export interface DealDoc {
+  id: string;
+  dealId: string;
+  source: DocSource;
+  status: string;
+  docNumber: string | null;
+  currency: string;
+  totalAmount: number; // minor units
+  txnDate: string | null;
+  notes: string | null;
+  qbId: string | null;
+  sourceEstimateId: string | null;
+  createdAt: string;
+  lines: DealDocLine[];
+}
+
+export interface DocLineInput {
+  description: string;
+  quantity: number;
+  unitPrice: number; // minor units
+}
+
+export interface CreateDocInput {
+  txnDate?: string;
+  notes?: string;
+  lines: DocLineInput[];
+  sourceEstimateId?: string;
+}
+
+export interface QbCustomer {
+  id: string;
+  name: string;
 }

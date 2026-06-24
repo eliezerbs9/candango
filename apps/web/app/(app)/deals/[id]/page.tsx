@@ -28,6 +28,7 @@ import { CreatableSelect } from '@/components/common/CreatableSelect';
 import { AddressFields, type Address } from '@/components/deals/AddressFields';
 import { CustomFieldsEditor } from '@/components/deals/CustomFieldsEditor';
 import { DealTimeline } from '@/components/deals/DealTimeline';
+import { QuickbooksPanel } from '@/components/deals/quickbooks/QuickbooksPanel';
 import { ApiError } from '@/lib/api/client';
 import {
   useAllStages,
@@ -231,6 +232,11 @@ export default function DealDetailPage() {
               ) : null}
             </Stack>
           </Card>
+        </Grid.Col>
+
+        {/* Billing (QuickBooks estimates & invoices) */}
+        <Grid.Col span={12}>
+          <QuickbooksPanel deal={deal} />
         </Grid.Col>
       </Grid>
     </Stack>

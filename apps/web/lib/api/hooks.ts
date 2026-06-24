@@ -89,8 +89,19 @@ import {
   getQuickbooksStatus,
   syncEmail,
 } from './integrations';
+import {
+  createDealEstimate,
+  createDealInvoice,
+  getDealEstimates,
+  getDealInvoices,
+  linkQuickbooks,
+  searchQbParents,
+  setEstimateStatus,
+  setInvoiceStatus,
+  type LinkAccountInput,
+} from './quickbooks';
 import type { CustomFieldType } from './customFields';
-import type { ApiDeal } from './types';
+import type { ApiDeal, CreateDocInput } from './types';
 
 function useToken() {
   return useAuthStore((s) => s.token);
@@ -822,5 +833,75 @@ export function useDeleteCustomField() {
   return useMutation({
     mutationFn: (id: string) => deleteCustomField(token!, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['custom-fields'] }),
+  });
+}
+
+// --- QuickBooks deal billing (estimates / invoices) ---
+
+export function useDealEstimates(dealId: string) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['estimates', dealId],
+    queryFn: () => getDealEstimates(token!, dealId),
+    enabled: !!token && !!dealId,
+  });
+}
+
+export function useDealInvoices(dealId: string) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['invoices', dealId],
+    queryFn: () => getDealInvoices(token!, dealId),
+    enabled: !!token && !!dealId,
+  });
+}
+
+export function useLinkQuickbooks(dealId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: LinkAccountInput) => linkQuickbooks(token!, dealId, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['deal', dealId] }),
+  });
+}
+
+export function useSearchQbParents(dealId: string) {
+  const token = useToken();
+  return useMutation({ mutationFn: (q: string) => searchQbParents(token!, dealId, q) });
+}
+
+export function useCreateEstimate(dealId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateDocInput) => createDealEstimate(token!, dealId, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['estimates', dealId] }),
+  });
+}
+
+export function useCreateInvoice(dealId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateDocInput) => createDealInvoice(token!, dealId, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices', dealId] }),
+  });
+}
+
+export function useSetEstimateStatus(dealId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) => setEstimateStatus(token!, dealId, id, status),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['estimates', dealId] }),
+  });
+}
+
+export function useSetInvoiceStatus(dealId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) => setInvoiceStatus(token!, dealId, id, status),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices', dealId] }),
   });
 }
