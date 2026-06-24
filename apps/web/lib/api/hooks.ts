@@ -539,6 +539,9 @@ export function useActivities(filters: ActivityFilters = {}) {
     queryKey: ['activities', filters],
     queryFn: () => getActivities(token!, filters),
     enabled: !!token,
+    // Inbound Google Calendar events are imported by a background poll — keep the calendar fresh.
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 }
 

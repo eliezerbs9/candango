@@ -31,11 +31,24 @@ export class GoogleOAuthService {
     private readonly config: ConfigService,
     private readonly jwt: JwtService,
     @InjectQueue('gmail-sync') private readonly gmailQueue: Queue,
+    @InjectQueue('calendar-sync') private readonly calendarQueue: Queue,
   ) {}
 
   /** Kick off a Gmail capture for the user (on connect or on demand). */
   syncEmail(userId: string) {
     return this.gmailQueue.add('sync-user', { userId }, { removeOnComplete: 200, removeOnFail: 500 });
+  }
+
+  /** On connect: pull Google events in now, and push up any activities created while disconnected. */
+  private async backfillCalendar(orgId: string, userId: string) {
+    await this.calendarQueue.add('pull-user', { userId }, { removeOnComplete: true, removeOnFail: 200 });
+    const unsynced = await this.prisma.activity.findMany({
+      where: { orgId, assignedUserId: userId, calendarEventId: null, googleTaskId: null },
+      select: { id: true },
+    });
+    for (const a of unsynced) {
+      await this.calendarQueue.add('sync', { op: 'upsert', activityId: a.id }, { removeOnComplete: true, removeOnFail: 200 });
+    }
   }
 
   private oauthClient() {
@@ -120,6 +133,7 @@ export class GoogleOAuthService {
     });
 
     await this.syncEmail(userId); // initial Gmail backfill
+    await this.backfillCalendar(orgId, userId); // pull events in + push existing activities up
     return { orgId };
   }
 

@@ -10,7 +10,7 @@ import { QuickbooksApiService } from './quickbooks-api.service';
 // AuthModule provides JwtModule (used to sign/verify the OAuth `state`) and the
 // JWT strategy behind JwtAuthGuard. PrismaService + ConfigService are global.
 @Module({
-  imports: [AuthModule, BullModule.registerQueue({ name: 'gmail-sync' })],
+  imports: [AuthModule, BullModule.registerQueue({ name: 'gmail-sync' }, { name: 'calendar-sync' })],
   controllers: [IntegrationsController, QuickbooksController],
   providers: [GoogleOAuthService, QuickbooksOAuthService, QuickbooksApiService],
   exports: [GoogleOAuthService, QuickbooksOAuthService, QuickbooksApiService],
