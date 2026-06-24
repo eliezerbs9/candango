@@ -1,9 +1,7 @@
 /* Tweaks over react-big-calendar defaults: roomier month cells, small/calm event chips. */
 
-/* Taller day cells in month view */
-.rbc-month-row {
-  min-height: 132px;
-}
+/* Cell height comes from the container (flex-distributed evenly across rows) — do NOT set
+   min-height here, or a short viewport overflows and the last row's border breaks. */
 .rbc-date-cell {
   padding: 4px 6px;
   font-size: 12px;

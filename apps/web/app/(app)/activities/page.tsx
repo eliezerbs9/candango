@@ -34,12 +34,11 @@ const localizer = dateFnsLocalizer({
   locales: { 'en-US': enUS },
 });
 
-// Calm, neutral palette — meetings (the bulk of the calendar) are neutral gray; the rest are
-// soft accents. No pink, and brand terracotta is reserved for buttons.
+// Events (meetings/calls) use the brand terracotta; tasks are blue; email kept distinct (teal).
 const TYPE_COLORS: Record<ActivityType, string> = {
-  call: 'blue',
-  meeting: 'gray',
-  task: 'yellow',
+  call: 'candango',
+  meeting: 'candango',
+  task: 'blue',
   email: 'teal',
 };
 
@@ -188,7 +187,7 @@ export default function ActivitiesPage() {
           {items.length === 0 ? <Text c="dimmed">No activities yet.</Text> : null}
         </Stack>
       ) : (
-        <div style={{ height: '82vh' }}>
+        <div style={{ height: '85vh', minHeight: 760 }}>
           <Calendar
             localizer={localizer}
             events={events}
