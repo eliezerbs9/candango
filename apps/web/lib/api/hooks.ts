@@ -230,6 +230,9 @@ export function useDealMessages(dealId: string) {
     queryKey: ['messages', { dealId }],
     queryFn: () => getMessages(token!, { dealId }).then((r) => r.data),
     enabled: !!token && !!dealId,
+    // The Gmail poll captures replies in the background — keep an open deal's timeline fresh.
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -262,6 +265,7 @@ export function useSyncEmail() {
         setTimeout(() => {
           qc.invalidateQueries({ queryKey: ['inbox'] });
           qc.invalidateQueries({ queryKey: ['folder-counts'] });
+          qc.invalidateQueries({ queryKey: ['messages'] }); // refresh deal timelines too
         }, ms),
       );
     },
@@ -899,7 +903,7 @@ export function useLinkQuickbooks(dealId: string) {
   return useMutation({
     mutationFn: (body: LinkAccountInput) => linkQuickbooks(token!, dealId, body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['deal', dealId] });
+      qc.invalidateQueries({ queryKey: ['deal'] });
       qc.invalidateQueries({ queryKey: ['qb-link-status', dealId] });
     },
   });
@@ -964,7 +968,7 @@ export function useConvertToInvoice(dealId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['invoices', dealId] });
       qc.invalidateQueries({ queryKey: ['estimates', dealId] }); // sources become 'closed' + dropped from value
-      qc.invalidateQueries({ queryKey: ['deal', dealId] }); // value recomputed
+      qc.invalidateQueries({ queryKey: ['deal'] }); // value recomputed
       qc.invalidateQueries({ queryKey: ['notes'] }); // conversion is logged on the timeline
     },
   });
@@ -986,7 +990,7 @@ export function useIncludeEstimatesInValue(dealId: string) {
     mutationFn: ({ estimateIds, include }: { estimateIds: string[]; include: boolean }) =>
       includeEstimatesInValue(token!, dealId, estimateIds, include),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['deal', dealId] });
+      qc.invalidateQueries({ queryKey: ['deal'] });
       qc.invalidateQueries({ queryKey: ['estimates', dealId] });
     },
   });
@@ -999,7 +1003,7 @@ export function useIncludeInvoicesInValue(dealId: string) {
     mutationFn: ({ invoiceIds, include }: { invoiceIds: string[]; include: boolean }) =>
       includeInvoicesInValue(token!, dealId, invoiceIds, include),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['deal', dealId] });
+      qc.invalidateQueries({ queryKey: ['deal'] });
       qc.invalidateQueries({ queryKey: ['invoices', dealId] });
     },
   });
@@ -1013,7 +1017,7 @@ export function useSendDoc(dealId: string) {
       sendDealDoc(token!, dealId, kind, docId, email),
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: [vars.kind === 'invoice' ? 'invoices' : 'estimates', dealId] });
-      if (vars.kind === 'invoice') qc.invalidateQueries({ queryKey: ['deal', dealId] });
+      if (vars.kind === 'invoice') qc.invalidateQueries({ queryKey: ['deal'] });
     },
   });
 }
