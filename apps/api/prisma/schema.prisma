@@ -627,6 +627,9 @@ model QuickBooksConnection {
   accessToken  String   // encrypted at rest
   refreshToken String   // encrypted at rest
   tokenExpiry  DateTime?
+  refreshTokenExpiry DateTime? // QBO refresh token lapses after ~100 days idle (keep-alive refresh)
+  lastRefreshAt DateTime?
+  lastError    String?
   status       String   @default("connected") // connected | reauth_required | disconnected
   connectedBy  String?
   createdAt    DateTime @default(now())
