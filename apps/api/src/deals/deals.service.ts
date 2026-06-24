@@ -73,24 +73,33 @@ export class DealsService {
         billTo = { name: company.name, ...(company.address ? { line1: company.address } : {}) };
       }
     }
-    const deal = await this.prisma.deal.create({
-      data: {
-        orgId,
-        ownerUserId,
-        title: dto.title,
-        value: dto.value ?? 0,
-        currency: dto.currency ?? 'USD',
-        pipelineId: dto.pipelineId,
-        stageId: dto.stageId,
-        primaryPersonId: dto.primaryPersonId ?? null,
-        companyId: dto.companyId ?? null,
-        expectedCloseDate: dto.expectedCloseDate ? new Date(dto.expectedCloseDate) : null,
-        shipTo: dto.shipTo as Prisma.InputJsonValue | undefined,
-        billTo,
-        customFields: dto.customFields as Prisma.InputJsonValue | undefined,
-        status: 'open',
-        stageChangedAt: new Date(),
-      },
+    // Assign a human-readable per-tenant deal number from an atomic org counter.
+    const deal = await this.prisma.$transaction(async (tx) => {
+      const org = await tx.organization.update({
+        where: { id: orgId },
+        data: { dealSeq: { increment: 1 } },
+        select: { dealSeq: true },
+      });
+      return tx.deal.create({
+        data: {
+          orgId,
+          ownerUserId,
+          refNumber: org.dealSeq,
+          title: dto.title,
+          value: dto.value ?? 0,
+          currency: dto.currency ?? 'USD',
+          pipelineId: dto.pipelineId,
+          stageId: dto.stageId,
+          primaryPersonId: dto.primaryPersonId ?? null,
+          companyId: dto.companyId ?? null,
+          expectedCloseDate: dto.expectedCloseDate ? new Date(dto.expectedCloseDate) : null,
+          shipTo: dto.shipTo as Prisma.InputJsonValue | undefined,
+          billTo,
+          customFields: dto.customFields as Prisma.InputJsonValue | undefined,
+          status: 'open',
+          stageChangedAt: new Date(),
+        },
+      });
     });
     await this.logStage(orgId, deal.id, null, deal.stageId, ownerUserId);
     this.emit(orgId, 'deal.created', deal);

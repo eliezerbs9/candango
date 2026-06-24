@@ -3,7 +3,7 @@ import { ApiAuthGuard } from '../../auth/api-auth.guard';
 import { Scopes } from '../../auth/scopes.decorator';
 import { CurrentUser, type AuthContext } from '../../auth/current-user.decorator';
 import { DealQuickbooksService } from './deal-quickbooks.service';
-import { CreateDocDto, LinkQuickbooksDto, UpdateDocStatusDto } from './dto/quickbooks.dto';
+import { ConvertToInvoiceDto, CreateDocDto, LinkQuickbooksDto, UpdateDocStatusDto } from './dto/quickbooks.dto';
 
 @UseGuards(ApiAuthGuard)
 @Controller('deals/:id')
@@ -83,10 +83,11 @@ export class DealQuickbooksController {
     return this.svc.listInvoices(u.orgId, id);
   }
 
-  @Post('invoices')
+  // Invoices are created only by converting one or more estimates (never directly).
+  @Post('invoices/from-estimates')
   @Scopes('deals:write')
-  createInvoice(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() dto: CreateDocDto) {
-    return this.svc.createInvoice(u.orgId, id, dto);
+  createInvoiceFromEstimates(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() dto: ConvertToInvoiceDto) {
+    return this.svc.createInvoiceFromEstimates(u.orgId, id, dto);
   }
 
   @Patch('invoices/:invid')

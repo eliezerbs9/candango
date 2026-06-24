@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../prisma/prisma.service';
 import { QuickbooksApiService, type DocInput, type NormalizedDoc } from '../../integrations/quickbooks-api.service';
-import { CreateDocDto, LinkQuickbooksDto } from './dto/quickbooks.dto';
+import { ConvertToInvoiceDto, CreateDocDto, LinkQuickbooksDto } from './dto/quickbooks.dto';
 
 // our estimate status <-> QBO TxnStatus
 const TO_TXN_STATUS: Record<string, string> = { accepted: 'Accepted', rejected: 'Rejected', closed: 'Closed', sent: 'Pending', draft: 'Pending' };
@@ -10,6 +10,11 @@ const FROM_TXN_STATUS: Record<string, string> = { Accepted: 'accepted', Rejected
 
 const lineSelect = { orderBy: { position: 'asc' as const } };
 type Addr = Record<string, string> | null;
+type DealForQbo = { id: string; refNumber: number | null; qbSubcustomerId: string | null; currency: string; shipTo: unknown; billTo: unknown };
+
+function dealPrivateNote(deal: DealForQbo) {
+  return `Candango deal #${deal.refNumber ?? '?'} (${deal.id})`;
+}
 
 @Injectable()
 export class DealQuickbooksService {
@@ -42,7 +47,7 @@ export class DealQuickbooksService {
   }
 
   /** Build the QBO doc payload from a linked deal + the request DTO. */
-  private qboDocInput(deal: { qbSubcustomerId: string | null; currency: string; shipTo: unknown; billTo: unknown; id: string }, dto: CreateDocDto): DocInput {
+  private qboDocInput(deal: DealForQbo, dto: CreateDocDto): DocInput {
     return {
       customerId: deal.qbSubcustomerId!,
       currency: deal.currency,
@@ -50,7 +55,8 @@ export class DealQuickbooksService {
       lines: dto.lines,
       billAddr: deal.billTo as Addr,
       shipAddr: deal.shipTo as Addr,
-      dealId: deal.id,
+      privateNote: dealPrivateNote(deal),
+      memo: dto.notes ?? undefined,
     };
   }
 
@@ -255,9 +261,45 @@ export class DealQuickbooksService {
     return rows.map(shapeDoc);
   }
 
-  async createInvoice(orgId: string, dealId: string, dto: CreateDocDto) {
+  /**
+   * Invoices are ALWAYS generated from estimates (never created directly). One or more
+   * estimates are combined into a single QBO invoice, linked back to each estimate.
+   */
+  async createInvoiceFromEstimates(orgId: string, dealId: string, dto: ConvertToInvoiceDto) {
     const deal = await this.requireLinked(orgId, dealId);
-    const doc = await this.qbo.createInvoice(orgId, this.qboDocInput(deal, dto));
+    const estimates = await this.prisma.dealEstimate.findMany({
+      where: { id: { in: dto.estimateIds }, orgId, dealId, deletedAt: null },
+      include: { lines: lineSelect },
+    });
+    if (estimates.length !== dto.estimateIds.length) {
+      throw new BadRequestException('Some selected estimates were not found');
+    }
+    const lines = estimates.flatMap((e) =>
+      e.lines.map((l) => ({
+        description: l.description,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        ...(l.itemId ? { itemId: l.itemId } : {}),
+      })),
+    );
+    if (!lines.length) throw new BadRequestException('The selected estimates have no line items');
+
+    const linkedTxns = estimates
+      .filter((e) => e.qbId)
+      .map((e) => ({ txnId: e.qbId as string, txnType: 'Estimate' }));
+
+    const doc = await this.qbo.createInvoice(orgId, {
+      customerId: deal.qbSubcustomerId!,
+      currency: deal.currency,
+      txnDate: dto.txnDate,
+      lines,
+      billAddr: deal.billTo as Addr,
+      shipAddr: deal.shipTo as Addr,
+      privateNote: dealPrivateNote(deal),
+      memo: dto.memo ?? undefined,
+      linkedTxns,
+    });
+
     const row = await this.prisma.dealInvoice.create({
       data: {
         orgId,
@@ -268,14 +310,20 @@ export class DealQuickbooksService {
         currency: deal.currency,
         totalAmount: doc.totalAmount,
         txnDate: dto.txnDate ? new Date(dto.txnDate) : null,
-        notes: dto.notes ?? null,
-        sourceEstimateId: dto.sourceEstimateId ?? null,
+        notes: dto.memo ?? null,
+        sourceEstimateId: estimates[0].id,
+        sourceEstimateIds: estimates.map((e) => e.id),
         qbId: doc.qbId,
         qbSyncToken: doc.syncToken,
         qbSyncedAt: new Date(),
         lines: { create: linesFromDoc(doc) },
       },
       include: { lines: lineSelect },
+    });
+    // QBO marks linked estimates Closed; reflect that locally.
+    await this.prisma.dealEstimate.updateMany({
+      where: { id: { in: estimates.map((e) => e.id) } },
+      data: { status: 'closed' },
     });
     this.events.emit('webhook.event', { orgId, type: 'quickbooks.invoice_created', data: { dealId, invoiceId: row.id } });
     return shapeDoc(row);

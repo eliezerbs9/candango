@@ -27,6 +27,7 @@ model Organization {
   slug            String   @unique
   plan            String   @default("trial") // trial | standard
   onboardingState Json     @default("{}")     // { pipelineCreated, teammatesInvited, ... }
+  dealSeq         Int      @default(0)         // per-tenant counter for human-readable Deal.refNumber
   logoUrl         String?   // workspace logo (data URL for now; object storage in production)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -184,6 +185,7 @@ model Stage {
 model Deal {
   id                 String   @id @default(cuid())
   orgId              String
+  refNumber          Int?     // human-readable per-tenant deal number (Pipedrive-style); cuid stays the real id
   title              String
   value              Int      @default(0) // minor units
   currency           String   @default("USD")
@@ -220,6 +222,7 @@ model Deal {
   estimates    DealEstimate[]
   invoices     DealInvoice[]
 
+  @@unique([orgId, refNumber])
   @@index([orgId, stageId])
   @@index([orgId, ownerUserId])
   @@index([orgId, status])
@@ -712,7 +715,8 @@ model DealInvoice {
   totalAmount      Int       @default(0)
   txnDate          DateTime?
   notes            String?
-  sourceEstimateId String?   // local DealEstimate this invoice was generated from
+  sourceEstimateId String?   // primary local DealEstimate this invoice was generated from
+  sourceEstimateIds String[] @default([]) // all local estimates combined into this invoice
   qbId             String?
   qbSyncToken      String?
   qbSyncedAt       DateTime?

@@ -41,7 +41,9 @@ export interface DocInput {
   lines: LineInput[];
   billAddr?: Addr;
   shipAddr?: Addr;
-  dealId?: string; // stored on the QBO doc PrivateNote for traceability
+  privateNote?: string; // internal note (traceability: deal ref + id) — QBO PrivateNote
+  memo?: string; // customer-facing message shown on the document — QBO CustomerMemo
+  linkedTxns?: { txnId: string; txnType: string }[]; // e.g. estimates this invoice was generated from
 }
 export interface NormalizedLine {
   description: string;
@@ -277,7 +279,11 @@ export class QuickbooksApiService {
     const ship = toQbAddr(input.shipAddr);
     if (bill) body.BillAddr = bill;
     if (ship) body.ShipAddr = ship;
-    if (input.dealId) body.PrivateNote = `Candango deal: ${input.dealId}`;
+    if (input.privateNote) body.PrivateNote = input.privateNote;
+    if (input.memo) body.CustomerMemo = { value: input.memo };
+    if (input.linkedTxns?.length) {
+      body.LinkedTxn = input.linkedTxns.map((t) => ({ TxnId: t.txnId, TxnType: t.txnType }));
+    }
     return body;
   }
 

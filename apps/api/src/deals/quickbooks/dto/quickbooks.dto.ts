@@ -64,6 +64,21 @@ export class CreateDocDto {
   sourceEstimateId?: string;
 }
 
+export class ConvertToInvoiceDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  estimateIds!: string[];
+
+  @IsOptional()
+  @IsString()
+  memo?: string;
+
+  @IsOptional()
+  @IsDateString()
+  txnDate?: string;
+}
+
 export class UpdateDocStatusDto {
   @IsString()
   @IsIn(['draft', 'sent', 'accepted', 'rejected', 'closed', 'paid', 'void'])
