@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '@/lib/auth/store';
 import {
@@ -22,7 +22,7 @@ import {
   type DealFilters,
 } from './deals';
 import { createNote, deleteNote, getNotes } from './notes';
-import { getMessages } from './messages';
+import { getFolderCounts, getMessageBody, getMessages, type MessageFolder } from './messages';
 import { changePassword, getMe, updateProfile, type Profile } from './profile';
 import {
   createCompany,
@@ -190,17 +190,34 @@ export function useDealMessages(dealId: string) {
   const token = useToken();
   return useQuery({
     queryKey: ['messages', { dealId }],
-    queryFn: () => getMessages(token!, { dealId }),
+    queryFn: () => getMessages(token!, { dealId }).then((r) => r.data),
     enabled: !!token && !!dealId,
   });
 }
 
-export function useInbox() {
+export function useInbox(folder: MessageFolder) {
+  const token = useToken();
+  return useInfiniteQuery({
+    queryKey: ['inbox', folder],
+    queryFn: ({ pageParam }) =>
+      getMessages(token!, { mine: true, folder, limit: 25, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: !!token,
+  });
+}
+
+export function useFolderCounts() {
+  const token = useToken();
+  return useQuery({ queryKey: ['folder-counts'], queryFn: () => getFolderCounts(token!), enabled: !!token });
+}
+
+export function useMessageBody(id: string | null) {
   const token = useToken();
   return useQuery({
-    queryKey: ['messages', { mine: true }],
-    queryFn: () => getMessages(token!, { mine: true }),
-    enabled: !!token,
+    queryKey: ['message-body', id],
+    queryFn: () => getMessageBody(token!, id!),
+    enabled: !!token && !!id,
   });
 }
 

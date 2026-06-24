@@ -22,6 +22,16 @@ function parseAddrs(v?: string | null): string[] {
   return v.split(',').map(parseAddr).filter((e): e is string => !!e);
 }
 
+/** Map Gmail labelIds to a single folder for the Email screen. */
+function deriveFolder(labelIds?: string[] | null): string {
+  const l = labelIds ?? [];
+  if (l.includes('TRASH')) return 'trash';
+  if (l.includes('SPAM')) return 'spam';
+  if (l.includes('SENT')) return 'sent';
+  if (l.includes('INBOX')) return 'inbox';
+  return 'other';
+}
+
 /**
  * Captures the connected user's recent Gmail and matches each message to a person → deal,
  * storing rows in `messages` (powers the Email screen + deal timeline, FR-5.2/5.5).
@@ -71,7 +81,12 @@ export class GmailSyncProcessor extends WorkerHost implements OnModuleInit {
       for (const e of (p.emails as string[]) ?? []) personByEmail.set(e.toLowerCase(), p.id);
     }
 
-    const list = await gmail.users.messages.list({ userId: 'me', maxResults: 50, q: 'newer_than:30d' });
+    const list = await gmail.users.messages.list({
+      userId: 'me',
+      maxResults: 100,
+      q: 'newer_than:30d',
+      includeSpamTrash: true, // so Trash/Spam folders populate
+    });
     const ids = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean);
     if (!ids.length) return;
 
@@ -103,6 +118,7 @@ export class GmailSyncProcessor extends WorkerHost implements OnModuleInit {
           ? new Date(Number(full.data.internalDate))
           : null;
 
+      const folder = deriveFolder(full.data.labelIds);
       const others = direction === 'out' ? toAddresses : [fromAddress];
       const personId = others.map((e) => personByEmail.get(e)).find(Boolean) ?? null;
       const dealId = personId
@@ -127,11 +143,12 @@ export class GmailSyncProcessor extends WorkerHost implements OnModuleInit {
           toAddresses: toAddresses as Prisma.InputJsonValue,
           subject: headers.get('subject') ?? null,
           snippet: full.data.snippet ?? null,
+          folder,
           personId,
           dealId,
           sentAt,
         },
-        update: { personId, dealId }, // refresh matching if the person/deal now exists
+        update: { personId, dealId, folder }, // refresh matching + folder (e.g. moved to trash)
       });
     }
 

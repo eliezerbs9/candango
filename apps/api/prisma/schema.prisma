@@ -443,6 +443,7 @@ model Message {
   toAddresses       Json     @default("[]")
   subject           String?
   snippet           String?
+  folder            String   @default("inbox") // inbox | sent | trash | spam | other (from Gmail labels)
   personId          String?
   dealId            String?
   sentAt            DateTime?
@@ -455,6 +456,7 @@ model Message {
   @@unique([userId, providerMessageId])
   @@index([orgId, personId])
   @@index([orgId, dealId])
+  @@index([userId, folder, sentAt])
 }
 
 // ---------------------------------------------------------------------------
