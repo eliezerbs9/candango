@@ -30,6 +30,7 @@ import {
 import { useAuthStore } from '@/lib/auth/store';
 import { ApiError } from '@/lib/api/client';
 import { fetchDocPdf } from '@/lib/api/quickbooks';
+import { runBusy } from '@/lib/ui/useBusy';
 import type { ApiDeal, CreateDocInput, DealDoc } from '@/lib/api/types';
 import { DocList } from './DocList';
 import { DocEditorModal } from './DocEditorModal';
@@ -110,7 +111,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
     if (connected && doc.qbId) {
       const w = window.open('', '_blank');
       try {
-        const blob = await fetchDocPdf(token!, deal.id, kind, doc.id);
+        const blob = await runBusy('Loading from QuickBooks…', () => fetchDocPdf(token!, deal.id, kind, doc.id));
         const url = URL.createObjectURL(blob);
         if (w) w.location.href = url;
         else window.open(url, '_blank');
@@ -126,19 +127,21 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const printMany = async (docs: DealDoc[], kind: 'estimate' | 'invoice') => {
     if (connected) {
       const entries = docs.map((doc) => ({ doc, w: window.open('', '_blank') }));
-      await Promise.all(
-        entries.map(async ({ doc, w }) => {
-          try {
-            if (doc.qbId) {
-              const blob = await fetchDocPdf(token!, deal.id, kind, doc.id);
-              if (w) w.location.href = URL.createObjectURL(blob);
-            } else if (w) {
-              w.location.href = `/print/${kind}/${deal.id}/${doc.id}`;
+      await runBusy('Loading from QuickBooks…', () =>
+        Promise.all(
+          entries.map(async ({ doc, w }) => {
+            try {
+              if (doc.qbId) {
+                const blob = await fetchDocPdf(token!, deal.id, kind, doc.id);
+                if (w) w.location.href = URL.createObjectURL(blob);
+              } else if (w) {
+                w.location.href = `/print/${kind}/${deal.id}/${doc.id}`;
+              }
+            } catch {
+              w?.close();
             }
-          } catch {
-            w?.close();
-          }
-        }),
+          }),
+        ),
       );
     } else {
       docs.forEach((doc) => window.open(`/print/${kind}/${deal.id}/${doc.id}`, '_blank'));
@@ -149,12 +152,14 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const startSend = async (docs: DealDoc[], kind: 'estimate' | 'invoice') => {
     if (!docs.length) return;
     try {
-      const attachments = await Promise.all(
-        docs.map(async (d) => ({
-          filename: `${kind}-${d.docNumber ?? d.id}.pdf`,
-          mimeType: 'application/pdf',
-          contentBase64: await blobToBase64(await fetchDocPdf(token!, deal.id, kind, d.id)),
-        })),
+      const attachments = await runBusy('Loading from QuickBooks…', () =>
+        Promise.all(
+          docs.map(async (d) => ({
+            filename: `${kind}-${d.docNumber ?? d.id}.pdf`,
+            mimeType: 'application/pdf',
+            contentBase64: await blobToBase64(await fetchDocPdf(token!, deal.id, kind, d.id)),
+          })),
+        ),
       );
       const label = kind === 'invoice' ? 'Invoice' : 'Estimate';
       const subject =
