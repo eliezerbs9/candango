@@ -158,9 +158,43 @@ export default function DealDetailPage() {
             )}
           </Group>
         </div>
-        <Button variant="light" leftSection={<IconMail size={16} />} onClick={emailCtl.open}>
-          Send email
-        </Button>
+        <Group gap="sm">
+          {deal.status === 'open' && !deal.archivedAt && (
+            <>
+              <Button
+                color="teal"
+                loading={win.isPending}
+                onClick={() =>
+                  win.mutate(deal.id, {
+                    onSuccess: () => {
+                      const openEst = dealEstimates.filter((e) => e.status !== 'closed');
+                      if (qb?.connected && deal.qbSubcustomerId && openEst.length > 0) winConvertCtl.open();
+                    },
+                    onError: fail,
+                  })
+                }
+              >
+                Mark won
+              </Button>
+              <Button color="red" variant="light" loading={lose.isPending} onClick={() => lose.mutate({ id: deal.id })}>
+                Mark lost
+              </Button>
+            </>
+          )}
+          {(deal.status !== 'open' || deal.archivedAt) && (
+            <Button variant="light" loading={reopen.isPending} onClick={() => reopen.mutate(deal.id, { onError: fail })}>
+              Reopen
+            </Button>
+          )}
+          {!deal.archivedAt && (
+            <Button variant="default" loading={archive.isPending} onClick={() => archive.mutate(deal.id, { onError: fail })}>
+              Archive
+            </Button>
+          )}
+          <Button variant="light" leftSection={<IconMail size={16} />} onClick={emailCtl.open}>
+            Send email
+          </Button>
+        </Group>
       </Group>
 
       <ComposeEmail opened={emailOpen} onClose={emailCtl.close} defaultDealId={deal.id} />
@@ -233,42 +267,6 @@ export default function DealDetailPage() {
               <Button onClick={save} loading={update.isPending} mt="xs">
                 Save changes
               </Button>
-
-              <Divider />
-              <Group>
-                {deal.status === 'open' && !deal.archivedAt && (
-                  <>
-                    <Button
-                      color="teal"
-                      loading={win.isPending}
-                      onClick={() =>
-                        win.mutate(deal.id, {
-                          onSuccess: () => {
-                            const openEst = dealEstimates.filter((e) => e.status !== 'closed');
-                            if (qb?.connected && deal.qbSubcustomerId && openEst.length > 0) winConvertCtl.open();
-                          },
-                          onError: fail,
-                        })
-                      }
-                    >
-                      Mark won
-                    </Button>
-                    <Button color="red" variant="light" loading={lose.isPending} onClick={() => lose.mutate({ id: deal.id })}>
-                      Mark lost
-                    </Button>
-                  </>
-                )}
-                {(deal.status !== 'open' || deal.archivedAt) && (
-                  <Button variant="light" loading={reopen.isPending} onClick={() => reopen.mutate(deal.id, { onError: fail })}>
-                    Reopen
-                  </Button>
-                )}
-                {!deal.archivedAt && (
-                  <Button variant="default" loading={archive.isPending} onClick={() => archive.mutate(deal.id, { onError: fail })}>
-                    Archive
-                  </Button>
-                )}
-              </Group>
             </Stack>
           </Card>
         </Grid.Col>
