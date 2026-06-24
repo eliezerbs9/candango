@@ -195,6 +195,9 @@ export class DealQuickbooksService {
   async updateEstimate(orgId: string, dealId: string, estimateId: string, dto: CreateDocDto) {
     const est = await this.prisma.dealEstimate.findFirst({ where: { id: estimateId, orgId, dealId } });
     if (!est) throw new NotFoundException('Estimate not found');
+    if (est.status === 'closed') {
+      throw new BadRequestException('This estimate was converted to an invoice and can no longer be edited');
+    }
     if (est.source === 'quickbooks' && est.qbId) {
       const deal = await this.requireLinked(orgId, dealId);
       const doc = await this.qbo.updateEstimate(orgId, est.qbId, this.qboDocInput(deal, dto));
@@ -293,8 +296,9 @@ export class DealQuickbooksService {
    */
   async recomputeDealValue(orgId: string, dealId: string) {
     const [invoices, estimates] = await Promise.all([
+      // Invoices always count toward the deal value (a made sale) — only voided ones drop out.
       this.prisma.dealInvoice.findMany({
-        where: { orgId, dealId, deletedAt: null, includeInValue: true, status: { not: 'void' } },
+        where: { orgId, dealId, deletedAt: null, status: { not: 'void' } },
         select: { totalAmount: true },
       }),
       this.prisma.dealEstimate.findMany({
@@ -313,6 +317,9 @@ export class DealQuickbooksService {
   async setEstimateStatus(orgId: string, dealId: string, estimateId: string, status: string) {
     const est = await this.prisma.dealEstimate.findFirst({ where: { id: estimateId, orgId, dealId } });
     if (!est) throw new NotFoundException('Estimate not found');
+    if (est.status === 'closed') {
+      throw new BadRequestException('This estimate was converted to an invoice and can no longer be changed');
+    }
     if (est.source === 'quickbooks' && est.qbId && est.qbSyncToken) {
       const doc = await this.qbo.updateEstimateStatus(orgId, est.qbId, est.qbSyncToken, TO_TXN_STATUS[status] ?? 'Pending');
       const row = await this.prisma.dealEstimate.update({
@@ -351,6 +358,9 @@ export class DealQuickbooksService {
     });
     if (estimates.length !== dto.estimateIds.length) {
       throw new BadRequestException('Some selected estimates were not found');
+    }
+    if (estimates.some((e) => e.status === 'closed')) {
+      throw new BadRequestException('Some selected estimates were already converted to an invoice');
     }
     const lines = estimates.flatMap((e) =>
       e.lines.map((l) => ({

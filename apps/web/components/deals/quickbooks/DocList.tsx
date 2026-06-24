@@ -22,6 +22,7 @@ export function DocList({
   onOpen,
   selectedIds,
   onToggleSelect,
+  isStatusLocked,
   emptyText,
 }: {
   docs: DealDoc[];
@@ -30,6 +31,7 @@ export function DocList({
   onOpen?: (doc: DealDoc) => void;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
+  isStatusLocked?: (doc: DealDoc) => boolean;
   emptyText: string;
 }) {
   if (!docs.length) {
@@ -88,22 +90,28 @@ export function DocList({
               </Text>
             </Table.Td>
             <Table.Td w={120} ta="right">
-              <Menu position="bottom-end" withinPortal>
-                <Menu.Target>
-                  <UnstyledButton>
-                    <Badge color={STATUS_COLOR[d.status] ?? 'gray'} variant="light" rightSection={<IconChevronDown size={12} />}>
-                      {d.status}
-                    </Badge>
-                  </UnstyledButton>
-                </Menu.Target>
-                <Menu.Dropdown>
-                  {statuses.map((s) => (
-                    <Menu.Item key={s} onClick={() => onSetStatus(d.id, s)} disabled={s === d.status}>
-                      {s}
-                    </Menu.Item>
-                  ))}
-                </Menu.Dropdown>
-              </Menu>
+              {isStatusLocked?.(d) ? (
+                <Badge color={STATUS_COLOR[d.status] ?? 'gray'} variant="light">
+                  {d.status}
+                </Badge>
+              ) : (
+                <Menu position="bottom-end" withinPortal>
+                  <Menu.Target>
+                    <UnstyledButton>
+                      <Badge color={STATUS_COLOR[d.status] ?? 'gray'} variant="light" rightSection={<IconChevronDown size={12} />}>
+                        {d.status}
+                      </Badge>
+                    </UnstyledButton>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    {statuses.map((s) => (
+                      <Menu.Item key={s} onClick={() => onSetStatus(d.id, s)} disabled={s === d.status}>
+                        {s}
+                      </Menu.Item>
+                    ))}
+                  </Menu.Dropdown>
+                </Menu>
+              )}
             </Table.Td>
           </Table.Tr>
         ))}

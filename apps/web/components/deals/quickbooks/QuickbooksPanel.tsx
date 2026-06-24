@@ -19,7 +19,6 @@ import {
   useDealEstimates,
   useDealInvoices,
   useIncludeEstimatesInValue,
-  useIncludeInvoicesInValue,
   useQbItems,
   useQuickbooksStatus,
   useSetEstimateStatus,
@@ -41,7 +40,8 @@ import { MoveStageModal } from './MoveStageModal';
 import { ComposeEmail } from '@/components/email/ComposeEmail';
 import type { EmailAttachment } from '@/lib/api/messages';
 
-const ESTIMATE_STATUSES = ['draft', 'sent', 'accepted', 'rejected', 'closed'];
+// 'closed' is terminal (set only by converting to an invoice) — not user-selectable.
+const ESTIMATE_STATUSES = ['draft', 'sent', 'accepted', 'rejected'];
 const INVOICE_STATUSES = ['draft', 'sent', 'paid', 'void'];
 
 const fail = (e: unknown) =>
@@ -78,7 +78,6 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const setEstStatus = useSetEstimateStatus(deal.id);
   const setInvStatus = useSetInvoiceStatus(deal.id);
   const includeEstimates = useIncludeEstimatesInValue(deal.id);
-  const includeInvoices = useIncludeInvoicesInValue(deal.id);
 
   const [estEditing, setEstEditing] = useState<DealDoc | null>(null);
   const [invEditing, setInvEditing] = useState<DealDoc | null>(null);
@@ -180,8 +179,6 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   });
   const markEstimates = (ids: string[], include: boolean) =>
     includeEstimates.mutate({ estimateIds: ids, include }, valueToast(include));
-  const markInvoices = (ids: string[], include: boolean) =>
-    includeInvoices.mutate({ invoiceIds: ids, include }, valueToast(include));
 
   const submitEstimate = (input: CreateDocInput) =>
     estEditing ? updateEstimate.mutateAsync({ id: estEditing.id, body: input }) : createEstimate.mutateAsync(input);
@@ -268,6 +265,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
           onOpen={(doc) => setView({ doc, kind: 'Estimate' })}
           selectedIds={canSelect ? estSel : undefined}
           onToggleSelect={canSelect ? toggle(setEstSel) : undefined}
+          isStatusLocked={(d) => d.status === 'closed'}
           emptyText={mode === 'link' ? 'Link the deal to add estimates.' : 'No estimates yet.'}
         />
 
@@ -279,12 +277,6 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
             {invSel.size > 0 && (
               <Group gap="xs">
                 <Text size="sm" c="dimmed">{invSel.size} selected</Text>
-                <Button size="xs" variant="light" leftSection={<IconCurrencyDollar size={14} />} onClick={() => markInvoices([...invSel], true)}>
-                  Add to deal value
-                </Button>
-                <Button size="xs" variant="light" color="gray" leftSection={<IconX size={14} />} onClick={() => markInvoices([...invSel], false)}>
-                  Remove from value
-                </Button>
                 <Button size="xs" variant="light" leftSection={<IconSend size={14} />} onClick={() => startSend(selInvoices, 'invoice')}>
                   Send
                 </Button>
@@ -356,7 +348,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         kind={view?.kind ?? 'Estimate'}
         opened={!!view}
         onClose={() => setView(null)}
-        onEdit={editFromView}
+        onEdit={view && !(view.kind === 'Estimate' && view.doc.status === 'closed') ? editFromView : undefined}
         onPrint={view ? () => openDoc(view.doc, view.kind === 'Invoice' ? 'invoice' : 'estimate') : undefined}
       />
 
