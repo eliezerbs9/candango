@@ -22,7 +22,15 @@ import {
   type DealFilters,
 } from './deals';
 import { createNote, deleteNote, getNotes } from './notes';
-import { getFolderCounts, getMessage, getMessageBody, getMessages, type MessageFolder } from './messages';
+import {
+  getFolderCounts,
+  getMessage,
+  getMessageBody,
+  getMessages,
+  sendMessage,
+  type MessageFolder,
+  type SendBody,
+} from './messages';
 import { changePassword, getMe, updateProfile, type Profile } from './profile';
 import {
   createCompany,
@@ -210,6 +218,19 @@ export function useInbox(folder: MessageFolder) {
 export function useFolderCounts() {
   const token = useToken();
   return useQuery({ queryKey: ['folder-counts'], queryFn: () => getFolderCounts(token!), enabled: !!token });
+}
+
+export function useSendMessage() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SendBody) => sendMessage(token!, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inbox'] });
+      qc.invalidateQueries({ queryKey: ['messages'] });
+      qc.invalidateQueries({ queryKey: ['folder-counts'] });
+    },
+  });
 }
 
 export function useMessage(id: string) {

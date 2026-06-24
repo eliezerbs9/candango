@@ -2,14 +2,17 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Anchor, Avatar, Badge, Box, Center, Divider, Group, Loader, Paper, Stack, Text, Title } from '@mantine/core';
-import { IconArrowLeft } from '@tabler/icons-react';
+import { Anchor, Avatar, Badge, Box, Button, Center, Divider, Group, Loader, Paper, Stack, Text, Title } from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
+import { IconArrowBackUp, IconArrowLeft } from '@tabler/icons-react';
+import { ComposeEmail } from '@/components/email/ComposeEmail';
 import { useMessage, useMessageBody } from '@/lib/api/hooks';
 
 export default function EmailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: message, isLoading } = useMessage(id);
   const { data: body, isLoading: loadingBody } = useMessageBody(id);
+  const [reply, replyCtl] = useDisclosure(false);
 
   if (isLoading || !message) {
     return (
@@ -27,11 +30,16 @@ export default function EmailPage() {
 
   return (
     <Stack gap="md" maw={900} mx="auto">
-      <Anchor component={Link} href="/emails" size="sm">
-        <Group gap={4}>
-          <IconArrowLeft size={14} /> Back to Email
-        </Group>
-      </Anchor>
+      <Group justify="space-between">
+        <Anchor component={Link} href="/emails" size="sm">
+          <Group gap={4}>
+            <IconArrowLeft size={14} /> Back to Email
+          </Group>
+        </Anchor>
+        <Button size="xs" variant="light" leftSection={<IconArrowBackUp size={14} />} onClick={replyCtl.open}>
+          Reply
+        </Button>
+      </Group>
 
       <Title order={3}>{message.subject || '(no subject)'}</Title>
 
@@ -86,6 +94,17 @@ export default function EmailPage() {
           </Text>
         )}
       </Paper>
+
+      <ComposeEmail
+        opened={reply}
+        onClose={replyCtl.close}
+        defaultDealId={message.dealId ?? undefined}
+        reply={{
+          to: [message.fromAddress],
+          subject: /^re:/i.test(message.subject ?? '') ? (message.subject ?? '') : `Re: ${message.subject ?? ''}`,
+          threadId: message.threadId ?? undefined,
+        }}
+      />
     </Stack>
   );
 }

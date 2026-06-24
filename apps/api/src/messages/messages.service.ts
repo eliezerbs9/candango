@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { extractBody, gmailClientFor } from './gmail-read.util';
+import { SendMessageDto } from './dto/send.dto';
 
 type MessageRow = {
   id: string;
@@ -11,6 +12,7 @@ type MessageRow = {
   subject: string | null;
   snippet: string | null;
   folder: string;
+  threadId: string | null;
   personId: string | null;
   dealId: string | null;
   sentAt: Date | null;
@@ -25,6 +27,7 @@ const shape = (m: MessageRow) => ({
   subject: m.subject,
   snippet: m.snippet,
   folder: m.folder,
+  threadId: m.threadId,
   personId: m.personId,
   dealId: m.dealId,
   sentAt: m.sentAt,
@@ -80,6 +83,54 @@ export class MessagesService {
       _count: { _all: true },
     });
     return Object.fromEntries(grouped.map((g) => [g.folder, g._count._all]));
+  }
+
+  /** Send an email via Gmail and record it as an outbound (Sent) message. */
+  async send(orgId: string, userId: string, dto: SendMessageDto) {
+    const conn = await this.prisma.mailboxConnection.findUnique({ where: { userId } });
+    if (!conn || conn.status !== 'connected' || !conn.refreshToken) {
+      throw new BadRequestException('Connect your Google account to send email');
+    }
+    const gmail = gmailClientFor(conn);
+    const from = (await gmail.users.getProfile({ userId: 'me' })).data.emailAddress ?? '';
+
+    const headers = [`To: ${dto.to.join(', ')}`, `From: ${from}`, `Subject: ${dto.subject}`];
+    if (dto.inReplyTo) headers.push(`In-Reply-To: ${dto.inReplyTo}`, `References: ${dto.inReplyTo}`);
+    headers.push('Content-Type: text/plain; charset="UTF-8"', '', dto.body);
+    const raw = Buffer.from(headers.join('\r\n')).toString('base64url');
+
+    const sent = await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: { raw, ...(dto.threadId ? { threadId: dto.threadId } : {}) },
+    });
+
+    // Match the first recipient to a person in the org.
+    const persons = await this.prisma.person.findMany({
+      where: { orgId, deletedAt: null },
+      select: { id: true, emails: true },
+    });
+    const byEmail = new Map<string, string>();
+    for (const p of persons) for (const e of (p.emails as string[]) ?? []) byEmail.set(e.toLowerCase(), p.id);
+    const personId = dto.to.map((e) => byEmail.get(e.toLowerCase())).find(Boolean) ?? null;
+
+    const msg = await this.prisma.message.create({
+      data: {
+        orgId,
+        userId,
+        direction: 'out',
+        providerMessageId: sent.data.id ?? `local_${Date.now()}`,
+        threadId: sent.data.threadId ?? null,
+        fromAddress: from,
+        toAddresses: dto.to as Prisma.InputJsonValue,
+        subject: dto.subject,
+        snippet: dto.body.slice(0, 200),
+        folder: 'sent',
+        personId,
+        dealId: dto.dealId ?? null,
+        sentAt: new Date(),
+      },
+    });
+    return shape(msg);
   }
 
   /** Fetch the full body on demand from Gmail (bodies aren't stored). */

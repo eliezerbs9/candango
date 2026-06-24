@@ -10,6 +10,7 @@ export interface ApiMessage {
   subject: string | null;
   snippet: string | null;
   folder: MessageFolder;
+  threadId: string | null;
   personId: string | null;
   dealId: string | null;
   sentAt: string | null;
@@ -40,6 +41,19 @@ export function getMessages(token: string, filters: MessageFilters = {}) {
   if (filters.cursor) qs.set('cursor', filters.cursor);
   const suffix = qs.toString() ? `?${qs.toString()}` : '';
   return apiFetch<MessagesPage>(`/messages${suffix}`, { token });
+}
+
+export interface SendBody {
+  to: string[];
+  subject: string;
+  body: string;
+  dealId?: string;
+  threadId?: string;
+  inReplyTo?: string;
+}
+
+export function sendMessage(token: string, body: SendBody) {
+  return apiFetch<ApiMessage>('/messages/send', { method: 'POST', token, body: JSON.stringify(body) });
 }
 
 export function getMessage(token: string, id: string) {

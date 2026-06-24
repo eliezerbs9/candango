@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useDisclosure } from '@mantine/hooks';
 import { Badge, Button, Card, Center, Group, Loader, SegmentedControl, Stack, Text } from '@mantine/core';
-import { IconMail } from '@tabler/icons-react';
+import { IconMail, IconPencil } from '@tabler/icons-react';
 import { PageHeader } from '@/components/primitives/PageHeader';
+import { ComposeEmail } from '@/components/email/ComposeEmail';
 import { useFolderCounts, useInbox } from '@/lib/api/hooks';
 import type { ApiMessage, MessageFolder } from '@/lib/api/messages';
 
@@ -20,6 +22,7 @@ const when = (m: ApiMessage) =>
 
 export default function EmailsPage() {
   const router = useRouter();
+  const [compose, composeCtl] = useDisclosure(false);
   const [folder, setFolder] = useState<MessageFolder>('inbox');
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInbox(folder);
   const { data: counts = {} } = useFolderCounts();
@@ -28,7 +31,15 @@ export default function EmailsPage() {
 
   return (
     <>
-      <PageHeader title="Email" subtitle="Your synced mailbox" />
+      <PageHeader
+        title="Email"
+        subtitle="Your synced mailbox"
+        actions={
+          <Button leftSection={<IconPencil size={16} />} onClick={composeCtl.open}>
+            Compose
+          </Button>
+        }
+      />
 
       <SegmentedControl
         mb="md"
@@ -102,6 +113,8 @@ export default function EmailsPage() {
           ) : null}
         </Stack>
       )}
+
+      <ComposeEmail opened={compose} onClose={composeCtl.close} />
     </>
   );
 }

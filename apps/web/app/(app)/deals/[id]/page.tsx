@@ -18,8 +18,10 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconArrowLeft } from '@tabler/icons-react';
+import { IconArrowLeft, IconMail } from '@tabler/icons-react';
+import { ComposeEmail } from '@/components/email/ComposeEmail';
 import { StatusBadge } from '@/components/primitives/StatusBadge';
 import { Money } from '@/components/primitives/Money';
 import { CreatableSelect } from '@/components/common/CreatableSelect';
@@ -61,6 +63,7 @@ export default function DealDetailPage() {
   const lose = useLoseDeal();
   const createCompany = useCreateCompany();
   const createPerson = useCreatePerson();
+  const [emailOpen, emailCtl] = useDisclosure(false);
 
   const [form, setForm] = useState<DealForm | null>(null);
 
@@ -133,7 +136,12 @@ export default function DealDetailPage() {
             <StatusBadge status={deal.status} />
           </Group>
         </div>
+        <Button variant="light" leftSection={<IconMail size={16} />} onClick={emailCtl.open}>
+          Send email
+        </Button>
       </Group>
+
+      <ComposeEmail opened={emailOpen} onClose={emailCtl.close} defaultDealId={deal.id} />
 
       <Grid gutter="lg">
         {/* Timeline (main) */}

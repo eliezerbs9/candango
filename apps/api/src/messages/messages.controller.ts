@@ -1,8 +1,9 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiAuthGuard } from '../auth/api-auth.guard';
 import { Scopes } from '../auth/scopes.decorator';
 import { CurrentUser, type AuthContext } from '../auth/current-user.decorator';
 import { MessagesService } from './messages.service';
+import { SendMessageDto } from './dto/send.dto';
 
 @UseGuards(ApiAuthGuard)
 @Controller('messages')
@@ -28,6 +29,12 @@ export class MessagesController {
       limit: limit ? Number(limit) : undefined,
       cursor,
     });
+  }
+
+  @Post('send')
+  @Scopes('deals:write')
+  send(@CurrentUser() u: AuthContext, @Body() dto: SendMessageDto) {
+    return this.svc.send(u.orgId, u.userId, dto);
   }
 
   /** Folder counts for the current user's mailbox (Inbox/Sent/Trash/Spam tabs). */
