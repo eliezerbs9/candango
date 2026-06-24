@@ -6,6 +6,7 @@ import { WebhookDeliveryProcessor } from './webhook-delivery.processor';
 import { EmailProcessor } from './email.processor';
 import { CalendarSyncProcessor } from './calendar-sync.processor';
 import { GmailSyncProcessor } from './gmail-sync.processor';
+import { QboRefreshProcessor } from './qbo-refresh.processor';
 
 @Module({
   imports: [
@@ -21,7 +22,15 @@ import { GmailSyncProcessor } from './gmail-sync.processor';
     BullModule.registerQueue({ name: 'email' }),
     BullModule.registerQueue({ name: 'calendar-sync' }),
     BullModule.registerQueue({ name: 'gmail-sync' }),
+    BullModule.registerQueue({ name: 'qbo-refresh' }),
   ],
-  providers: [PrismaService, WebhookDeliveryProcessor, EmailProcessor, CalendarSyncProcessor, GmailSyncProcessor],
+  providers: [
+    PrismaService,
+    WebhookDeliveryProcessor,
+    EmailProcessor,
+    CalendarSyncProcessor,
+    GmailSyncProcessor,
+    QboRefreshProcessor,
+  ],
 })
 export class WorkerModule {}
