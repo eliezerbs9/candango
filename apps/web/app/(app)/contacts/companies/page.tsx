@@ -11,7 +11,6 @@ import {
   Modal,
   Stack,
   Text,
-  Textarea,
   TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
