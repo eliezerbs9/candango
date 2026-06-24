@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SCOPES_KEY } from './scopes.decorator';
 import type { AuthContext } from './current-user.decorator';
+import { setTenantOrgId } from '../prisma/tenant-context';
 
 /**
  * Accepts a user session JWT OR an API key (`sk_live_…`) as a Bearer token.
@@ -37,6 +38,7 @@ export class ApiAuthGuard implements CanActivate {
       ? await this.fromApiKey(token)
       : await this.fromJwt(token);
     req.user = user;
+    setTenantOrgId(user.orgId); // scope all downstream Prisma queries to this tenant
 
     const required =
       this.reflector.getAllAndOverride<string[]>(SCOPES_KEY, [ctx.getHandler(), ctx.getClass()]) ?? [];

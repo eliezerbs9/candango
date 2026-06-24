@@ -85,7 +85,7 @@ export class DealsService {
       }
     }
     // Assign a human-readable per-tenant deal number from an atomic org counter.
-    const deal = await this.prisma.$transaction(async (tx) => {
+    const deal = await this.prisma.$tx(async (tx) => {
       const org = await tx.organization.update({
         where: { id: orgId },
         data: { dealSeq: { increment: 1 } },

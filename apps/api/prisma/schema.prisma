@@ -13,8 +13,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Runtime connection: the non-superuser `candango_app` role, subject to RLS.
+  url       = env("DATABASE_URL")
+  // Migrations/introspection run as the owner (superuser), which can ALTER tables + RLS.
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------------------------------------------------------------------------

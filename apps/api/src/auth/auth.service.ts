@@ -33,7 +33,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
     const slug = `${slugify(dto.orgName)}-${Math.random().toString(36).slice(2, 7)}`;
 
-    const { org, user } = await this.prisma.$transaction(async (tx) => {
+    const { org, user } = await this.prisma.$tx(async (tx) => {
       const org = await tx.organization.create({
         data: { name: dto.orgName, slug },
       });
