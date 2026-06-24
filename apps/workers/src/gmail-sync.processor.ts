@@ -116,15 +116,36 @@ export class GmailSyncProcessor extends WorkerHost implements OnModuleInit {
       const folder = deriveFolder(labels);
       const others = direction === 'out' ? toAddresses : [fromAddress];
       const personId = others.map((e) => personByEmail.get(e)).find(Boolean) ?? null;
-      const dealId = personId
-        ? (
-            await this.prisma.deal.findFirst({
-              where: { orgId: conn.orgId, primaryPersonId: personId, status: 'open', deletedAt: null },
-              orderBy: { updatedAt: 'desc' },
-              select: { id: true },
-            })
-          )?.id ?? null
-        : null;
+
+      // Link the message to a deal so it shows on the deal timeline (FR-5.2/3.9):
+      let dealId: string | null = null;
+      // 1. Thread continuity — a reply in a thread already linked to a deal stays on that deal.
+      if (full.data.threadId) {
+        const prior = await this.prisma.message.findFirst({
+          where: { orgId: conn.orgId, threadId: full.data.threadId, dealId: { not: null } },
+          select: { dealId: true },
+        });
+        dealId = prior?.dealId ?? null;
+      }
+      // 2. Otherwise match the contact — primary person, a deal participant, OR a contact of the
+      //    deal's company — to the most recent open deal.
+      if (!dealId && personId) {
+        const deal = await this.prisma.deal.findFirst({
+          where: {
+            orgId: conn.orgId,
+            status: 'open',
+            deletedAt: null,
+            OR: [
+              { primaryPersonId: personId },
+              { participants: { some: { personId } } },
+              { company: { contacts: { some: { personId } } } },
+            ],
+          },
+          orderBy: { updatedAt: 'desc' },
+          select: { id: true },
+        });
+        dealId = deal?.id ?? null;
+      }
 
       await this.prisma.message.upsert({
         where: { userId_providerMessageId: { userId, providerMessageId: id } },
@@ -144,7 +165,8 @@ export class GmailSyncProcessor extends WorkerHost implements OnModuleInit {
           dealId,
           sentAt,
         },
-        update: { personId, dealId, folder, labels }, // refresh matching + folder/labels (e.g. moved to trash)
+        // refresh matching + folder/labels (e.g. moved to trash); never wipe an existing deal link on re-sync
+        update: { personId, dealId: dealId ?? undefined, folder, labels },
       });
     }
 
