@@ -14,8 +14,8 @@ export class CreatePersonDto {
   phone?: string;
 
   @IsOptional()
-  @IsString()
-  address?: string;
+  @IsObject()
+  address?: Record<string, unknown>;
 
   @IsOptional()
   @IsArray()
@@ -42,8 +42,8 @@ export class UpdatePersonDto {
   phone?: string;
 
   @IsOptional()
-  @IsString()
-  address?: string;
+  @IsObject()
+  address?: Record<string, unknown>;
 
   @IsOptional()
   @IsArray()

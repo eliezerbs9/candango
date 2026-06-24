@@ -1,4 +1,5 @@
 import { apiFetch } from './client';
+import type { Address } from './types';
 
 export interface ContactRef {
   id: string;
@@ -10,7 +11,7 @@ export interface ApiPerson {
   name: string;
   email: string | null;
   phone: string | null;
-  address: string | null;
+  address: Address | null;
   companies: ContactRef[];
   customFields: Record<string, unknown>;
 }
@@ -19,7 +20,7 @@ export interface ApiCompany {
   id: string;
   name: string;
   domain: string | null;
-  address: string | null;
+  address: Address | null;
   phone: string | null;
   contacts: ContactRef[];
   customFields: Record<string, unknown>;
@@ -29,7 +30,7 @@ export interface PersonBody {
   name: string;
   email?: string;
   phone?: string;
-  address?: string;
+  address?: Address;
   companyIds?: string[];
   customFields?: Record<string, unknown>;
 }
@@ -37,7 +38,7 @@ export interface PersonBody {
 export interface CompanyBody {
   name: string;
   domain?: string;
-  address?: string;
+  address?: Address;
   phone?: string;
   contactIds?: string[];
   customFields?: Record<string, unknown>;

@@ -12,7 +12,7 @@ type CompanyRow = {
   id: string;
   name: string;
   domain: string | null;
-  address: string | null;
+  address: Prisma.JsonValue;
   phone: string | null;
   customFields: Prisma.JsonValue;
   contacts: { person: { id: string; name: string } }[];
@@ -60,7 +60,7 @@ export class CompaniesService {
         orgId,
         name: dto.name,
         domain: dto.domain ?? null,
-        address: dto.address ?? null,
+        address: (dto.address ?? undefined) as Prisma.InputJsonValue | undefined,
         phone: dto.phone ?? null,
         customFields: (dto.customFields ?? {}) as Prisma.InputJsonValue,
         contacts: { create: contactIds.map((personId) => ({ personId })) },
@@ -87,7 +87,7 @@ export class CompaniesService {
     const data: Prisma.CompanyUncheckedUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.domain !== undefined) data.domain = dto.domain;
-    if (dto.address !== undefined) data.address = dto.address;
+    if (dto.address !== undefined) data.address = dto.address as Prisma.InputJsonValue;
     if (dto.phone !== undefined) data.phone = dto.phone;
     if (dto.customFields !== undefined) data.customFields = dto.customFields as Prisma.InputJsonValue;
     await this.prisma.company.update({ where: { id }, data });

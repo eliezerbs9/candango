@@ -33,8 +33,8 @@ export interface ApiDeal {
   expectedCloseDate: string | null;
   stageChangedAt: string;
   customFields: Record<string, unknown>;
-  shipTo: Record<string, unknown> | null;
-  billTo: Record<string, unknown> | null;
+  shipTo: Address | null;
+  billTo: Address | null;
   qbSubcustomerId: string | null;
   refNumber: number | null;
   archivedAt: string | null;
@@ -95,6 +95,16 @@ export interface CreateDocInput {
 export interface QbCustomer {
   id: string;
   name: string;
+}
+
+export interface Address {
+  name?: string;
+  line1?: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
 }
 
 export type QbItem = { id: string; name: string };

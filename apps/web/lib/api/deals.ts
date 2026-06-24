@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { ApiDeal } from './types';
+import type { Address, ApiDeal } from './types';
 
 export interface DealFilters {
   pipelineId?: string;
@@ -61,8 +61,8 @@ export function updateDeal(
     primaryPersonId: string;
     expectedCloseDate: string;
     customFields: Record<string, unknown>;
-    shipTo: Record<string, unknown>;
-    billTo: Record<string, unknown>;
+    shipTo: Address;
+    billTo: Address;
   }>,
 ) {
   return apiFetch<ApiDeal>(`/deals/${id}`, { method: 'PATCH', token, body: JSON.stringify(body) });

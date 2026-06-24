@@ -235,7 +235,7 @@ model Person {
   name         String
   emails       Json     @default("[]") // [{ value, label }]
   phones       Json     @default("[]")
-  address      String?  // mirrors Company.address; used for QBO Bill To when a person is the deal's client
+  address      Json?    // structured { line1, line2, city, state, postalCode, country }; used for QBO Bill To
   ownerUserId  String?
   customFields Json     @default("{}")
   createdAt    DateTime @default(now())
@@ -260,7 +260,7 @@ model Company {
   orgId        String
   name         String
   domain       String?
-  address      String?
+  address      Json?    // structured { line1, line2, city, state, postalCode, country }
   phone        String?
   ownerUserId  String?
   customFields Json     @default("{}")

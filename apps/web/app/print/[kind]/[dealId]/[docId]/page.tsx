@@ -83,8 +83,8 @@ export default function PrintDocPage() {
       </div>
 
       <div className="addrs">
-        <Address label="Bill To" addr={deal.billTo} />
-        <Address label="Ship To" addr={deal.shipTo} />
+        <Address label="Bill To" addr={deal.billTo as Record<string, unknown> | null} />
+        <Address label="Ship To" addr={deal.shipTo as Record<string, unknown> | null} />
       </div>
 
       <table>

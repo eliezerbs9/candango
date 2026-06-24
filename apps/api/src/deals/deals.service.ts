@@ -72,7 +72,7 @@ export class DealsService {
         select: { name: true, address: true },
       });
       if (company) {
-        billTo = { name: company.name, ...(company.address ? { line1: company.address } : {}) };
+        billTo = { name: company.name, ...((company.address as Record<string, unknown>) ?? {}) };
       }
     }
     if (!billTo && dto.primaryPersonId) {
@@ -81,7 +81,7 @@ export class DealsService {
         select: { name: true, address: true },
       });
       if (person) {
-        billTo = { name: person.name, ...(person.address ? { line1: person.address } : {}) };
+        billTo = { name: person.name, ...((person.address as Record<string, unknown>) ?? {}) };
       }
     }
     // Assign a human-readable per-tenant deal number from an atomic org counter.

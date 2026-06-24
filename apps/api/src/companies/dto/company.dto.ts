@@ -10,8 +10,8 @@ export class CreateCompanyDto {
   domain?: string;
 
   @IsOptional()
-  @IsString()
-  address?: string;
+  @IsObject()
+  address?: Record<string, unknown>;
 
   @IsOptional()
   @IsString()
@@ -38,8 +38,8 @@ export class UpdateCompanyDto {
   domain?: string;
 
   @IsOptional()
-  @IsString()
-  address?: string;
+  @IsObject()
+  address?: Record<string, unknown>;
 
   @IsOptional()
   @IsString()

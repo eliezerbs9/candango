@@ -21,6 +21,8 @@ import { PageHeader } from '@/components/primitives/PageHeader';
 import { DataTable, type Column } from '@/components/data/DataTable';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
 import { CustomFieldsEditor } from '@/components/deals/CustomFieldsEditor';
+import { AddressFields } from '@/components/deals/AddressFields';
+import type { Address } from '@/lib/api/types';
 import { ApiError } from '@/lib/api/client';
 import {
   useCompanies,
@@ -44,7 +46,7 @@ export default function CompaniesPage() {
   const [editing, setEditing] = useState<ApiCompany | null>(null);
   const [name, setName] = useState('');
   const [domain, setDomain] = useState('');
-  const [address, setAddress] = useState('');
+  const [address, setAddress] = useState<Address>({});
   const [phone, setPhone] = useState('');
   const [contactIds, setContactIds] = useState<string[]>([]);
   const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
@@ -53,7 +55,7 @@ export default function CompaniesPage() {
     setEditing(null);
     setName('');
     setDomain('');
-    setAddress('');
+    setAddress({});
     setPhone('');
     setContactIds([]);
     setCustomFields({});
@@ -64,7 +66,7 @@ export default function CompaniesPage() {
     setEditing(c);
     setName(c.name);
     setDomain(c.domain ?? '');
-    setAddress(c.address ?? '');
+    setAddress(c.address ?? {});
     setPhone(c.phone ?? '');
     setContactIds(c.contacts.map((p) => p.id));
     setCustomFields(c.customFields ?? {});
@@ -116,7 +118,7 @@ export default function CompaniesPage() {
     const body = {
       name: name.trim(),
       domain: domain || undefined,
-      address: address || undefined,
+      address: Object.values(address).some(Boolean) ? address : undefined,
       phone: phone || undefined,
       contactIds,
       customFields,
@@ -178,14 +180,7 @@ export default function CompaniesPage() {
             onChange={(e) => setDomain(e.currentTarget.value)}
           />
           <TextInput label="Phone" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} />
-          <Textarea
-            label="Address"
-            placeholder="Street, city, state, ZIP"
-            autosize
-            minRows={2}
-            value={address}
-            onChange={(e) => setAddress(e.currentTarget.value)}
-          />
+          <AddressFields label="Address" value={address} onChange={setAddress} withName={false} />
           <CreatableMultiSelect
             label="Contact people"
             placeholder="Search or create people"
