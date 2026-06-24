@@ -1,15 +1,59 @@
 'use client';
 
-import { Badge, Button, Card, Group, SimpleGrid, Stack, Table, Text } from '@mantine/core';
+import { useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Alert, Anchor, Badge, Button, Card, Center, Group, Loader, SimpleGrid, Stack, Table, Text } from '@mantine/core';
+import { IconAlertTriangle, IconExternalLink } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { Money } from '@/components/primitives/Money';
-import { invoices, subscription } from '@/lib/mock/admin';
+import { ApiError } from '@/lib/api/client';
+import { useBilling, useCheckout, usePortal } from '@/lib/api/hooks';
+
+const STATUS_COLOR: Record<string, string> = {
+  trialing: 'blue',
+  active: 'teal',
+  past_due: 'red',
+  canceled: 'gray',
+  locked: 'red',
+};
 
 export default function BillingPage() {
-  const monthly = subscription.seats * subscription.pricePerSeat;
+  const { data: b, isLoading } = useBilling();
+  const checkout = useCheckout();
+  const portal = usePortal();
+  const params = useSearchParams();
+
+  useEffect(() => {
+    const c = params.get('checkout');
+    if (c === 'success') notifications.show({ message: 'Subscription updated — thank you!', color: 'green' });
+    if (c === 'cancel') notifications.show({ message: 'Checkout canceled', color: 'yellow' });
+  }, [params]);
+
+  const go = (m: typeof checkout | typeof portal) =>
+    m.mutate(undefined, {
+      onSuccess: ({ url }) => {
+        if (url) window.location.href = url;
+      },
+      onError: (e) =>
+        notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' }),
+    });
+
+  if (isLoading || !b) {
+    return (
+      <Center mih="40vh">
+        <Loader />
+      </Center>
+    );
+  }
 
   return (
     <Stack gap="lg">
+      {b.locked && (
+        <Alert color="red" variant="light" icon={<IconAlertTriangle size={18} />} title="Workspace locked">
+          Your trial ended without an active subscription. Add a payment method to restore full access.
+        </Alert>
+      )}
+
       <SimpleGrid cols={{ base: 1, sm: 3 }}>
         <Card withBorder radius="md" padding="lg">
           <Text size="sm" c="dimmed">
@@ -17,72 +61,104 @@ export default function BillingPage() {
           </Text>
           <Group gap="xs" mt={4}>
             <Text fw={600}>Per seat</Text>
-            <Badge color="yellow" variant="light">
-              {subscription.status}
+            <Badge color={STATUS_COLOR[b.status] ?? 'gray'} variant="light" tt="capitalize">
+              {b.status}
             </Badge>
           </Group>
           <Text size="xs" c="dimmed" mt={4}>
-            Trial ends {subscription.trialEndsAt}
+            {b.status === 'trialing'
+              ? `Trial ends in ${b.trialDaysLeft} day${b.trialDaysLeft === 1 ? '' : 's'}`
+              : b.currentPeriodEnd
+                ? `Renews ${new Date(b.currentPeriodEnd).toLocaleDateString()}`
+                : '—'}
           </Text>
         </Card>
         <Card withBorder radius="md" padding="lg">
           <Text size="sm" c="dimmed">
-            Seats
+            Active seats
           </Text>
           <Text fz={28} fw={700} mt={4}>
-            {subscription.seats}
+            {b.seats}
           </Text>
           <Text size="xs" c="dimmed">
-            <Money value={subscription.pricePerSeat} /> / seat / mo
+            <Money value={b.pricePerSeat} currency={b.currency} /> / seat / mo
           </Text>
         </Card>
         <Card withBorder radius="md" padding="lg">
           <Text size="sm" c="dimmed">
-            Next invoice
+            {b.status === 'active' ? 'Next invoice' : 'Estimated monthly'}
           </Text>
           <Text fz={28} fw={700} mt={4}>
-            <Money value={monthly} />
+            <Money value={b.monthlyTotal} currency={b.currency} />
           </Text>
         </Card>
       </SimpleGrid>
 
       <Group>
-        <Button onClick={() => notifications.show({ message: 'Would open Stripe Checkout' })}>
-          Add payment method
-        </Button>
-        <Button variant="default" onClick={() => notifications.show({ message: 'Would open Stripe Portal' })}>
-          Manage billing
-        </Button>
+        {b.hasSubscription ? (
+          <>
+            <Button variant="default" loading={portal.isPending} onClick={() => go(portal)}>
+              Manage billing
+            </Button>
+            <Button variant="subtle" loading={checkout.isPending} onClick={() => go(checkout)}>
+              Update subscription
+            </Button>
+          </>
+        ) : (
+          <Button loading={checkout.isPending} onClick={() => go(checkout)}>
+            Add payment method
+          </Button>
+        )}
       </Group>
 
       <div>
         <Text fw={600} mb="xs">
           Invoices
         </Text>
-        <Table>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Date</Table.Th>
-              <Table.Th>Amount</Table.Th>
-              <Table.Th>Status</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {invoices.map((i) => (
-              <Table.Tr key={i.id}>
-                <Table.Td>{i.date}</Table.Td>
-                <Table.Td>
-                  <Money value={i.amount} />
-                </Table.Td>
-                <Table.Td>
-                  <Badge variant="light" color={i.status === 'paid' ? 'green' : 'blue'}>
-                    {i.status}
-                  </Badge>
-                </Table.Td>
+        {b.invoices.length === 0 ? (
+          <Text size="sm" c="dimmed">
+            No invoices yet.
+          </Text>
+        ) : (
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Date</Table.Th>
+                <Table.Th>Amount</Table.Th>
+                <Table.Th>Status</Table.Th>
+                <Table.Th />
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {b.invoices.map((i) => (
+                <Table.Tr key={i.id}>
+                  <Table.Td>{new Date(i.createdAt).toLocaleDateString()}</Table.Td>
+                  <Table.Td>
+                    <Money value={i.amountPaid || i.amountDue} currency={i.currency} />
+                  </Table.Td>
+                  <Table.Td>
+                    <Badge
+                      variant="light"
+                      color={i.status === 'paid' ? 'teal' : i.status === 'open' ? 'blue' : 'gray'}
+                      tt="capitalize"
+                    >
+                      {i.status}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    {i.hostedInvoiceUrl && (
+                      <Anchor href={i.hostedInvoiceUrl} target="_blank" size="sm">
+                        <Group gap={4}>
+                          View <IconExternalLink size={13} />
+                        </Group>
+                      </Anchor>
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
       </div>
     </Stack>
   );

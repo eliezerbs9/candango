@@ -82,6 +82,7 @@ import {
   updateWebhook,
 } from './webhooks';
 import { createCustomField, deleteCustomField, getCustomFields } from './customFields';
+import { getBilling, openPortal, startCheckout } from './billing';
 import {
   disconnectGoogle,
   disconnectQuickbooks,
@@ -1032,4 +1033,21 @@ export function useSetInvoiceStatus(dealId: string) {
     mutationFn: ({ id, status }: { id: string; status: string }) => setInvoiceStatus(token!, dealId, id, status),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices', dealId] }),
   });
+}
+
+// --- Billing (Stripe) ---
+
+export function useBilling() {
+  const token = useToken();
+  return useQuery({ queryKey: ['billing'], queryFn: () => getBilling(token!), enabled: !!token });
+}
+
+export function useCheckout() {
+  const token = useToken();
+  return useMutation({ mutationFn: () => startCheckout(token!) });
+}
+
+export function usePortal() {
+  const token = useToken();
+  return useMutation({ mutationFn: () => openPortal(token!) });
 }
