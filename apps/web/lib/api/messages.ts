@@ -10,6 +10,7 @@ export interface ApiMessage {
   subject: string | null;
   snippet: string | null;
   folder: MessageFolder;
+  unread: boolean;
   threadId: string | null;
   personId: string | null;
   dealId: string | null;

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDisclosure } from '@mantine/hooks';
-import { Badge, Button, Card, Center, Group, Loader, SegmentedControl, Stack, Text } from '@mantine/core';
+import { Badge, Box, Button, Card, Center, Group, Loader, SegmentedControl, Stack, Text } from '@mantine/core';
 import { IconMail, IconPencil, IconRefresh } from '@tabler/icons-react';
 import { PageHeader } from '@/components/primitives/PageHeader';
 import { ComposeEmail } from '@/components/email/ComposeEmail';
@@ -94,26 +94,35 @@ export default function EmailsPage() {
               style={{ cursor: 'pointer' }}
             >
               <Group justify="space-between" wrap="nowrap" align="flex-start">
-                <div style={{ minWidth: 0 }}>
-                  <Group gap={6} wrap="nowrap">
-                    {m.direction === 'out' ? (
-                      <Badge size="xs" variant="light" color="blue">
-                        sent
-                      </Badge>
+                <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }} align="flex-start">
+                  <Box
+                    w={8}
+                    h={8}
+                    mt={6}
+                    style={{ borderRadius: '50%', flexShrink: 0 }}
+                    bg={m.unread ? 'teal' : 'transparent'}
+                  />
+                  <div style={{ minWidth: 0 }}>
+                    <Group gap={6} wrap="nowrap">
+                      {m.direction === 'out' ? (
+                        <Badge size="xs" variant="light" color="blue">
+                          sent
+                        </Badge>
+                      ) : null}
+                      <Text fw={m.unread ? 700 : 500} truncate>
+                        {m.subject || '(no subject)'}
+                      </Text>
+                    </Group>
+                    <Text size="xs" c="dimmed" truncate>
+                      {m.direction === 'out' ? `To ${m.toAddresses.join(', ')}` : `From ${m.fromAddress}`}
+                    </Text>
+                    {m.snippet ? (
+                      <Text size="sm" c="dimmed" lineClamp={1} mt={2}>
+                        {m.snippet}
+                      </Text>
                     ) : null}
-                    <Text fw={500} truncate>
-                      {m.subject || '(no subject)'}
-                    </Text>
-                  </Group>
-                  <Text size="xs" c="dimmed" truncate>
-                    {m.direction === 'out' ? `To ${m.toAddresses.join(', ')}` : `From ${m.fromAddress}`}
-                  </Text>
-                  {m.snippet ? (
-                    <Text size="sm" c="dimmed" lineClamp={1} mt={2}>
-                      {m.snippet}
-                    </Text>
-                  ) : null}
-                </div>
+                  </div>
+                </Group>
                 <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
                   {when(m)}
                 </Text>

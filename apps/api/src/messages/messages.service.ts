@@ -12,6 +12,7 @@ type MessageRow = {
   subject: string | null;
   snippet: string | null;
   folder: string;
+  labels: string[];
   threadId: string | null;
   personId: string | null;
   dealId: string | null;
@@ -27,6 +28,7 @@ const shape = (m: MessageRow) => ({
   subject: m.subject,
   snippet: m.snippet,
   folder: m.folder,
+  unread: (m.labels ?? []).includes('UNREAD'),
   threadId: m.threadId,
   personId: m.personId,
   dealId: m.dealId,

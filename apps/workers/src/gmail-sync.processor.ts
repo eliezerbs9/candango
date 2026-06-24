@@ -83,22 +83,16 @@ export class GmailSyncProcessor extends WorkerHost implements OnModuleInit {
 
     const list = await gmail.users.messages.list({
       userId: 'me',
-      maxResults: 100,
+      maxResults: 50,
       q: 'newer_than:30d',
       includeSpamTrash: true, // so Trash/Spam folders populate
     });
     const ids = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean);
     if (!ids.length) return;
 
-    // Skip messages we've already captured AND labeled; re-fetch unlabeled ones to backfill labels.
-    const existing = await this.prisma.message.findMany({
-      where: { userId, providerMessageId: { in: ids } },
-      select: { providerMessageId: true, labels: true },
-    });
-    const labeled = new Set(existing.filter((m) => (m.labels?.length ?? 0) > 0).map((m) => m.providerMessageId));
-
+    // Re-fetch the whole recent window each sync so labels (read/unread, folder moves) stay fresh.
+    // (For scale, switch to Gmail history.list incremental sync — future.)
     for (const id of ids) {
-      if (labeled.has(id)) continue;
       const full = await gmail.users.messages.get({
         userId: 'me',
         id,
