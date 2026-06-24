@@ -321,7 +321,10 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         currency={deal.currency}
         opened={convertOpen}
         onClose={convertCtl.close}
-        onConverted={() => setEstSel(new Set())}
+        onConverted={() => {
+          setEstSel(new Set());
+          stageCtl.open(); // offer to move the deal in the pipeline after converting
+        }}
       />
 
       <ComposeEmail

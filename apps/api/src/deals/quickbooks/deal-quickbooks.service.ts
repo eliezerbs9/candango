@@ -350,7 +350,7 @@ export class DealQuickbooksService {
    * Invoices are ALWAYS generated from estimates (never created directly). One or more
    * estimates are combined into a single QBO invoice, linked back to each estimate.
    */
-  async createInvoiceFromEstimates(orgId: string, dealId: string, dto: ConvertToInvoiceDto) {
+  async createInvoiceFromEstimates(orgId: string, dealId: string, dto: ConvertToInvoiceDto, userId: string) {
     const deal = await this.requireLinked(orgId, dealId);
     const estimates = await this.prisma.dealEstimate.findMany({
       where: { id: { in: dto.estimateIds }, orgId, dealId, deletedAt: null },
@@ -408,12 +408,20 @@ export class DealQuickbooksService {
       },
       include: { lines: lineSelect },
     });
-    // QBO marks linked estimates Closed; reflect that locally.
+    // The estimates are now invoiced: close them and drop them from the deal value (the invoice counts instead).
     await this.prisma.dealEstimate.updateMany({
       where: { id: { in: estimates.map((e) => e.id) } },
-      data: { status: 'closed' },
+      data: { status: 'closed', includeInValue: false },
     });
     await this.recomputeDealValue(orgId, dealId); // the new invoice always counts toward the value
+
+    // Log the conversion on the deal timeline.
+    const estLabel = estimates.map((e) => (e.docNumber ? `#${e.docNumber}` : 'estimate')).join(', ');
+    const invLabel = row.docNumber ? `#${row.docNumber}` : 'invoice';
+    await this.prisma.note.create({
+      data: { orgId, dealId, authorUserId: userId, body: `🧾 Converted estimate ${estLabel} to invoice ${invLabel}.` },
+    });
+
     this.events.emit('webhook.event', { orgId, type: 'quickbooks.invoice_created', data: { dealId, invoiceId: row.id } });
     return shapeDoc(row);
   }

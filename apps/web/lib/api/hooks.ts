@@ -933,7 +933,9 @@ export function useConvertToInvoice(dealId: string) {
     mutationFn: (body: ConvertToInvoiceInput) => convertEstimatesToInvoice(token!, dealId, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['invoices', dealId] });
-      qc.invalidateQueries({ queryKey: ['estimates', dealId] }); // sources become 'closed'
+      qc.invalidateQueries({ queryKey: ['estimates', dealId] }); // sources become 'closed' + dropped from value
+      qc.invalidateQueries({ queryKey: ['deal', dealId] }); // value recomputed
+      qc.invalidateQueries({ queryKey: ['notes'] }); // conversion is logged on the timeline
     },
   });
 }

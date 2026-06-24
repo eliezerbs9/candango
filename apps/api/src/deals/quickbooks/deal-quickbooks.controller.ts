@@ -111,7 +111,7 @@ export class DealQuickbooksController {
   @Post('invoices/from-estimates')
   @Scopes('deals:write')
   createInvoiceFromEstimates(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() dto: ConvertToInvoiceDto) {
-    return this.svc.createInvoiceFromEstimates(u.orgId, id, dto);
+    return this.svc.createInvoiceFromEstimates(u.orgId, id, dto, u.userId);
   }
 
   @Patch('invoices/:invid')
