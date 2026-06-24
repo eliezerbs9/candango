@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDisclosure } from '@mantine/hooks';
 import { Badge, Button, Card, Center, Group, Loader, SegmentedControl, Stack, Text } from '@mantine/core';
-import { IconMail, IconPencil } from '@tabler/icons-react';
+import { IconMail, IconPencil, IconRefresh } from '@tabler/icons-react';
 import { PageHeader } from '@/components/primitives/PageHeader';
 import { ComposeEmail } from '@/components/email/ComposeEmail';
-import { useFolderCounts, useInbox } from '@/lib/api/hooks';
+import { useFolderCounts, useInbox, useSyncEmail } from '@/lib/api/hooks';
 import type { ApiMessage, MessageFolder } from '@/lib/api/messages';
 
 const FOLDERS: { value: MessageFolder; label: string }[] = [
@@ -26,6 +26,13 @@ export default function EmailsPage() {
   const [folder, setFolder] = useState<MessageFolder>('inbox');
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInbox(folder);
   const { data: counts = {} } = useFolderCounts();
+  const sync = useSyncEmail();
+
+  // Pull new mail from Gmail when the screen opens (and via the Sync button).
+  useEffect(() => {
+    sync.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const messages = data?.pages.flatMap((p) => p.data) ?? [];
 
@@ -35,9 +42,19 @@ export default function EmailsPage() {
         title="Email"
         subtitle="Your synced mailbox"
         actions={
-          <Button leftSection={<IconPencil size={16} />} onClick={composeCtl.open}>
-            Compose
-          </Button>
+          <Group>
+            <Button
+              variant="default"
+              leftSection={<IconRefresh size={16} />}
+              loading={sync.isPending}
+              onClick={() => sync.mutate()}
+            >
+              Sync
+            </Button>
+            <Button leftSection={<IconPencil size={16} />} onClick={composeCtl.open}>
+              Compose
+            </Button>
+          </Group>
         }
       />
 

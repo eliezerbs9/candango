@@ -22,3 +22,7 @@ export function getGoogleConnectUrl(token: string) {
 export function disconnectGoogle(token: string) {
   return apiFetch<void>('/integrations/google', { method: 'DELETE', token });
 }
+
+export function syncEmail(token: string) {
+  return apiFetch<{ queued: boolean }>('/integrations/google/sync-email', { method: 'POST', token });
+}

@@ -78,7 +78,7 @@ import {
   updateWebhook,
 } from './webhooks';
 import { createCustomField, deleteCustomField, getCustomFields } from './customFields';
-import { disconnectGoogle, getGoogleConnectUrl, getGoogleStatus } from './integrations';
+import { disconnectGoogle, getGoogleConnectUrl, getGoogleStatus, syncEmail } from './integrations';
 import type { CustomFieldType } from './customFields';
 import type { ApiDeal } from './types';
 
@@ -218,6 +218,24 @@ export function useInbox(folder: MessageFolder) {
 export function useFolderCounts() {
   const token = useToken();
   return useQuery({ queryKey: ['folder-counts'], queryFn: () => getFolderCounts(token!), enabled: !!token });
+}
+
+/** Trigger a Gmail capture, then refetch the inbox once the worker has run. */
+export function useSyncEmail() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => syncEmail(token!),
+    onSuccess: () => {
+      // The worker processes the job asynchronously; refetch after it likely finished.
+      [3000, 7000].forEach((ms) =>
+        setTimeout(() => {
+          qc.invalidateQueries({ queryKey: ['inbox'] });
+          qc.invalidateQueries({ queryKey: ['folder-counts'] });
+        }, ms),
+      );
+    },
+  });
 }
 
 export function useSendMessage() {
