@@ -80,7 +80,15 @@ import {
   updateWebhook,
 } from './webhooks';
 import { createCustomField, deleteCustomField, getCustomFields } from './customFields';
-import { disconnectGoogle, getGoogleConnectUrl, getGoogleStatus, syncEmail } from './integrations';
+import {
+  disconnectGoogle,
+  disconnectQuickbooks,
+  getGoogleConnectUrl,
+  getGoogleStatus,
+  getQuickbooksConnectUrl,
+  getQuickbooksStatus,
+  syncEmail,
+} from './integrations';
 import type { CustomFieldType } from './customFields';
 import type { ApiDeal } from './types';
 
@@ -761,6 +769,29 @@ export function useDisconnectGoogle() {
   return useMutation({
     mutationFn: () => disconnectGoogle(token!),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['integrations', 'google'] }),
+  });
+}
+
+export function useQuickbooksStatus() {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['integrations', 'quickbooks'],
+    queryFn: () => getQuickbooksStatus(token!),
+    enabled: !!token,
+  });
+}
+
+export function useConnectQuickbooks() {
+  const token = useToken();
+  return useMutation({ mutationFn: () => getQuickbooksConnectUrl(token!) });
+}
+
+export function useDisconnectQuickbooks() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => disconnectQuickbooks(token!),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['integrations', 'quickbooks'] }),
   });
 }
 

@@ -26,3 +26,22 @@ export function disconnectGoogle(token: string) {
 export function syncEmail(token: string) {
   return apiFetch<{ queued: boolean }>('/integrations/google/sync-email', { method: 'POST', token });
 }
+
+export interface QuickbooksStatus {
+  connected: boolean;
+  status: string;
+  realmId: string | null;
+  updatedAt: string | null;
+}
+
+export function getQuickbooksStatus(token: string) {
+  return apiFetch<QuickbooksStatus>('/integrations/quickbooks', { token });
+}
+
+export function getQuickbooksConnectUrl(token: string) {
+  return apiFetch<{ url: string }>('/integrations/quickbooks/connect', { token });
+}
+
+export function disconnectQuickbooks(token: string) {
+  return apiFetch<void>('/integrations/quickbooks', { method: 'DELETE', token });
+}
