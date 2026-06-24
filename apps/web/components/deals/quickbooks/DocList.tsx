@@ -1,6 +1,6 @@
 'use client';
 
-import { ActionIcon, Badge, Group, Menu, Table, Text, UnstyledButton } from '@mantine/core';
+import { ActionIcon, Badge, Checkbox, Group, Menu, Table, Text, UnstyledButton } from '@mantine/core';
 import { IconChevronDown, IconCurrencyDollar, IconDots } from '@tabler/icons-react';
 import { Money } from '@/components/primitives/Money';
 import type { DealDoc } from '@/lib/api/types';
@@ -21,6 +21,8 @@ export function DocList({
   onSetStatus,
   onUseAsValue,
   onOpen,
+  selectedIds,
+  onToggleSelect,
   emptyText,
 }: {
   docs: DealDoc[];
@@ -28,6 +30,8 @@ export function DocList({
   onSetStatus: (id: string, status: string) => void;
   onUseAsValue?: (id: string) => void;
   onOpen?: (doc: DealDoc) => void;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
   emptyText: string;
 }) {
   if (!docs.length) {
@@ -43,6 +47,16 @@ export function DocList({
       <Table.Tbody>
         {docs.map((d) => (
           <Table.Tr key={d.id}>
+            {onToggleSelect && (
+              <Table.Td w={36}>
+                <Checkbox
+                  size="sm"
+                  checked={selectedIds?.has(d.id) ?? false}
+                  onChange={() => onToggleSelect(d.id)}
+                  aria-label="Select estimate"
+                />
+              </Table.Td>
+            )}
             <Table.Td>
               <UnstyledButton onClick={() => onOpen?.(d)} style={{ cursor: onOpen ? 'pointer' : 'default' }}>
                 <Group gap={6}>

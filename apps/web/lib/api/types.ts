@@ -36,6 +36,7 @@ export interface ApiDeal {
   shipTo: Record<string, unknown> | null;
   billTo: Record<string, unknown> | null;
   qbSubcustomerId: string | null;
+  refNumber: number | null;
 }
 
 export type DocSource = 'native' | 'quickbooks';
@@ -63,8 +64,15 @@ export interface DealDoc {
   notes: string | null;
   qbId: string | null;
   sourceEstimateId: string | null;
+  sourceEstimateIds?: string[];
   createdAt: string;
   lines: DealDocLine[];
+}
+
+export interface ConvertToInvoiceInput {
+  estimateIds: string[];
+  memo?: string;
+  txnDate?: string;
 }
 
 export interface DocLineInput {

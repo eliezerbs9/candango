@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { CreateDocInput, DealDoc, QbCustomer, QbItem, QbLinkStatus } from './types';
+import type { ConvertToInvoiceInput, CreateDocInput, DealDoc, QbCustomer, QbItem, QbLinkStatus } from './types';
 
 export interface LinkAccountInput {
   parentCustomerId?: string;
@@ -61,8 +61,12 @@ export function getDealInvoices(token: string, dealId: string) {
   return apiFetch<DealDoc[]>(`/deals/${dealId}/invoices`, { token });
 }
 
-export function createDealInvoice(token: string, dealId: string, body: CreateDocInput) {
-  return apiFetch<DealDoc>(`/deals/${dealId}/invoices`, { method: 'POST', token, body: JSON.stringify(body) });
+export function convertEstimatesToInvoice(token: string, dealId: string, body: ConvertToInvoiceInput) {
+  return apiFetch<DealDoc>(`/deals/${dealId}/invoices/from-estimates`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(body),
+  });
 }
 
 export function updateDealInvoice(token: string, dealId: string, invoiceId: string, body: CreateDocInput) {

@@ -127,6 +127,11 @@ export default function DealDetailPage() {
       {/* Header */}
       <Group justify="space-between" align="flex-start">
         <div>
+          {deal.refNumber != null && (
+            <Text size="xs" c="dimmed" fw={600}>
+              DEAL #{deal.refNumber}
+            </Text>
+          )}
           <Title order={3}>{deal.title}</Title>
           <Group gap="sm" mt={4}>
             <Text fw={600}>

@@ -419,6 +419,7 @@ type DocRow = {
   notes: string | null;
   qbId: string | null;
   sourceEstimateId?: string | null;
+  sourceEstimateIds?: string[];
   createdAt: Date;
   lines: {
     id: string;
@@ -445,6 +446,7 @@ function shapeDoc(d: DocRow) {
     notes: d.notes,
     qbId: d.qbId,
     sourceEstimateId: d.sourceEstimateId ?? null,
+    sourceEstimateIds: d.sourceEstimateIds ?? [],
     createdAt: d.createdAt,
     lines: d.lines.map((l) => ({
       id: l.id,

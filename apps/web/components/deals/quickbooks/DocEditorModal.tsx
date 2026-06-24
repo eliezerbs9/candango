@@ -196,7 +196,8 @@ export function DocEditorModal({
         </Group>
 
         <Textarea
-          label="Notes"
+          label="Memo"
+          description="Shown on the document in QuickBooks"
           autosize
           minRows={2}
           value={notes}

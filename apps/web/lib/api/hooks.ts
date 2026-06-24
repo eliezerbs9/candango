@@ -90,8 +90,8 @@ import {
   syncEmail,
 } from './integrations';
 import {
+  convertEstimatesToInvoice,
   createDealEstimate,
-  createDealInvoice,
   getDealEstimates,
   getDealInvoices,
   getQbItems,
@@ -106,7 +106,7 @@ import {
   type LinkAccountInput,
 } from './quickbooks';
 import type { CustomFieldType } from './customFields';
-import type { ApiDeal, CreateDocInput } from './types';
+import type { ApiDeal, ConvertToInvoiceInput, CreateDocInput } from './types';
 
 function useToken() {
   return useAuthStore((s) => s.token);
@@ -924,12 +924,15 @@ export function useCreateEstimate(dealId: string) {
   });
 }
 
-export function useCreateInvoice(dealId: string) {
+export function useConvertToInvoice(dealId: string) {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: CreateDocInput) => createDealInvoice(token!, dealId, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices', dealId] }),
+    mutationFn: (body: ConvertToInvoiceInput) => convertEstimatesToInvoice(token!, dealId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['invoices', dealId] });
+      qc.invalidateQueries({ queryKey: ['estimates', dealId] }); // sources become 'closed'
+    },
   });
 }
 
