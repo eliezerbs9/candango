@@ -61,6 +61,14 @@ export function getMessage(token: string, id: string) {
   return apiFetch<ApiMessage>(`/messages/${id}`, { token });
 }
 
+export function markRead(token: string, id: string) {
+  return apiFetch<ApiMessage>(`/messages/${id}/read`, { method: 'POST', token });
+}
+
+export function trashMessage(token: string, id: string) {
+  return apiFetch<ApiMessage>(`/messages/${id}/trash`, { method: 'POST', token });
+}
+
 export function getFolderCounts(token: string) {
   return apiFetch<Record<string, number>>('/messages/folder-counts', { token });
 }

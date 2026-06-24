@@ -27,7 +27,9 @@ import {
   getMessage,
   getMessageBody,
   getMessages,
+  markRead,
   sendMessage,
+  trashMessage,
   type MessageFolder,
   type SendBody,
 } from './messages';
@@ -246,6 +248,31 @@ export function useSendMessage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['inbox'] });
       qc.invalidateQueries({ queryKey: ['messages'] });
+      qc.invalidateQueries({ queryKey: ['folder-counts'] });
+    },
+  });
+}
+
+export function useMarkRead() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => markRead(token!, id),
+    onSuccess: (msg) => {
+      qc.setQueryData(['message', msg.id], msg);
+      qc.invalidateQueries({ queryKey: ['inbox'] });
+      qc.invalidateQueries({ queryKey: ['folder-counts'] });
+    },
+  });
+}
+
+export function useTrashMessage() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => trashMessage(token!, id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inbox'] });
       qc.invalidateQueries({ queryKey: ['folder-counts'] });
     },
   });

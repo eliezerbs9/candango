@@ -37,6 +37,18 @@ export class MessagesController {
     return this.svc.send(u.orgId, u.userId, dto);
   }
 
+  @Post(':id/read')
+  @Scopes('deals:read')
+  markRead(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.markRead(u.orgId, id);
+  }
+
+  @Post(':id/trash')
+  @Scopes('deals:write')
+  trash(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.trash(u.orgId, id);
+  }
+
   /** Folder counts for the current user's mailbox (Inbox/Sent/Trash/Spam tabs). */
   @Get('folder-counts')
   @Scopes('deals:read')

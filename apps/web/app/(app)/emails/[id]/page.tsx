@@ -1,18 +1,33 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Anchor, Avatar, Badge, Box, Button, Center, Divider, Group, Loader, Paper, Stack, Text, Title } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconArrowBackUp, IconArrowLeft } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
+import { IconArrowBackUp, IconArrowLeft, IconTrash } from '@tabler/icons-react';
 import { ComposeEmail } from '@/components/email/ComposeEmail';
-import { useMessage, useMessageBody } from '@/lib/api/hooks';
+import { useMarkRead, useMessage, useMessageBody, useTrashMessage } from '@/lib/api/hooks';
 
 export default function EmailPage() {
+  const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const { data: message, isLoading } = useMessage(id);
   const { data: body, isLoading: loadingBody } = useMessageBody(id);
   const [reply, replyCtl] = useDisclosure(false);
+  const markRead = useMarkRead();
+  const trash = useTrashMessage();
+
+  // Mark read on open (once), if unread.
+  const markedRef = useRef(false);
+  useEffect(() => {
+    if (message?.unread && !markedRef.current) {
+      markedRef.current = true;
+      markRead.mutate(id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message?.unread, id]);
 
   if (isLoading || !message) {
     return (
@@ -36,9 +51,28 @@ export default function EmailPage() {
             <IconArrowLeft size={14} /> Back to Email
           </Group>
         </Anchor>
-        <Button size="xs" variant="light" leftSection={<IconArrowBackUp size={14} />} onClick={replyCtl.open}>
-          Reply
-        </Button>
+        <Group gap="xs">
+          <Button size="xs" variant="light" leftSection={<IconArrowBackUp size={14} />} onClick={replyCtl.open}>
+            Reply
+          </Button>
+          <Button
+            size="xs"
+            variant="light"
+            color="red"
+            leftSection={<IconTrash size={14} />}
+            loading={trash.isPending}
+            onClick={() =>
+              trash.mutate(id, {
+                onSuccess: () => {
+                  notifications.show({ message: 'Moved to Trash' });
+                  router.push('/emails');
+                },
+              })
+            }
+          >
+            Delete
+          </Button>
+        </Group>
       </Group>
 
       <Title order={3}>{message.subject || '(no subject)'}</Title>

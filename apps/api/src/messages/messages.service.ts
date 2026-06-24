@@ -146,6 +146,46 @@ export class MessagesService {
     return shape(msg);
   }
 
+  private async mailbox(orgId: string, id: string) {
+    const msg = await this.prisma.message.findFirst({
+      where: { id, orgId },
+      select: { providerMessageId: true, userId: true, labels: true },
+    });
+    if (!msg) throw new NotFoundException('Message not found');
+    const conn = await this.prisma.mailboxConnection.findUnique({ where: { userId: msg.userId } });
+    if (!conn || conn.status !== 'connected' || !conn.refreshToken) {
+      throw new BadRequestException('Mailbox not connected');
+    }
+    return { msg, gmail: gmailClientFor(conn) };
+  }
+
+  /** Mark a message read in Gmail (remove the UNREAD label) and locally. Needs `gmail.modify`. */
+  async markRead(orgId: string, id: string) {
+    const { msg, gmail } = await this.mailbox(orgId, id);
+    if (!msg.labels.includes('UNREAD')) return this.get(orgId, id); // already read
+    await gmail.users.messages.modify({
+      userId: 'me',
+      id: msg.providerMessageId,
+      requestBody: { removeLabelIds: ['UNREAD'] },
+    });
+    const updated = await this.prisma.message.update({
+      where: { id },
+      data: { labels: msg.labels.filter((l) => l !== 'UNREAD') },
+    });
+    return shape(updated);
+  }
+
+  /** Move a message to Trash in Gmail and locally. Needs `gmail.modify`. */
+  async trash(orgId: string, id: string) {
+    const { msg, gmail } = await this.mailbox(orgId, id);
+    await gmail.users.messages.trash({ userId: 'me', id: msg.providerMessageId });
+    const updated = await this.prisma.message.update({
+      where: { id },
+      data: { labels: ['TRASH'], folder: 'trash' },
+    });
+    return shape(updated);
+  }
+
   /** Fetch the full body on demand from Gmail (bodies aren't stored). */
   async body(orgId: string, id: string) {
     const msg = await this.prisma.message.findFirst({

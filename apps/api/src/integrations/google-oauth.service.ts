@@ -11,7 +11,7 @@ import { encryptToken } from './crypto.util';
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/tasks',
-  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.modify', // read + label changes (mark read) + trash
   'https://www.googleapis.com/auth/gmail.send',
   'openid',
   'email',
