@@ -42,6 +42,10 @@ export function getMessages(token: string, filters: MessageFilters = {}) {
   return apiFetch<MessagesPage>(`/messages${suffix}`, { token });
 }
 
+export function getMessage(token: string, id: string) {
+  return apiFetch<ApiMessage>(`/messages/${id}`, { token });
+}
+
 export function getFolderCounts(token: string) {
   return apiFetch<Record<string, number>>('/messages/folder-counts', { token });
 }

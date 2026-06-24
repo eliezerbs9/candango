@@ -65,6 +65,13 @@ export class MessagesService {
     return { data: data.map(shape), nextCursor: hasMore ? data[data.length - 1].id : null };
   }
 
+  /** A single message's metadata (the full-page reader fetches the body separately). */
+  async get(orgId: string, id: string) {
+    const m = await this.prisma.message.findFirst({ where: { id, orgId } });
+    if (!m) throw new NotFoundException('Message not found');
+    return shape(m);
+  }
+
   /** Folder counts for the current user's mailbox (for the screen's tabs). */
   async folderCounts(orgId: string, userId: string) {
     const grouped = await this.prisma.message.groupBy({

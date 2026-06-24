@@ -22,7 +22,7 @@ import {
   type DealFilters,
 } from './deals';
 import { createNote, deleteNote, getNotes } from './notes';
-import { getFolderCounts, getMessageBody, getMessages, type MessageFolder } from './messages';
+import { getFolderCounts, getMessage, getMessageBody, getMessages, type MessageFolder } from './messages';
 import { changePassword, getMe, updateProfile, type Profile } from './profile';
 import {
   createCompany,
@@ -210,6 +210,15 @@ export function useInbox(folder: MessageFolder) {
 export function useFolderCounts() {
   const token = useToken();
   return useQuery({ queryKey: ['folder-counts'], queryFn: () => getFolderCounts(token!), enabled: !!token });
+}
+
+export function useMessage(id: string) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['message', id],
+    queryFn: () => getMessage(token!, id),
+    enabled: !!token && !!id,
+  });
 }
 
 export function useMessageBody(id: string | null) {

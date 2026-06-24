@@ -43,4 +43,10 @@ export class MessagesController {
   body(@CurrentUser() u: AuthContext, @Param('id') id: string) {
     return this.svc.body(u.orgId, id);
   }
+
+  @Get(':id')
+  @Scopes('deals:read')
+  get(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.get(u.orgId, id);
+  }
 }
