@@ -80,6 +80,11 @@ export class DealQuickbooksService {
     return deal;
   }
 
+  private async isConnected(orgId: string) {
+    const conn = await this.prisma.quickBooksConnection.findUnique({ where: { orgId }, select: { status: true } });
+    return conn?.status === 'connected';
+  }
+
   // --- Estimates ---
   async listEstimates(orgId: string, dealId: string) {
     await this.requireDeal(orgId, dealId);
@@ -91,34 +96,75 @@ export class DealQuickbooksService {
     return rows.map(shapeDoc);
   }
 
+  /**
+   * Connected → create the estimate in QuickBooks (deal must be linked).
+   * Not connected → store a native estimate locally (used to price the deal).
+   */
   async createEstimate(orgId: string, dealId: string, dto: CreateDocDto) {
-    const deal = await this.requireLinked(orgId, dealId);
-    const doc = await this.qbo.createEstimate(orgId, {
-      customerId: deal.qbSubcustomerId!,
-      currency: deal.currency,
-      txnDate: dto.txnDate,
-      lines: dto.lines,
-    });
+    if (await this.isConnected(orgId)) {
+      const deal = await this.requireLinked(orgId, dealId);
+      const doc = await this.qbo.createEstimate(orgId, {
+        customerId: deal.qbSubcustomerId!,
+        currency: deal.currency,
+        txnDate: dto.txnDate,
+        lines: dto.lines,
+      });
+      const row = await this.prisma.dealEstimate.create({
+        data: {
+          orgId,
+          dealId,
+          source: 'quickbooks',
+          status: FROM_TXN_STATUS[doc.status ?? 'Pending'] ?? 'sent',
+          docNumber: doc.docNumber,
+          currency: deal.currency,
+          totalAmount: doc.totalAmount,
+          txnDate: dto.txnDate ? new Date(dto.txnDate) : null,
+          notes: dto.notes ?? null,
+          qbId: doc.qbId,
+          qbSyncToken: doc.syncToken,
+          qbSyncedAt: new Date(),
+          lines: { create: linesFromDoc(doc) },
+        },
+        include: { lines: lineSelect },
+      });
+      this.events.emit('webhook.event', { orgId, type: 'quickbooks.estimate_synced', data: { dealId, estimateId: row.id } });
+      return shapeDoc(row);
+    }
+
+    // Native (offline) estimate — amounts computed server-side.
+    const deal = await this.requireDeal(orgId, dealId);
+    const lines = dto.lines.map((l, i) => ({
+      position: i,
+      description: l.description,
+      quantity: l.quantity,
+      unitPrice: l.unitPrice,
+      amount: l.quantity * l.unitPrice,
+      qbLineId: null,
+    }));
+    const total = lines.reduce((sum, l) => sum + l.amount, 0);
     const row = await this.prisma.dealEstimate.create({
       data: {
         orgId,
         dealId,
-        source: 'quickbooks',
-        status: FROM_TXN_STATUS[doc.status ?? 'Pending'] ?? 'sent',
-        docNumber: doc.docNumber,
+        source: 'native',
+        status: 'draft',
         currency: deal.currency,
-        totalAmount: doc.totalAmount,
+        totalAmount: total,
         txnDate: dto.txnDate ? new Date(dto.txnDate) : null,
         notes: dto.notes ?? null,
-        qbId: doc.qbId,
-        qbSyncToken: doc.syncToken,
-        qbSyncedAt: new Date(),
-        lines: { create: linesFromDoc(doc) },
+        lines: { create: lines },
       },
       include: { lines: lineSelect },
     });
-    this.events.emit('webhook.event', { orgId, type: 'quickbooks.estimate_synced', data: { dealId, estimateId: row.id } });
     return shapeDoc(row);
+  }
+
+  /** Push an estimate's total onto the deal value (explicit, user-triggered pricing). */
+  async useEstimateAsValue(orgId: string, dealId: string, estimateId: string) {
+    const est = await this.prisma.dealEstimate.findFirst({ where: { id: estimateId, orgId, dealId } });
+    if (!est) throw new NotFoundException('Estimate not found');
+    await this.prisma.deal.update({ where: { id: dealId }, data: { value: est.totalAmount, valueOverridden: true } });
+    return { value: est.totalAmount };
   }
 
   async setEstimateStatus(orgId: string, dealId: string, estimateId: string, status: string) {

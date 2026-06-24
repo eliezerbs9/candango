@@ -2,16 +2,19 @@
 
 import { Alert, Badge, Button, Card, Divider, Group, Stack, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
 import { IconFileInvoice, IconInfoCircle, IconPlus } from '@tabler/icons-react';
 import {
   useCreateEstimate,
   useCreateInvoice,
   useDealEstimates,
   useDealInvoices,
+  useEstimateAsDealValue,
   useQuickbooksStatus,
   useSetEstimateStatus,
   useSetInvoiceStatus,
 } from '@/lib/api/hooks';
+import { ApiError } from '@/lib/api/client';
 import type { ApiDeal } from '@/lib/api/types';
 import { DocList } from './DocList';
 import { DocEditorModal } from './DocEditorModal';
@@ -32,61 +35,67 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const createInvoice = useCreateInvoice(deal.id);
   const setEstStatus = useSetEstimateStatus(deal.id);
   const setInvStatus = useSetInvoiceStatus(deal.id);
+  const useAsValue = useEstimateAsDealValue(deal.id);
 
-  const connected = qb?.connected;
+  const connected = !!qb?.connected;
   const linked = !!deal.qbSubcustomerId;
+  // native = price the deal offline; link = connect this deal to QBO; qbo = full estimates + invoices
+  const mode: 'native' | 'link' | 'qbo' = !connected ? 'native' : linked ? 'qbo' : 'link';
 
-  const header = (
-    <Group justify="space-between">
-      <Group gap="xs">
-        <IconFileInvoice size={18} />
-        <Text fw={600}>Billing</Text>
-        {connected && <Badge size="xs" color="teal" variant="light">QuickBooks</Badge>}
-      </Group>
-      {connected && !linked && (
-        <Button size="xs" variant="light" onClick={linkCtl.open}>
-          Set up QuickBooks billing
-        </Button>
-      )}
-    </Group>
-  );
+  const applyAsValue = (id: string) =>
+    useAsValue.mutate(id, {
+      onSuccess: () => notifications.show({ message: 'Deal value updated from estimate', color: 'green' }),
+      onError: (e) =>
+        notifications.show({ message: e instanceof ApiError ? e.message : 'Could not update value', color: 'red' }),
+    });
 
   return (
     <Card withBorder radius="md" padding="lg">
       <Stack gap="md">
-        {header}
+        <Group justify="space-between">
+          <Group gap="xs">
+            <IconFileInvoice size={18} />
+            <Text fw={600}>Estimates{mode === 'qbo' ? ' & invoices' : ''}</Text>
+            {connected && (
+              <Badge size="xs" color="teal" variant="light">
+                QuickBooks
+              </Badge>
+            )}
+          </Group>
+          {mode === 'link' && (
+            <Button size="xs" variant="light" onClick={linkCtl.open}>
+              Set up QuickBooks billing
+            </Button>
+          )}
+        </Group>
 
-        {!connected && (
-          <Alert variant="light" color="gray" icon={<IconInfoCircle size={16} />}>
-            Connect QuickBooks in Settings → Integrations to create estimates and invoices for this deal.
+        {mode === 'link' && (
+          <Alert variant="light" color="blue" icon={<IconInfoCircle size={16} />}>
+            QuickBooks is connected. Link this deal to a QuickBooks account to create estimates and invoices there.
           </Alert>
         )}
 
-        {connected && !linked && (
-          <Text size="sm" c="dimmed">
-            Link this deal to a QuickBooks account to start creating estimates and invoices.
-          </Text>
-        )}
+        {/* Estimates — always available (native when QuickBooks is not connected) */}
+        <Group justify="space-between">
+          <Text fw={500}>Estimates</Text>
+          {mode !== 'link' && (
+            <Button size="xs" variant="subtle" leftSection={<IconPlus size={14} />} onClick={estCtl.open}>
+              New estimate
+            </Button>
+          )}
+        </Group>
+        <DocList
+          docs={estimates.data ?? []}
+          statuses={ESTIMATE_STATUSES}
+          onSetStatus={(id, status) => setEstStatus.mutate({ id, status })}
+          onUseAsValue={applyAsValue}
+          emptyText={mode === 'link' ? 'Link the deal to add estimates.' : 'No estimates yet.'}
+        />
 
-        {connected && linked && (
+        {/* Invoices — only when connected to QuickBooks */}
+        {mode === 'qbo' && (
           <>
-            {/* Estimates */}
-            <Group justify="space-between">
-              <Text fw={500}>Estimates</Text>
-              <Button size="xs" variant="subtle" leftSection={<IconPlus size={14} />} onClick={estCtl.open}>
-                New estimate
-              </Button>
-            </Group>
-            <DocList
-              docs={estimates.data ?? []}
-              statuses={ESTIMATE_STATUSES}
-              onSetStatus={(id, status) => setEstStatus.mutate({ id, status })}
-              emptyText="No estimates yet."
-            />
-
             <Divider />
-
-            {/* Invoices */}
             <Group justify="space-between">
               <Text fw={500}>Invoices</Text>
               <Button size="xs" variant="subtle" leftSection={<IconPlus size={14} />} onClick={invCtl.open}>
@@ -100,6 +109,12 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
               emptyText="No invoices yet."
             />
           </>
+        )}
+
+        {mode === 'native' && (
+          <Text size="xs" c="dimmed">
+            Connect QuickBooks in Settings → Integrations to create invoices.
+          </Text>
         )}
       </Stack>
 

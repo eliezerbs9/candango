@@ -1,7 +1,7 @@
 'use client';
 
-import { Badge, Group, Menu, Table, Text, UnstyledButton } from '@mantine/core';
-import { IconChevronDown } from '@tabler/icons-react';
+import { ActionIcon, Badge, Group, Menu, Table, Text, UnstyledButton } from '@mantine/core';
+import { IconChevronDown, IconCurrencyDollar, IconDots } from '@tabler/icons-react';
 import { Money } from '@/components/primitives/Money';
 import type { DealDoc } from '@/lib/api/types';
 
@@ -19,11 +19,13 @@ export function DocList({
   docs,
   statuses,
   onSetStatus,
+  onUseAsValue,
   emptyText,
 }: {
   docs: DealDoc[];
   statuses: string[];
   onSetStatus: (id: string, status: string) => void;
+  onUseAsValue?: (id: string) => void;
   emptyText: string;
 }) {
   if (!docs.length) {
@@ -59,23 +61,39 @@ export function DocList({
                 <Money value={d.totalAmount} currency={d.currency} />
               </Text>
             </Table.Td>
-            <Table.Td w={130} ta="right">
-              <Menu position="bottom-end" withinPortal>
-                <Menu.Target>
-                  <UnstyledButton>
-                    <Badge color={STATUS_COLOR[d.status] ?? 'gray'} variant="light" rightSection={<IconChevronDown size={12} />}>
-                      {d.status}
-                    </Badge>
-                  </UnstyledButton>
-                </Menu.Target>
-                <Menu.Dropdown>
-                  {statuses.map((s) => (
-                    <Menu.Item key={s} onClick={() => onSetStatus(d.id, s)} disabled={s === d.status}>
-                      {s}
-                    </Menu.Item>
-                  ))}
-                </Menu.Dropdown>
-              </Menu>
+            <Table.Td w={170} ta="right">
+              <Group gap={6} justify="flex-end" wrap="nowrap">
+                <Menu position="bottom-end" withinPortal>
+                  <Menu.Target>
+                    <UnstyledButton>
+                      <Badge color={STATUS_COLOR[d.status] ?? 'gray'} variant="light" rightSection={<IconChevronDown size={12} />}>
+                        {d.status}
+                      </Badge>
+                    </UnstyledButton>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    {statuses.map((s) => (
+                      <Menu.Item key={s} onClick={() => onSetStatus(d.id, s)} disabled={s === d.status}>
+                        {s}
+                      </Menu.Item>
+                    ))}
+                  </Menu.Dropdown>
+                </Menu>
+                {onUseAsValue && (
+                  <Menu position="bottom-end" withinPortal>
+                    <Menu.Target>
+                      <ActionIcon variant="subtle" color="gray">
+                        <IconDots size={16} />
+                      </ActionIcon>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                      <Menu.Item leftSection={<IconCurrencyDollar size={14} />} onClick={() => onUseAsValue(d.id)}>
+                        Use as deal value
+                      </Menu.Item>
+                    </Menu.Dropdown>
+                  </Menu>
+                )}
+              </Group>
             </Table.Td>
           </Table.Tr>
         ))}

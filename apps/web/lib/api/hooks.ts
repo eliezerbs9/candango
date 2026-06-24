@@ -98,6 +98,7 @@ import {
   searchQbParents,
   setEstimateStatus,
   setInvoiceStatus,
+  applyEstimateAsValue,
   type LinkAccountInput,
 } from './quickbooks';
 import type { CustomFieldType } from './customFields';
@@ -894,6 +895,15 @@ export function useSetEstimateStatus(dealId: string) {
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) => setEstimateStatus(token!, dealId, id, status),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['estimates', dealId] }),
+  });
+}
+
+export function useEstimateAsDealValue(dealId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (estimateId: string) => applyEstimateAsValue(token!, dealId, estimateId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['deal', dealId] }),
   });
 }
 

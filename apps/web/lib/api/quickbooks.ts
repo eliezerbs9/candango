@@ -34,6 +34,13 @@ export function setEstimateStatus(token: string, dealId: string, estimateId: str
   });
 }
 
+export function applyEstimateAsValue(token: string, dealId: string, estimateId: string) {
+  return apiFetch<{ value: number }>(`/deals/${dealId}/estimates/${estimateId}/use-as-value`, {
+    method: 'POST',
+    token,
+  });
+}
+
 export function getDealInvoices(token: string, dealId: string) {
   return apiFetch<DealDoc[]>(`/deals/${dealId}/invoices`, { token });
 }

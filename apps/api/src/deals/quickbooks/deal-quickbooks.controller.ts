@@ -47,6 +47,12 @@ export class DealQuickbooksController {
     return this.svc.setEstimateStatus(u.orgId, id, eid, dto.status);
   }
 
+  @Post('estimates/:eid/use-as-value')
+  @Scopes('deals:write')
+  useEstimateAsValue(@CurrentUser() u: AuthContext, @Param('id') id: string, @Param('eid') eid: string) {
+    return this.svc.useEstimateAsValue(u.orgId, id, eid);
+  }
+
   // --- Invoices ---
   @Get('invoices')
   @Scopes('deals:read')
