@@ -5,8 +5,8 @@ import { Button, Modal, Select, Stack, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
 import { ApiError } from '@/lib/api/client';
-import { useCreateActivity, useCreatePerson, useDeals, usePersons } from '@/lib/api/hooks';
-import type { ActivityType, LocationType } from '@/lib/api/activities';
+import { useCreateActivity, useCreatePerson, useDeals, usePersons, useUpdateActivity } from '@/lib/api/hooks';
+import type { ActivityType, ApiActivity, LocationType } from '@/lib/api/activities';
 
 const TYPES: { value: ActivityType; label: string }[] = [
   { value: 'task', label: 'Task' },
@@ -24,18 +24,28 @@ const LOCATION_TYPES: { value: LocationType; label: string }[] = [
 /** Local datetime-local / date string → full ISO (or undefined). */
 const toIso = (v: string) => (v ? new Date(v).toISOString() : undefined);
 
+/** ISO → local `YYYY-MM-DDTHH:mm` for a datetime-local input. */
+const toLocalDateTime = (iso: string) => {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 export function ActivityForm({
   opened,
   onClose,
   defaultDealId,
+  activity,
 }: {
   opened: boolean;
   onClose: () => void;
   defaultDealId?: string;
+  activity?: ApiActivity | null;
 }) {
   const { data: deals = [] } = useDeals();
   const { data: persons = [] } = usePersons();
   const create = useCreateActivity();
+  const update = useUpdateActivity();
   const createPerson = useCreatePerson();
 
   const [type, setType] = useState<ActivityType>('task');
@@ -50,7 +60,19 @@ export function ActivityForm({
   const [conferenceUrl, setConferenceUrl] = useState('');
 
   useEffect(() => {
-    if (opened) {
+    if (!opened) return;
+    if (activity) {
+      setType(activity.type);
+      setSubject(activity.subject);
+      setDealId(activity.dealId);
+      setParticipantIds(activity.participants.map((p) => p.id));
+      setDueAt(activity.dueAt ? activity.dueAt.slice(0, 10) : '');
+      setStartAt(activity.startAt ? toLocalDateTime(activity.startAt) : '');
+      setEndAt(activity.endAt ? toLocalDateTime(activity.endAt) : '');
+      setLocationType(activity.locationType && activity.locationType !== 'none' ? activity.locationType : 'in_person');
+      setLocation(activity.location ?? '');
+      setConferenceUrl(activity.conferenceUrl ?? '');
+    } else {
       setType('task');
       setSubject('');
       setDealId(defaultDealId ?? null);
@@ -62,7 +84,7 @@ export function ActivityForm({
       setLocation('');
       setConferenceUrl('');
     }
-  }, [opened, defaultDealId]);
+  }, [opened, activity, defaultDealId]);
 
   const timed = type === 'meeting' || type === 'call';
 
@@ -71,33 +93,33 @@ export function ActivityForm({
       notifications.show({ message: 'Subject is required', color: 'red' });
       return;
     }
-    create.mutate(
-      {
-        type,
-        subject: subject.trim(),
-        dealId: dealId ?? undefined,
-        // Empty → let the API default participants to the deal's people.
-        participantIds: participantIds.length ? participantIds : undefined,
-        dueAt: !timed ? toIso(dueAt) : undefined,
-        startAt: timed ? toIso(startAt) : undefined,
-        endAt: timed ? toIso(endAt) : undefined,
-        locationType: timed ? locationType : undefined,
-        location: timed && locationType === 'in_person' ? location || undefined : undefined,
-        conferenceUrl: timed && locationType === 'video' ? conferenceUrl || undefined : undefined,
+    const body = {
+      type,
+      subject: subject.trim(),
+      dealId: dealId ?? undefined,
+      // Empty → let the API default participants to the deal's people.
+      participantIds: participantIds.length ? participantIds : undefined,
+      dueAt: !timed ? toIso(dueAt) : undefined,
+      startAt: timed ? toIso(startAt) : undefined,
+      endAt: timed ? toIso(endAt) : undefined,
+      locationType: timed ? locationType : undefined,
+      location: timed && locationType === 'in_person' ? location || undefined : undefined,
+      conferenceUrl: timed && locationType === 'video' ? conferenceUrl || undefined : undefined,
+    };
+    const handlers = {
+      onSuccess: () => {
+        notifications.show({ message: activity ? 'Activity updated' : 'Activity created', color: 'green' });
+        onClose();
       },
-      {
-        onSuccess: () => {
-          notifications.show({ message: 'Activity created', color: 'green' });
-          onClose();
-        },
-        onError: (e) =>
-          notifications.show({ message: e instanceof ApiError ? e.message : 'Failed', color: 'red' }),
-      },
-    );
+      onError: (e: unknown) =>
+        notifications.show({ message: e instanceof ApiError ? e.message : 'Failed', color: 'red' }),
+    };
+    if (activity) update.mutate({ id: activity.id, ...body }, handlers);
+    else create.mutate(body, handlers);
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title="New activity">
+    <Modal opened={opened} onClose={onClose} title={activity ? 'Edit activity' : 'New activity'}>
       <Stack>
         <Select
           label="Type"
@@ -176,8 +198,8 @@ export function ActivityForm({
           />
         )}
 
-        <Button onClick={submit} loading={create.isPending}>
-          Create activity
+        <Button onClick={submit} loading={create.isPending || update.isPending}>
+          {activity ? 'Save changes' : 'Create activity'}
         </Button>
       </Stack>
     </Modal>

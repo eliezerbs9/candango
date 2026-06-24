@@ -90,8 +90,18 @@ export default function ActivitiesPage() {
   const { data: items = [], isLoading } = useActivities({ assignee: 'me' });
   const complete = useCompleteActivity();
   const [opened, ctl] = useDisclosure(false);
+  const [editing, setEditing] = useState<ApiActivity | null>(null);
   const [mode, setMode] = useState<Mode>('month');
   const [date, setDate] = useState(new Date());
+
+  const openNew = () => {
+    setEditing(null);
+    ctl.open();
+  };
+  const openEdit = (a: ApiActivity) => {
+    setEditing(a);
+    ctl.open();
+  };
 
   const events = useMemo<CalEvent[]>(
     () =>
@@ -131,7 +141,7 @@ export default function ActivitiesPage() {
                 { value: 'list', label: 'List' },
               ]}
             />
-            <Button leftSection={<IconPlus size={16} />} onClick={ctl.open}>
+            <Button leftSection={<IconPlus size={16} />} onClick={openNew}>
               New activity
             </Button>
           </Group>
@@ -153,7 +163,13 @@ export default function ActivitiesPage() {
                     mt={2}
                   />
                   <div>
-                    <Text fw={500} td={a.done ? 'line-through' : undefined} c={a.done ? 'dimmed' : undefined}>
+                    <Text
+                      fw={500}
+                      td={a.done ? 'line-through' : undefined}
+                      c={a.done ? 'dimmed' : undefined}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => openEdit(a)}
+                    >
                       {a.subject}
                     </Text>
                     <Group gap={8} mt={2}>
@@ -198,6 +214,7 @@ export default function ActivitiesPage() {
             views={['month', 'week', 'day']}
             components={{ toolbar: CalToolbar }}
             popup
+            onSelectEvent={(e: CalEvent) => openEdit(e.resource)}
             eventPropGetter={(e: CalEvent) => {
               const c = TYPE_COLORS[e.resource.type];
               return {
@@ -214,7 +231,7 @@ export default function ActivitiesPage() {
         </div>
       )}
 
-      <ActivityForm opened={opened} onClose={ctl.close} />
+      <ActivityForm opened={opened} onClose={ctl.close} activity={editing} />
     </>
   );
 }
