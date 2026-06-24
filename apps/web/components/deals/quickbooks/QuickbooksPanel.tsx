@@ -97,6 +97,8 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const invoiceDocs = invoices.data ?? [];
   const selEstimates = estimateDocs.filter((e) => estSel.has(e.id));
   const selInvoices = invoiceDocs.filter((i) => invSel.has(i.id));
+  // Closed (already-invoiced) estimates are terminal: value / convert / send don't apply to them.
+  const openEstimates = selEstimates.filter((e) => e.status !== 'closed');
 
   const toggle = (set: (fn: (p: Set<string>) => Set<string>) => void) => (id: string) =>
     set((prev) => {
@@ -234,21 +236,25 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         {canSelect && estSel.size > 0 && (
           <Group gap="xs">
             <Text size="sm" c="dimmed">{estSel.size} selected</Text>
-            <Button size="xs" variant="light" leftSection={<IconCurrencyDollar size={14} />} onClick={() => markEstimates([...estSel], true)}>
-              Use as deal value
-            </Button>
-            <Button size="xs" variant="light" color="gray" leftSection={<IconX size={14} />} onClick={() => markEstimates([...estSel], false)}>
-              Remove from value
-            </Button>
-            {mode === 'qbo' && (
-              <Button size="xs" variant="light" color="teal" leftSection={<IconReceipt size={14} />} onClick={convertCtl.open}>
-                Convert to invoice
-              </Button>
-            )}
-            {mode === 'qbo' && (
-              <Button size="xs" variant="light" leftSection={<IconSend size={14} />} onClick={() => startSend(selEstimates, 'estimate')}>
-                Send
-              </Button>
+            {openEstimates.length > 0 && (
+              <>
+                <Button size="xs" variant="light" leftSection={<IconCurrencyDollar size={14} />} onClick={() => markEstimates(openEstimates.map((e) => e.id), true)}>
+                  Use as deal value
+                </Button>
+                <Button size="xs" variant="light" color="gray" leftSection={<IconX size={14} />} onClick={() => markEstimates(openEstimates.map((e) => e.id), false)}>
+                  Remove from value
+                </Button>
+                {mode === 'qbo' && (
+                  <Button size="xs" variant="light" color="teal" leftSection={<IconReceipt size={14} />} onClick={convertCtl.open}>
+                    Convert to invoice
+                  </Button>
+                )}
+                {mode === 'qbo' && (
+                  <Button size="xs" variant="light" leftSection={<IconSend size={14} />} onClick={() => startSend(openEstimates, 'estimate')}>
+                    Send
+                  </Button>
+                )}
+              </>
             )}
             <Button size="xs" variant="light" leftSection={<IconPrinter size={14} />} onClick={() => printMany(selEstimates, 'estimate')}>
               Print
@@ -311,7 +317,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
 
       <ConvertToInvoiceModal
         dealId={deal.id}
-        estimates={selEstimates}
+        estimates={openEstimates}
         currency={deal.currency}
         opened={convertOpen}
         onClose={convertCtl.close}
