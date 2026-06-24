@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../prisma/prisma.service';
-import { QuickbooksApiService, type NormalizedDoc } from '../../integrations/quickbooks-api.service';
+import { QuickbooksApiService, type DocInput, type NormalizedDoc } from '../../integrations/quickbooks-api.service';
 import { CreateDocDto, LinkQuickbooksDto } from './dto/quickbooks.dto';
 
 // our estimate status <-> QBO TxnStatus
@@ -9,6 +9,7 @@ const TO_TXN_STATUS: Record<string, string> = { accepted: 'Accepted', rejected: 
 const FROM_TXN_STATUS: Record<string, string> = { Accepted: 'accepted', Rejected: 'rejected', Closed: 'closed', Pending: 'sent' };
 
 const lineSelect = { orderBy: { position: 'asc' as const } };
+type Addr = Record<string, string> | null;
 
 @Injectable()
 export class DealQuickbooksService {
@@ -27,6 +28,32 @@ export class DealQuickbooksService {
     return deal;
   }
 
+  private async requireLinked(orgId: string, dealId: string) {
+    const deal = await this.requireDeal(orgId, dealId);
+    if (!deal.qbSubcustomerId) {
+      throw new BadRequestException('Link this deal to a QuickBooks account first');
+    }
+    return deal;
+  }
+
+  private async isConnected(orgId: string) {
+    const conn = await this.prisma.quickBooksConnection.findUnique({ where: { orgId }, select: { status: true } });
+    return conn?.status === 'connected';
+  }
+
+  /** Build the QBO doc payload from a linked deal + the request DTO. */
+  private qboDocInput(deal: { qbSubcustomerId: string | null; currency: string; shipTo: unknown; billTo: unknown; id: string }, dto: CreateDocDto): DocInput {
+    return {
+      customerId: deal.qbSubcustomerId!,
+      currency: deal.currency,
+      txnDate: dto.txnDate,
+      lines: dto.lines,
+      billAddr: deal.billTo as Addr,
+      shipAddr: deal.shipTo as Addr,
+      dealId: deal.id,
+    };
+  }
+
   // --- Account linking ---
   async link(orgId: string, dealId: string, dto: LinkQuickbooksDto) {
     const deal = await this.requireDeal(orgId, dealId);
@@ -34,7 +61,7 @@ export class DealQuickbooksService {
     const clientId = deal.companyId ?? deal.primaryPersonId ?? null;
     const clientName = deal.company?.name ?? deal.primaryPerson?.name ?? deal.title;
 
-    // Resolve the parent Customer: explicit id → existing link → create from the client.
+    // Resolve the parent Customer: explicit id → existing link (client already in QBO) → create from the client.
     let parentCustomerId = dto.parentCustomerId ?? null;
     if (!parentCustomerId) {
       if (!clientType || !clientId) {
@@ -60,8 +87,8 @@ export class DealQuickbooksService {
     const sub = await this.qbo.createSubCustomer(orgId, {
       displayName: deal.title,
       parentCustomerId,
-      shipAddr: deal.shipTo as Record<string, string> | null,
-      billAddr: deal.billTo as Record<string, string> | null,
+      shipAddr: deal.shipTo as Addr,
+      billAddr: deal.billTo as Addr,
     });
     await this.prisma.deal.update({ where: { id: dealId }, data: { qbSubcustomerId: sub.id } });
     this.events.emit('webhook.event', {
@@ -77,17 +104,26 @@ export class DealQuickbooksService {
     return this.qbo.searchCustomers(orgId, q);
   }
 
-  private async requireLinked(orgId: string, dealId: string) {
+  /** Tells the UI whether this deal (or its client) is already connected to QuickBooks. */
+  async linkStatus(orgId: string, dealId: string) {
     const deal = await this.requireDeal(orgId, dealId);
-    if (!deal.qbSubcustomerId) {
-      throw new BadRequestException('Link this deal to a QuickBooks account first');
+    const clientType = deal.companyId ? 'company' : deal.primaryPersonId ? 'person' : null;
+    const clientId = deal.companyId ?? deal.primaryPersonId ?? null;
+    let clientHasParent = false;
+    if (clientType && clientId) {
+      const link = await this.prisma.quickBooksCustomerLink.findFirst({ where: { orgId, clientType, clientId } });
+      clientHasParent = !!link;
     }
-    return deal;
+    return {
+      linked: !!deal.qbSubcustomerId,
+      clientHasParent,
+      clientName: deal.company?.name ?? deal.primaryPerson?.name ?? null,
+    };
   }
 
-  private async isConnected(orgId: string) {
-    const conn = await this.prisma.quickBooksConnection.findUnique({ where: { orgId }, select: { status: true } });
-    return conn?.status === 'connected';
+  async listItems(orgId: string, dealId: string) {
+    await this.requireDeal(orgId, dealId);
+    return this.qbo.listItems(orgId);
   }
 
   // --- Estimates ---
@@ -108,12 +144,7 @@ export class DealQuickbooksService {
   async createEstimate(orgId: string, dealId: string, dto: CreateDocDto) {
     if (await this.isConnected(orgId)) {
       const deal = await this.requireLinked(orgId, dealId);
-      const doc = await this.qbo.createEstimate(orgId, {
-        customerId: deal.qbSubcustomerId!,
-        currency: deal.currency,
-        txnDate: dto.txnDate,
-        lines: dto.lines,
-      });
+      const doc = await this.qbo.createEstimate(orgId, this.qboDocInput(deal, dto));
       const row = await this.prisma.dealEstimate.create({
         data: {
           orgId,
@@ -138,15 +169,6 @@ export class DealQuickbooksService {
 
     // Native (offline) estimate — amounts computed server-side.
     const deal = await this.requireDeal(orgId, dealId);
-    const lines = dto.lines.map((l, i) => ({
-      position: i,
-      description: l.description,
-      quantity: l.quantity,
-      unitPrice: l.unitPrice,
-      amount: l.quantity * l.unitPrice,
-      qbLineId: null,
-    }));
-    const total = lines.reduce((sum, l) => sum + l.amount, 0);
     const row = await this.prisma.dealEstimate.create({
       data: {
         orgId,
@@ -154,10 +176,44 @@ export class DealQuickbooksService {
         source: 'native',
         status: 'draft',
         currency: deal.currency,
-        totalAmount: total,
+        totalAmount: nativeTotal(dto),
         txnDate: dto.txnDate ? new Date(dto.txnDate) : null,
         notes: dto.notes ?? null,
-        lines: { create: lines },
+        lines: { create: nativeLines(dto) },
+      },
+      include: { lines: lineSelect },
+    });
+    return shapeDoc(row);
+  }
+
+  async updateEstimate(orgId: string, dealId: string, estimateId: string, dto: CreateDocDto) {
+    const est = await this.prisma.dealEstimate.findFirst({ where: { id: estimateId, orgId, dealId } });
+    if (!est) throw new NotFoundException('Estimate not found');
+    if (est.source === 'quickbooks' && est.qbId) {
+      const deal = await this.requireLinked(orgId, dealId);
+      const doc = await this.qbo.updateEstimate(orgId, est.qbId, this.qboDocInput(deal, dto));
+      const row = await this.prisma.dealEstimate.update({
+        where: { id: estimateId },
+        data: {
+          totalAmount: doc.totalAmount,
+          docNumber: doc.docNumber,
+          txnDate: dto.txnDate ? new Date(dto.txnDate) : est.txnDate,
+          notes: dto.notes ?? est.notes,
+          qbSyncToken: doc.syncToken,
+          qbSyncedAt: new Date(),
+          lines: { deleteMany: {}, create: linesFromDoc(doc) },
+        },
+        include: { lines: lineSelect },
+      });
+      return shapeDoc(row);
+    }
+    const row = await this.prisma.dealEstimate.update({
+      where: { id: estimateId },
+      data: {
+        totalAmount: nativeTotal(dto),
+        txnDate: dto.txnDate ? new Date(dto.txnDate) : est.txnDate,
+        notes: dto.notes ?? est.notes,
+        lines: { deleteMany: {}, create: nativeLines(dto) },
       },
       include: { lines: lineSelect },
     });
@@ -188,7 +244,7 @@ export class DealQuickbooksService {
     return shapeDoc(row);
   }
 
-  // --- Invoices --- (QBO invoices have no settable TxnStatus; status is tracked locally in Phase 1)
+  // --- Invoices --- (QBO-only; QBO invoices have no settable TxnStatus → status tracked locally)
   async listInvoices(orgId: string, dealId: string) {
     await this.requireDeal(orgId, dealId);
     const rows = await this.prisma.dealInvoice.findMany({
@@ -201,12 +257,7 @@ export class DealQuickbooksService {
 
   async createInvoice(orgId: string, dealId: string, dto: CreateDocDto) {
     const deal = await this.requireLinked(orgId, dealId);
-    const doc = await this.qbo.createInvoice(orgId, {
-      customerId: deal.qbSubcustomerId!,
-      currency: deal.currency,
-      txnDate: dto.txnDate,
-      lines: dto.lines,
-    });
+    const doc = await this.qbo.createInvoice(orgId, this.qboDocInput(deal, dto));
     const row = await this.prisma.dealInvoice.create({
       data: {
         orgId,
@@ -230,11 +281,51 @@ export class DealQuickbooksService {
     return shapeDoc(row);
   }
 
+  async updateInvoice(orgId: string, dealId: string, invoiceId: string, dto: CreateDocDto) {
+    const inv = await this.prisma.dealInvoice.findFirst({ where: { id: invoiceId, orgId, dealId } });
+    if (!inv) throw new NotFoundException('Invoice not found');
+    const deal = await this.requireLinked(orgId, dealId);
+    if (!inv.qbId) throw new BadRequestException('Invoice is not linked to QuickBooks');
+    const doc = await this.qbo.updateInvoice(orgId, inv.qbId, this.qboDocInput(deal, dto));
+    const row = await this.prisma.dealInvoice.update({
+      where: { id: invoiceId },
+      data: {
+        totalAmount: doc.totalAmount,
+        docNumber: doc.docNumber,
+        txnDate: dto.txnDate ? new Date(dto.txnDate) : inv.txnDate,
+        notes: dto.notes ?? inv.notes,
+        qbSyncToken: doc.syncToken,
+        qbSyncedAt: new Date(),
+        lines: { deleteMany: {}, create: linesFromDoc(doc) },
+      },
+      include: { lines: lineSelect },
+    });
+    return shapeDoc(row);
+  }
+
   async setInvoiceStatus(orgId: string, dealId: string, invoiceId: string, status: string) {
     const inv = await this.prisma.dealInvoice.findFirst({ where: { id: invoiceId, orgId, dealId } });
     if (!inv) throw new NotFoundException('Invoice not found');
     const row = await this.prisma.dealInvoice.update({ where: { id: invoiceId }, data: { status }, include: { lines: lineSelect } });
     return shapeDoc(row);
+  }
+
+  /** Keep the QBO sub-customer in sync when a linked deal's name/addresses change. Non-blocking. */
+  @OnEvent('webhook.event')
+  async onDealEvent(payload: { orgId: string; type: string; data: { deal?: { id?: string; qbSubcustomerId?: string | null; title?: string; billTo?: unknown; shipTo?: unknown } } }) {
+    if (payload.type !== 'deal.updated') return;
+    const deal = payload.data?.deal;
+    if (!deal?.qbSubcustomerId) return;
+    if (!(await this.isConnected(payload.orgId))) return;
+    try {
+      await this.qbo.updateSubCustomer(payload.orgId, deal.qbSubcustomerId, {
+        displayName: deal.title,
+        billAddr: deal.billTo as Addr,
+        shipAddr: deal.shipTo as Addr,
+      });
+    } catch {
+      // best-effort; a QBO hiccup must never break saving a deal
+    }
   }
 }
 
@@ -246,7 +337,26 @@ function linesFromDoc(doc: NormalizedDoc) {
     unitPrice: l.unitPrice,
     amount: l.amount,
     qbLineId: l.qbLineId,
+    itemId: l.itemId,
+    itemName: l.itemName,
   }));
+}
+
+function nativeLines(dto: CreateDocDto) {
+  return dto.lines.map((l, i) => ({
+    position: i,
+    description: l.description,
+    quantity: l.quantity,
+    unitPrice: l.unitPrice,
+    amount: l.quantity * l.unitPrice,
+    qbLineId: null,
+    itemId: l.itemId ?? null,
+    itemName: null,
+  }));
+}
+
+function nativeTotal(dto: CreateDocDto) {
+  return dto.lines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
 }
 
 type DocRow = {
@@ -262,7 +372,16 @@ type DocRow = {
   qbId: string | null;
   sourceEstimateId?: string | null;
   createdAt: Date;
-  lines: { id: string; position: number; description: string; quantity: number; unitPrice: number; amount: number }[];
+  lines: {
+    id: string;
+    position: number;
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    amount: number;
+    itemId: string | null;
+    itemName: string | null;
+  }[];
 };
 
 function shapeDoc(d: DocRow) {
@@ -286,6 +405,8 @@ function shapeDoc(d: DocRow) {
       quantity: l.quantity,
       unitPrice: l.unitPrice,
       amount: l.amount,
+      itemId: l.itemId,
+      itemName: l.itemName,
     })),
   };
 }

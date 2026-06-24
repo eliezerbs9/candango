@@ -7,13 +7,17 @@ import { decryptToken, encryptToken } from './crypto.util';
 const MINOR_VERSION = '73';
 const REFRESH_SKEW_MS = 5 * 60 * 1000;
 
-/** Our deal address Json → QBO address shape (undefined if empty). */
+/** Our deal address Json → QBO address shape (undefined if empty).
+ * `name` becomes the first address line so the printed Bill To/Ship To shows the
+ * company/person, not the deal title. */
 type Addr = Record<string, string> | null | undefined;
 function toQbAddr(a: Addr) {
   const x = (a ?? {}) as Record<string, string>;
+  const lines = [x.name, x.line1, x.line2].filter((v): v is string => !!v);
   const out: Record<string, string> = {};
-  if (x.line1) out.Line1 = x.line1;
-  if (x.line2) out.Line2 = x.line2;
+  lines.forEach((l, i) => {
+    out[`Line${i + 1}`] = l;
+  });
   if (x.city) out.City = x.city;
   if (x.state) out.CountrySubDivisionCode = x.state;
   if (x.postalCode) out.PostalCode = x.postalCode;
@@ -28,6 +32,25 @@ export interface LineInput {
   description: string;
   quantity: number;
   unitPrice: number; // minor units
+  itemId?: string; // QBO Item (Product/Service) ref; falls back to a default Service item
+}
+export interface DocInput {
+  customerId: string;
+  currency?: string;
+  txnDate?: string;
+  lines: LineInput[];
+  billAddr?: Addr;
+  shipAddr?: Addr;
+  dealId?: string; // stored on the QBO doc PrivateNote for traceability
+}
+export interface NormalizedLine {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+  qbLineId: string | null;
+  itemId: string | null;
+  itemName: string | null;
 }
 export interface NormalizedDoc {
   qbId: string;
@@ -35,7 +58,7 @@ export interface NormalizedDoc {
   status: string | null;
   totalAmount: number; // minor units (QBO TotalAmt — source of truth incl. tax)
   syncToken: string;
-  lines: { description: string; quantity: number; unitPrice: number; amount: number; qbLineId: string | null }[];
+  lines: NormalizedLine[];
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -148,6 +171,15 @@ export class QuickbooksApiService {
     return id;
   }
 
+  // --- Items (Products / Services) ---
+  async listItems(orgId: string): Promise<{ id: string; name: string }[]> {
+    const r = await this.query(
+      orgId,
+      "select Id, Name from Item where Active = true and Type in ('Service','Inventory','NonInventory') MAXRESULTS 200",
+    );
+    return (r?.QueryResponse?.Item ?? []).map((i: any) => ({ id: i.Id, name: i.Name }));
+  }
+
   // --- Customers ---
   async searchCustomers(orgId: string, q: string): Promise<{ id: string; name: string }[]> {
     const safe = q.replace(/['\\]/g, '');
@@ -182,19 +214,37 @@ export class QuickbooksApiService {
     return { id: r.Customer.Id, name: r.Customer.DisplayName };
   }
 
+  /** Sparse-update a sub-customer's name + addresses (reads the current SyncToken first). */
+  async updateSubCustomer(
+    orgId: string,
+    qbCustomerId: string,
+    input: { displayName?: string; shipAddr?: Addr; billAddr?: Addr },
+  ): Promise<void> {
+    const cur = await this.query(orgId, `select Id, SyncToken from Customer where Id = '${qbCustomerId}'`);
+    const syncToken = cur?.QueryResponse?.Customer?.[0]?.SyncToken;
+    if (syncToken == null) return; // customer gone; nothing to sync
+    const body: Record<string, unknown> = { Id: qbCustomerId, SyncToken: syncToken, sparse: true };
+    if (input.displayName) body.DisplayName = input.displayName;
+    const ship = toQbAddr(input.shipAddr);
+    const bill = toQbAddr(input.billAddr);
+    if (ship) body.ShipAddr = ship;
+    if (bill) body.BillAddr = bill;
+    await this.request(orgId, 'POST', 'customer', body);
+  }
+
   // --- Estimates / Invoices ---
   private async buildLines(orgId: string, realmId: string, lines: LineInput[]) {
-    const itemId = await this.defaultItemId(orgId, realmId);
+    const fallback = await this.defaultItemId(orgId, realmId);
     return lines.map((l) => ({
       DetailType: 'SalesItemLineDetail',
       Amount: toQbAmount(l.quantity * l.unitPrice),
       Description: l.description,
-      SalesItemLineDetail: { ItemRef: { value: itemId }, Qty: l.quantity, UnitPrice: toQbAmount(l.unitPrice) },
+      SalesItemLineDetail: { ItemRef: { value: l.itemId || fallback }, Qty: l.quantity, UnitPrice: toQbAmount(l.unitPrice) },
     }));
   }
 
   private normalizeDoc(doc: any): NormalizedDoc {
-    const lines = (doc.Line ?? [])
+    const lines: NormalizedLine[] = (doc.Line ?? [])
       .filter((l: any) => l.DetailType === 'SalesItemLineDetail')
       .map((l: any) => ({
         description: l.Description ?? '',
@@ -202,6 +252,8 @@ export class QuickbooksApiService {
         unitPrice: fromQbAmount(l.SalesItemLineDetail?.UnitPrice),
         amount: fromQbAmount(l.Amount),
         qbLineId: l.Id ?? null,
+        itemId: l.SalesItemLineDetail?.ItemRef?.value ?? null,
+        itemName: l.SalesItemLineDetail?.ItemRef?.name ?? null,
       }));
     return {
       qbId: doc.Id,
@@ -213,7 +265,7 @@ export class QuickbooksApiService {
     };
   }
 
-  private async createDoc(orgId: string, resource: 'estimate' | 'invoice', input: { customerId: string; currency?: string; txnDate?: string; lines: LineInput[] }): Promise<NormalizedDoc> {
+  private async docBody(orgId: string, input: DocInput): Promise<Record<string, unknown>> {
     const { realmId } = await this.authContext(orgId);
     const body: Record<string, unknown> = {
       CustomerRef: { value: input.customerId },
@@ -221,15 +273,50 @@ export class QuickbooksApiService {
     };
     if (input.txnDate) body.TxnDate = input.txnDate.slice(0, 10);
     if (input.currency && input.currency !== 'USD') body.CurrencyRef = { value: input.currency };
+    const bill = toQbAddr(input.billAddr);
+    const ship = toQbAddr(input.shipAddr);
+    if (bill) body.BillAddr = bill;
+    if (ship) body.ShipAddr = ship;
+    if (input.dealId) body.PrivateNote = `Candango deal: ${input.dealId}`;
+    return body;
+  }
+
+  private async createDoc(orgId: string, resource: 'estimate' | 'invoice', input: DocInput): Promise<NormalizedDoc> {
+    const body = await this.docBody(orgId, input);
     const r = await this.request(orgId, 'POST', resource, body);
     return this.normalizeDoc(resource === 'estimate' ? r.Estimate : r.Invoice);
   }
 
-  createEstimate(orgId: string, input: { customerId: string; currency?: string; txnDate?: string; lines: LineInput[] }) {
+  createEstimate(orgId: string, input: DocInput) {
     return this.createDoc(orgId, 'estimate', input);
   }
-  createInvoice(orgId: string, input: { customerId: string; currency?: string; txnDate?: string; lines: LineInput[] }) {
+  createInvoice(orgId: string, input: DocInput) {
     return this.createDoc(orgId, 'invoice', input);
+  }
+
+  /** Read the current SyncToken for a doc (for safe sparse updates). */
+  private async currentSyncToken(orgId: string, resource: 'Estimate' | 'Invoice', qbId: string): Promise<string | null> {
+    const r = await this.query(orgId, `select Id, SyncToken from ${resource} where Id = '${qbId}'`);
+    return r?.QueryResponse?.[resource]?.[0]?.SyncToken ?? null;
+  }
+
+  /** Replace a doc's lines + addresses (re-reads SyncToken to avoid stale-token errors). */
+  private async updateDoc(orgId: string, resource: 'estimate' | 'invoice', qbId: string, input: DocInput): Promise<NormalizedDoc> {
+    const Resource = resource === 'estimate' ? 'Estimate' : 'Invoice';
+    const syncToken = await this.currentSyncToken(orgId, Resource, qbId);
+    if (syncToken == null) throw new BadRequestException('This document no longer exists in QuickBooks');
+    const body = await this.docBody(orgId, input);
+    body.Id = qbId;
+    body.SyncToken = syncToken;
+    const r = await this.request(orgId, 'POST', resource, body);
+    return this.normalizeDoc(resource === 'estimate' ? r.Estimate : r.Invoice);
+  }
+
+  updateEstimate(orgId: string, qbId: string, input: DocInput) {
+    return this.updateDoc(orgId, 'estimate', qbId, input);
+  }
+  updateInvoice(orgId: string, qbId: string, input: DocInput) {
+    return this.updateDoc(orgId, 'invoice', qbId, input);
   }
 
   private async listDocs(orgId: string, resource: 'Estimate' | 'Invoice', customerId: string): Promise<NormalizedDoc[]> {

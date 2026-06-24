@@ -23,6 +23,18 @@ export class DealQuickbooksController {
     return this.svc.searchParents(u.orgId, id, q);
   }
 
+  @Get('quickbooks/link-status')
+  @Scopes('deals:read')
+  linkStatus(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.linkStatus(u.orgId, id);
+  }
+
+  @Get('quickbooks/items')
+  @Scopes('deals:read')
+  listItems(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.listItems(u.orgId, id);
+  }
+
   // --- Estimates ---
   @Get('estimates')
   @Scopes('deals:read')
@@ -47,6 +59,17 @@ export class DealQuickbooksController {
     return this.svc.setEstimateStatus(u.orgId, id, eid, dto.status);
   }
 
+  @Patch('estimates/:eid')
+  @Scopes('deals:write')
+  updateEstimate(
+    @CurrentUser() u: AuthContext,
+    @Param('id') id: string,
+    @Param('eid') eid: string,
+    @Body() dto: CreateDocDto,
+  ) {
+    return this.svc.updateEstimate(u.orgId, id, eid, dto);
+  }
+
   @Post('estimates/:eid/use-as-value')
   @Scopes('deals:write')
   useEstimateAsValue(@CurrentUser() u: AuthContext, @Param('id') id: string, @Param('eid') eid: string) {
@@ -64,6 +87,17 @@ export class DealQuickbooksController {
   @Scopes('deals:write')
   createInvoice(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() dto: CreateDocDto) {
     return this.svc.createInvoice(u.orgId, id, dto);
+  }
+
+  @Patch('invoices/:invid')
+  @Scopes('deals:write')
+  updateInvoice(
+    @CurrentUser() u: AuthContext,
+    @Param('id') id: string,
+    @Param('invid') invid: string,
+    @Body() dto: CreateDocDto,
+  ) {
+    return this.svc.updateInvoice(u.orgId, id, invid, dto);
   }
 
   @Patch('invoices/:invid/status')

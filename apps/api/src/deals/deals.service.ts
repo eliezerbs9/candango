@@ -62,6 +62,17 @@ export class DealsService {
   }
 
   async create(orgId: string, ownerUserId: string, dto: CreateDealDto) {
+    // Auto-fill Bill To from the company (payer) when not provided; Ship To (work site) stays empty.
+    let billTo = dto.billTo as Prisma.InputJsonValue | undefined;
+    if (!billTo && dto.companyId) {
+      const company = await this.prisma.company.findFirst({
+        where: { id: dto.companyId, orgId },
+        select: { name: true, address: true },
+      });
+      if (company) {
+        billTo = { name: company.name, ...(company.address ? { line1: company.address } : {}) };
+      }
+    }
     const deal = await this.prisma.deal.create({
       data: {
         orgId,
@@ -75,7 +86,7 @@ export class DealsService {
         companyId: dto.companyId ?? null,
         expectedCloseDate: dto.expectedCloseDate ? new Date(dto.expectedCloseDate) : null,
         shipTo: dto.shipTo as Prisma.InputJsonValue | undefined,
-        billTo: dto.billTo as Prisma.InputJsonValue | undefined,
+        billTo,
         customFields: dto.customFields as Prisma.InputJsonValue | undefined,
         status: 'open',
         stageChangedAt: new Date(),

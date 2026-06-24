@@ -37,6 +37,10 @@ export class LineItemDto {
   @IsInt()
   @Min(0)
   unitPrice!: number; // minor units
+
+  @IsOptional()
+  @IsString()
+  itemId?: string; // QBO Product/Service ref
 }
 
 export class CreateDocDto {

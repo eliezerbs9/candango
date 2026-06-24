@@ -693,6 +693,8 @@ model DealEstimateLine {
   unitPrice   Int     @default(0) // minor units
   amount      Int     @default(0) // minor units (= quantity * unitPrice, server-computed)
   qbLineId    String?
+  itemId      String? // QBO Item (Product/Service) ref id
+  itemName    String? // QBO Item display name (cached for display)
 
   estimate DealEstimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
 
@@ -736,6 +738,8 @@ model DealInvoiceLine {
   unitPrice   Int     @default(0)
   amount      Int     @default(0)
   qbLineId    String?
+  itemId      String? // QBO Item (Product/Service) ref id
+  itemName    String? // QBO Item display name (cached for display)
 
   invoice DealInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
