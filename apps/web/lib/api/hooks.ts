@@ -94,10 +94,14 @@ import {
   createDealInvoice,
   getDealEstimates,
   getDealInvoices,
+  getQbItems,
+  getQbLinkStatus,
   linkQuickbooks,
   searchQbParents,
   setEstimateStatus,
   setInvoiceStatus,
+  updateDealEstimate,
+  updateDealInvoice,
   applyEstimateAsValue,
   type LinkAccountInput,
 } from './quickbooks';
@@ -862,13 +866,53 @@ export function useLinkQuickbooks(dealId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: LinkAccountInput) => linkQuickbooks(token!, dealId, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['deal', dealId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deal', dealId] });
+      qc.invalidateQueries({ queryKey: ['qb-link-status', dealId] });
+    },
   });
 }
 
 export function useSearchQbParents(dealId: string) {
   const token = useToken();
   return useMutation({ mutationFn: (q: string) => searchQbParents(token!, dealId, q) });
+}
+
+export function useQbLinkStatus(dealId: string, enabled = true) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['qb-link-status', dealId],
+    queryFn: () => getQbLinkStatus(token!, dealId),
+    enabled: !!token && !!dealId && enabled,
+  });
+}
+
+export function useQbItems(dealId: string, enabled = true) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['qb-items', dealId],
+    queryFn: () => getQbItems(token!, dealId),
+    enabled: !!token && !!dealId && enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useUpdateEstimate(dealId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: CreateDocInput }) => updateDealEstimate(token!, dealId, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['estimates', dealId] }),
+  });
+}
+
+export function useUpdateInvoice(dealId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: CreateDocInput }) => updateDealInvoice(token!, dealId, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices', dealId] }),
+  });
 }
 
 export function useCreateEstimate(dealId: string) {

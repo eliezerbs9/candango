@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { CreateDocInput, DealDoc, QbCustomer } from './types';
+import type { CreateDocInput, DealDoc, QbCustomer, QbItem, QbLinkStatus } from './types';
 
 export interface LinkAccountInput {
   parentCustomerId?: string;
@@ -18,12 +18,28 @@ export function searchQbParents(token: string, dealId: string, q: string) {
   return apiFetch<QbCustomer[]>(`/deals/${dealId}/quickbooks/parent-search?q=${encodeURIComponent(q)}`, { token });
 }
 
+export function getQbLinkStatus(token: string, dealId: string) {
+  return apiFetch<QbLinkStatus>(`/deals/${dealId}/quickbooks/link-status`, { token });
+}
+
+export function getQbItems(token: string, dealId: string) {
+  return apiFetch<QbItem[]>(`/deals/${dealId}/quickbooks/items`, { token });
+}
+
 export function getDealEstimates(token: string, dealId: string) {
   return apiFetch<DealDoc[]>(`/deals/${dealId}/estimates`, { token });
 }
 
 export function createDealEstimate(token: string, dealId: string, body: CreateDocInput) {
   return apiFetch<DealDoc>(`/deals/${dealId}/estimates`, { method: 'POST', token, body: JSON.stringify(body) });
+}
+
+export function updateDealEstimate(token: string, dealId: string, estimateId: string, body: CreateDocInput) {
+  return apiFetch<DealDoc>(`/deals/${dealId}/estimates/${estimateId}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(body),
+  });
 }
 
 export function setEstimateStatus(token: string, dealId: string, estimateId: string, status: string) {
@@ -47,6 +63,14 @@ export function getDealInvoices(token: string, dealId: string) {
 
 export function createDealInvoice(token: string, dealId: string, body: CreateDocInput) {
   return apiFetch<DealDoc>(`/deals/${dealId}/invoices`, { method: 'POST', token, body: JSON.stringify(body) });
+}
+
+export function updateDealInvoice(token: string, dealId: string, invoiceId: string, body: CreateDocInput) {
+  return apiFetch<DealDoc>(`/deals/${dealId}/invoices/${invoiceId}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(body),
+  });
 }
 
 export function setInvoiceStatus(token: string, dealId: string, invoiceId: string, status: string) {

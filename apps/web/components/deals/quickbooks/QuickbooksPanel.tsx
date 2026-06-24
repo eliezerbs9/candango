@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Alert, Badge, Button, Card, Divider, Group, Stack, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -10,18 +11,25 @@ import {
   useDealEstimates,
   useDealInvoices,
   useEstimateAsDealValue,
+  useQbItems,
   useQuickbooksStatus,
   useSetEstimateStatus,
   useSetInvoiceStatus,
+  useUpdateEstimate,
+  useUpdateInvoice,
 } from '@/lib/api/hooks';
 import { ApiError } from '@/lib/api/client';
-import type { ApiDeal } from '@/lib/api/types';
+import type { ApiDeal, CreateDocInput, DealDoc } from '@/lib/api/types';
 import { DocList } from './DocList';
 import { DocEditorModal } from './DocEditorModal';
+import { DocViewModal } from './DocViewModal';
 import { LinkAccountModal } from './LinkAccountModal';
 
 const ESTIMATE_STATUSES = ['draft', 'sent', 'accepted', 'rejected', 'closed'];
 const INVOICE_STATUSES = ['draft', 'sent', 'paid', 'void'];
+
+const fail = (e: unknown) =>
+  notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
 
 export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const { data: qb } = useQuickbooksStatus();
@@ -29,24 +37,58 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const [estOpen, estCtl] = useDisclosure(false);
   const [invOpen, invCtl] = useDisclosure(false);
 
+  const connected = !!qb?.connected;
+  const linked = !!deal.qbSubcustomerId;
+  const mode: 'native' | 'link' | 'qbo' = !connected ? 'native' : linked ? 'qbo' : 'link';
+
   const estimates = useDealEstimates(deal.id);
   const invoices = useDealInvoices(deal.id);
+  const items = useQbItems(deal.id, mode === 'qbo');
   const createEstimate = useCreateEstimate(deal.id);
+  const updateEstimate = useUpdateEstimate(deal.id);
   const createInvoice = useCreateInvoice(deal.id);
+  const updateInvoice = useUpdateInvoice(deal.id);
   const setEstStatus = useSetEstimateStatus(deal.id);
   const setInvStatus = useSetInvoiceStatus(deal.id);
   const useAsValue = useEstimateAsDealValue(deal.id);
 
-  const connected = !!qb?.connected;
-  const linked = !!deal.qbSubcustomerId;
-  // native = price the deal offline; link = connect this deal to QBO; qbo = full estimates + invoices
-  const mode: 'native' | 'link' | 'qbo' = !connected ? 'native' : linked ? 'qbo' : 'link';
+  // null = creating, a doc = editing
+  const [estEditing, setEstEditing] = useState<DealDoc | null>(null);
+  const [invEditing, setInvEditing] = useState<DealDoc | null>(null);
+  const [view, setView] = useState<{ doc: DealDoc; kind: 'Estimate' | 'Invoice' } | null>(null);
+
+  const itemList = mode === 'qbo' ? items.data : undefined;
+
+  const openNewEstimate = () => {
+    setEstEditing(null);
+    estCtl.open();
+  };
+  const openNewInvoice = () => {
+    setInvEditing(null);
+    invCtl.open();
+  };
+  const editFromView = () => {
+    if (!view) return;
+    const { doc, kind } = view;
+    setView(null);
+    if (kind === 'Estimate') {
+      setEstEditing(doc);
+      estCtl.open();
+    } else {
+      setInvEditing(doc);
+      invCtl.open();
+    }
+  };
+
+  const submitEstimate = (input: CreateDocInput) =>
+    estEditing ? updateEstimate.mutateAsync({ id: estEditing.id, body: input }) : createEstimate.mutateAsync(input);
+  const submitInvoice = (input: CreateDocInput) =>
+    invEditing ? updateInvoice.mutateAsync({ id: invEditing.id, body: input }) : createInvoice.mutateAsync(input);
 
   const applyAsValue = (id: string) =>
     useAsValue.mutate(id, {
       onSuccess: () => notifications.show({ message: 'Deal value updated from estimate', color: 'green' }),
-      onError: (e) =>
-        notifications.show({ message: e instanceof ApiError ? e.message : 'Could not update value', color: 'red' }),
+      onError: fail,
     });
 
   return (
@@ -79,7 +121,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         <Group justify="space-between">
           <Text fw={500}>Estimates</Text>
           {mode !== 'link' && (
-            <Button size="xs" variant="subtle" leftSection={<IconPlus size={14} />} onClick={estCtl.open}>
+            <Button size="xs" variant="subtle" leftSection={<IconPlus size={14} />} onClick={openNewEstimate}>
               New estimate
             </Button>
           )}
@@ -87,8 +129,9 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         <DocList
           docs={estimates.data ?? []}
           statuses={ESTIMATE_STATUSES}
-          onSetStatus={(id, status) => setEstStatus.mutate({ id, status })}
+          onSetStatus={(id, status) => setEstStatus.mutate({ id, status }, { onError: fail })}
           onUseAsValue={applyAsValue}
+          onOpen={(doc) => setView({ doc, kind: 'Estimate' })}
           emptyText={mode === 'link' ? 'Link the deal to add estimates.' : 'No estimates yet.'}
         />
 
@@ -98,14 +141,15 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
             <Divider />
             <Group justify="space-between">
               <Text fw={500}>Invoices</Text>
-              <Button size="xs" variant="subtle" leftSection={<IconPlus size={14} />} onClick={invCtl.open}>
+              <Button size="xs" variant="subtle" leftSection={<IconPlus size={14} />} onClick={openNewInvoice}>
                 New invoice
               </Button>
             </Group>
             <DocList
               docs={invoices.data ?? []}
               statuses={INVOICE_STATUSES}
-              onSetStatus={(id, status) => setInvStatus.mutate({ id, status })}
+              onSetStatus={(id, status) => setInvStatus.mutate({ id, status }, { onError: fail })}
+              onOpen={(doc) => setView({ doc, kind: 'Invoice' })}
               emptyText="No invoices yet."
             />
           </>
@@ -119,21 +163,36 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
       </Stack>
 
       <LinkAccountModal dealId={deal.id} dealTitle={deal.title} opened={linkOpen} onClose={linkCtl.close} />
+
+      <DocViewModal
+        doc={view?.doc ?? null}
+        kind={view?.kind ?? 'Estimate'}
+        opened={!!view}
+        onClose={() => setView(null)}
+        onEdit={editFromView}
+      />
+
       <DocEditorModal
         opened={estOpen}
         onClose={estCtl.close}
-        title="New estimate"
+        title={estEditing ? 'Edit estimate' : 'New estimate'}
+        submitLabel={estEditing ? 'Save' : 'Create'}
         currency={deal.currency}
-        loading={createEstimate.isPending}
-        onSubmit={(input) => createEstimate.mutateAsync(input)}
+        items={itemList}
+        initial={estEditing}
+        loading={createEstimate.isPending || updateEstimate.isPending}
+        onSubmit={submitEstimate}
       />
       <DocEditorModal
         opened={invOpen}
         onClose={invCtl.close}
-        title="New invoice"
+        title={invEditing ? 'Edit invoice' : 'New invoice'}
+        submitLabel={invEditing ? 'Save' : 'Create'}
         currency={deal.currency}
-        loading={createInvoice.isPending}
-        onSubmit={(input) => createInvoice.mutateAsync(input)}
+        items={itemList}
+        initial={invEditing}
+        loading={createInvoice.isPending || updateInvoice.isPending}
+        onSubmit={submitInvoice}
       />
     </Card>
   );

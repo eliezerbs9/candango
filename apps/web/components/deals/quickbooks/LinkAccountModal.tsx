@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Button, Group, Modal, Radio, Select, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Group, Modal, Radio, Select, Stack, Text, TextInput } from '@mantine/core';
+import { IconCircleCheck } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { ApiError } from '@/lib/api/client';
-import { useLinkQuickbooks, useSearchQbParents } from '@/lib/api/hooks';
+import { useLinkQuickbooks, useQbLinkStatus, useSearchQbParents } from '@/lib/api/hooks';
 import type { QbCustomer } from '@/lib/api/types';
 
 export function LinkAccountModal({
@@ -20,6 +21,7 @@ export function LinkAccountModal({
 }) {
   const link = useLinkQuickbooks(dealId);
   const search = useSearchQbParents(dealId);
+  const { data: status } = useQbLinkStatus(dealId, opened);
   const [mode, setMode] = useState<'client' | 'existing'>('client');
   const [q, setQ] = useState('');
   const [results, setResults] = useState<QbCustomer[]>([]);
@@ -57,6 +59,12 @@ export function LinkAccountModal({
         <Text size="sm" c="dimmed">
           The deal becomes a sub-account named <b>{dealTitle}</b> in QuickBooks, billed under a parent customer.
         </Text>
+
+        {status?.clientHasParent && (
+          <Alert variant="light" color="teal" icon={<IconCircleCheck size={16} />}>
+            <b>{status.clientName}</b> is already in QuickBooks — we&apos;ll just add this deal as a sub-account under it.
+          </Alert>
+        )}
 
         <Radio.Group value={mode} onChange={(v) => setMode(v as 'client' | 'existing')}>
           <Stack gap="xs">

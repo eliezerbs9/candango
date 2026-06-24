@@ -47,6 +47,8 @@ export interface DealDocLine {
   quantity: number;
   unitPrice: number; // minor units
   amount: number; // minor units
+  itemId: string | null;
+  itemName: string | null;
 }
 
 export interface DealDoc {
@@ -69,6 +71,7 @@ export interface DocLineInput {
   description: string;
   quantity: number;
   unitPrice: number; // minor units
+  itemId?: string;
 }
 
 export interface CreateDocInput {
@@ -81,4 +84,12 @@ export interface CreateDocInput {
 export interface QbCustomer {
   id: string;
   name: string;
+}
+
+export type QbItem = { id: string; name: string };
+
+export interface QbLinkStatus {
+  linked: boolean;
+  clientHasParent: boolean;
+  clientName: string | null;
 }

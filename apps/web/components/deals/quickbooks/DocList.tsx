@@ -20,12 +20,14 @@ export function DocList({
   statuses,
   onSetStatus,
   onUseAsValue,
+  onOpen,
   emptyText,
 }: {
   docs: DealDoc[];
   statuses: string[];
   onSetStatus: (id: string, status: string) => void;
   onUseAsValue?: (id: string) => void;
+  onOpen?: (doc: DealDoc) => void;
   emptyText: string;
 }) {
   if (!docs.length) {
@@ -42,19 +44,21 @@ export function DocList({
         {docs.map((d) => (
           <Table.Tr key={d.id}>
             <Table.Td>
-              <Group gap={6}>
-                <Text size="sm" fw={500}>
-                  {d.docNumber ? `#${d.docNumber}` : 'Draft'}
+              <UnstyledButton onClick={() => onOpen?.(d)} style={{ cursor: onOpen ? 'pointer' : 'default' }}>
+                <Group gap={6}>
+                  <Text size="sm" fw={500}>
+                    {d.docNumber ? `#${d.docNumber}` : 'Draft'}
+                  </Text>
+                  {d.source === 'native' && (
+                    <Badge size="xs" variant="light" color="grape">
+                      local
+                    </Badge>
+                  )}
+                </Group>
+                <Text size="xs" c="dimmed">
+                  {new Date(d.createdAt).toLocaleDateString()} · {d.lines.length} item{d.lines.length === 1 ? '' : 's'}
                 </Text>
-                {d.source === 'native' && (
-                  <Badge size="xs" variant="light" color="grape">
-                    local
-                  </Badge>
-                )}
-              </Group>
-              <Text size="xs" c="dimmed">
-                {new Date(d.createdAt).toLocaleDateString()} · {d.lines.length} item{d.lines.length === 1 ? '' : 's'}
-              </Text>
+              </UnstyledButton>
             </Table.Td>
             <Table.Td ta="right">
               <Text size="sm" fw={600}>

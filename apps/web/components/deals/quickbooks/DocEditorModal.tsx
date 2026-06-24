@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActionIcon,
   Button,
   Group,
   Modal,
   NumberInput,
+  Select,
   Stack,
   Table,
   Text,
@@ -17,15 +18,16 @@ import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { Money } from '@/components/primitives/Money';
 import { ApiError } from '@/lib/api/client';
-import type { CreateDocInput } from '@/lib/api/types';
+import type { CreateDocInput, DealDoc, QbItem } from '@/lib/api/types';
 
 interface LineRow {
   description: string;
   quantity: number | string;
   unitPrice: number | string; // dollars in the form
+  itemId: string | null;
 }
 
-const blankLine = (): LineRow => ({ description: '', quantity: 1, unitPrice: 0 });
+const blankLine = (): LineRow => ({ description: '', quantity: 1, unitPrice: 0, itemId: null });
 
 export function DocEditorModal({
   opened,
@@ -33,6 +35,9 @@ export function DocEditorModal({
   title,
   currency = 'USD',
   loading,
+  items,
+  initial,
+  submitLabel = 'Create',
   onSubmit,
 }: {
   opened: boolean;
@@ -40,23 +45,49 @@ export function DocEditorModal({
   title: string;
   currency?: string;
   loading?: boolean;
+  items?: QbItem[]; // QBO products/services (omit for native estimates)
+  initial?: DealDoc | null; // prefill for editing
+  submitLabel?: string;
   onSubmit: (input: CreateDocInput) => Promise<unknown>;
 }) {
   const [txnDate, setTxnDate] = useState('');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<LineRow[]>([blankLine()]);
 
-  const reset = () => {
-    setTxnDate('');
-    setNotes('');
-    setLines([blankLine()]);
-  };
+  // (Re)initialise whenever the modal opens.
+  useEffect(() => {
+    if (!opened) return;
+    if (initial) {
+      setTxnDate(initial.txnDate?.slice(0, 10) ?? '');
+      setNotes(initial.notes ?? '');
+      setLines(
+        initial.lines.length
+          ? initial.lines.map((l) => ({
+              description: l.description,
+              quantity: l.quantity,
+              unitPrice: l.unitPrice / 100,
+              itemId: l.itemId,
+            }))
+          : [blankLine()],
+      );
+    } else {
+      setTxnDate('');
+      setNotes('');
+      setLines([blankLine()]);
+    }
+  }, [opened, initial]);
 
   const setLine = (i: number, patch: Partial<LineRow>) =>
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
 
   const cents = (l: LineRow) => Math.round(Number(l.quantity || 0) * Number(l.unitPrice || 0) * 100);
   const total = lines.reduce((sum, l) => sum + cents(l), 0);
+  const itemData = (items ?? []).map((i) => ({ value: i.id, label: i.name }));
+
+  const pickItem = (i: number, itemId: string | null) => {
+    const name = items?.find((it) => it.id === itemId)?.name;
+    setLine(i, { itemId, ...(name && !lines[i].description ? { description: name } : {}) });
+  };
 
   const submit = async () => {
     const clean = lines
@@ -65,6 +96,7 @@ export function DocEditorModal({
         description: l.description.trim(),
         quantity: Math.round(Number(l.quantity)),
         unitPrice: Math.round(Number(l.unitPrice || 0) * 100),
+        ...(l.itemId ? { itemId: l.itemId } : {}),
       }));
     if (!clean.length) {
       notifications.show({ message: 'Add at least one line item with a description', color: 'red' });
@@ -72,7 +104,6 @@ export function DocEditorModal({
     }
     try {
       await onSubmit({ txnDate: txnDate || undefined, notes: notes || undefined, lines: clean });
-      reset();
       onClose();
     } catch (e) {
       notifications.show({ message: e instanceof ApiError ? e.message : 'Could not save', color: 'red' });
@@ -80,17 +111,18 @@ export function DocEditorModal({
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title={title} size="lg" centered>
+    <Modal opened={opened} onClose={onClose} title={title} size="xl" centered>
       <Stack gap="sm">
         <TextInput type="date" label="Date" value={txnDate} onChange={(e) => setTxnDate(e.currentTarget.value)} />
 
         <Table verticalSpacing="xs" withRowBorders={false}>
           <Table.Thead>
             <Table.Tr>
+              {items && <Table.Th w={170}>Product / Service</Table.Th>}
               <Table.Th>Description</Table.Th>
-              <Table.Th w={80}>Qty</Table.Th>
-              <Table.Th w={130}>Unit price</Table.Th>
-              <Table.Th w={110} ta="right">
+              <Table.Th w={70}>Qty</Table.Th>
+              <Table.Th w={120}>Unit price</Table.Th>
+              <Table.Th w={100} ta="right">
                 Amount
               </Table.Th>
               <Table.Th w={36} />
@@ -99,6 +131,18 @@ export function DocEditorModal({
           <Table.Tbody>
             {lines.map((l, i) => (
               <Table.Tr key={i}>
+                {items && (
+                  <Table.Td>
+                    <Select
+                      placeholder="Select"
+                      data={itemData}
+                      value={l.itemId}
+                      onChange={(v) => pickItem(i, v)}
+                      searchable
+                      comboboxProps={{ withinPortal: true }}
+                    />
+                  </Table.Td>
+                )}
                 <Table.Td>
                   <TextInput
                     placeholder="Item or service"
@@ -164,7 +208,7 @@ export function DocEditorModal({
             Cancel
           </Button>
           <Button loading={loading} onClick={submit}>
-            Create
+            {submitLabel}
           </Button>
         </Group>
       </Stack>
