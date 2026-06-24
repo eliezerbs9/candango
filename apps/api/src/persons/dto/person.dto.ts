@@ -14,6 +14,10 @@ export class CreatePersonDto {
   phone?: string;
 
   @IsOptional()
+  @IsString()
+  address?: string;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   companyIds?: string[];
@@ -36,6 +40,10 @@ export class UpdatePersonDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
 
   @IsOptional()
   @IsArray()

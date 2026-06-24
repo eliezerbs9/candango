@@ -44,6 +44,7 @@ export default function PeoplePage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
   const [companyIds, setCompanyIds] = useState<string[]>([]);
   const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
 
@@ -52,6 +53,7 @@ export default function PeoplePage() {
     setName('');
     setEmail('');
     setPhone('');
+    setAddress('');
     setCompanyIds([]);
     setCustomFields({});
     ctl.open();
@@ -62,6 +64,7 @@ export default function PeoplePage() {
     setName(p.name);
     setEmail(p.email ?? '');
     setPhone(p.phone ?? '');
+    setAddress(p.address ?? '');
     setCompanyIds(p.companies.map((c) => c.id));
     setCustomFields(p.customFields ?? {});
     ctl.open();
@@ -112,6 +115,7 @@ export default function PeoplePage() {
       name: name.trim(),
       email: email || undefined,
       phone: phone || undefined,
+      address: address || undefined,
       companyIds,
       customFields,
     };
@@ -167,6 +171,7 @@ export default function PeoplePage() {
           <TextInput label="Name" required value={name} onChange={(e) => setName(e.currentTarget.value)} />
           <TextInput label="Email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
           <TextInput label="Phone" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} />
+          <TextInput label="Address" value={address} onChange={(e) => setAddress(e.currentTarget.value)} />
           <CreatableMultiSelect
             label="Companies"
             placeholder="Search or create companies"

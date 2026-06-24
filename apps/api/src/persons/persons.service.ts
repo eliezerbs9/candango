@@ -13,6 +13,7 @@ type PersonRow = {
   name: string;
   emails: Prisma.JsonValue;
   phones: Prisma.JsonValue;
+  address: string | null;
   customFields: Prisma.JsonValue;
   companyLinks: { company: { id: string; name: string } }[];
 };
@@ -25,6 +26,7 @@ function shape(p: PersonRow) {
     name: p.name,
     email: emails[0] ?? null,
     phone: phones[0] ?? null,
+    address: p.address ?? null,
     customFields: (p.customFields as Record<string, unknown>) ?? {},
     companies: p.companyLinks.map((l) => l.company),
   };
@@ -64,6 +66,7 @@ export class PersonsService {
         name: dto.name,
         emails: dto.email ? [dto.email] : [],
         phones: dto.phone ? [dto.phone] : [],
+        address: dto.address ?? null,
         customFields: (dto.customFields ?? {}) as Prisma.InputJsonValue,
         companyLinks: { create: companyIds.map((companyId) => ({ companyId })) },
       },
@@ -89,6 +92,7 @@ export class PersonsService {
     const data: Prisma.PersonUncheckedUpdateInput = { name: dto.name };
     if (dto.email !== undefined) data.emails = dto.email ? [dto.email] : [];
     if (dto.phone !== undefined) data.phones = dto.phone ? [dto.phone] : [];
+    if (dto.address !== undefined) data.address = dto.address || null;
     if (dto.customFields !== undefined) data.customFields = dto.customFields as Prisma.InputJsonValue;
     await this.prisma.person.update({ where: { id }, data });
 

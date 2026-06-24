@@ -64,7 +64,7 @@ export class DealsService {
   }
 
   async create(orgId: string, ownerUserId: string, dto: CreateDealDto) {
-    // Auto-fill Bill To from the company (payer) when not provided; Ship To (work site) stays empty.
+    // Auto-fill Bill To from the payer (company, else the primary person) when not provided; Ship To stays empty.
     let billTo = dto.billTo as Prisma.InputJsonValue | undefined;
     if (!billTo && dto.companyId) {
       const company = await this.prisma.company.findFirst({
@@ -73,6 +73,15 @@ export class DealsService {
       });
       if (company) {
         billTo = { name: company.name, ...(company.address ? { line1: company.address } : {}) };
+      }
+    }
+    if (!billTo && dto.primaryPersonId) {
+      const person = await this.prisma.person.findFirst({
+        where: { id: dto.primaryPersonId, orgId },
+        select: { name: true, address: true },
+      });
+      if (person) {
+        billTo = { name: person.name, ...(person.address ? { line1: person.address } : {}) };
       }
     }
     // Assign a human-readable per-tenant deal number from an atomic org counter.

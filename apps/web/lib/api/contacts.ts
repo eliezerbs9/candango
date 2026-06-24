@@ -10,6 +10,7 @@ export interface ApiPerson {
   name: string;
   email: string | null;
   phone: string | null;
+  address: string | null;
   companies: ContactRef[];
   customFields: Record<string, unknown>;
 }
@@ -28,6 +29,7 @@ export interface PersonBody {
   name: string;
   email?: string;
   phone?: string;
+  address?: string;
   companyIds?: string[];
   customFields?: Record<string, unknown>;
 }

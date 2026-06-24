@@ -235,6 +235,7 @@ model Person {
   name         String
   emails       Json     @default("[]") // [{ value, label }]
   phones       Json     @default("[]")
+  address      String?  // mirrors Company.address; used for QBO Bill To when a person is the deal's client
   ownerUserId  String?
   customFields Json     @default("{}")
   createdAt    DateTime @default(now())
