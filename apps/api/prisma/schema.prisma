@@ -52,8 +52,8 @@ model Organization {
   customFieldDefinitions CustomFieldDefinition[]
   quickbooksConnection QuickBooksConnection?
   quickbooksCustomerLinks QuickBooksCustomerLink[]
-  quickbooksEstimates  QuickBooksEstimate[]
-  quickbooksInvoices   QuickBooksInvoice[]
+  dealEstimates  DealEstimate[]
+  dealInvoices   DealInvoice[]
 }
 
 model User {
@@ -217,8 +217,8 @@ model Deal {
   notes        Note[]
   messages     Message[]
   stageEvents  DealStageEvent[]
-  qbEstimates  QuickBooksEstimate[]
-  qbInvoices   QuickBooksInvoice[]
+  estimates    DealEstimate[]
+  invoices     DealInvoice[]
 
   @@index([orgId, stageId])
   @@index([orgId, ownerUserId])
@@ -654,42 +654,90 @@ model QuickBooksCustomerLink {
   @@index([orgId])
 }
 
-// Mirror of QBO estimates for a deal's sub-customer. The is_latest row drives default deal value.
-model QuickBooksEstimate {
-  id           String   @id @default(cuid())
-  orgId        String
-  dealId       String
-  qbEstimateId String
-  docNumber    String?
-  totalAmount  Int      // cents
-  currency     String   @default("USD")
-  status       String?
-  txnDate      DateTime?
-  isLatest     Boolean  @default(false)
-  syncedAt     DateTime @default(now())
+// Estimates & invoices for a deal — line-item documents. `source` distinguishes
+// native (Candango-created, works offline) from quickbooks (created/edited via QBO).
+// Native + QBO docs coexist and are NOT synced to each other (see QuickBooks Integration).
+model DealEstimate {
+  id          String    @id @default(cuid())
+  orgId       String
+  dealId      String
+  source      String    @default("native") // native | quickbooks
+  status      String    @default("draft")  // draft | sent | accepted | rejected | closed
+  docNumber   String?
+  currency    String    @default("USD")
+  totalAmount Int       @default(0) // minor units (= sum of line amounts, or QBO TotalAmt)
+  txnDate     DateTime?
+  notes       String?
+  qbId        String?   // QBO Estimate.Id (null for native)
+  qbSyncToken String?   // QBO SyncToken (required for QBO updates)
+  qbSyncedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
 
-  organization Organization @relation(fields: [orgId], references: [id])
-  deal         Deal         @relation(fields: [dealId], references: [id])
+  organization Organization       @relation(fields: [orgId], references: [id])
+  deal         Deal               @relation(fields: [dealId], references: [id])
+  lines        DealEstimateLine[]
+  invoices     DealInvoice[]
 
-  @@unique([orgId, qbEstimateId])
+  @@unique([orgId, source, qbId])
   @@index([orgId, dealId])
 }
 
-// Invoices created in QBO when a deal is won (from selected estimates).
-model QuickBooksInvoice {
-  id                 String   @id @default(cuid())
-  orgId              String
-  dealId             String
-  qbInvoiceId        String
-  sourceQbEstimateId String?
-  docNumber          String?
-  totalAmount        Int      // cents
-  status             String?
-  syncedAt           DateTime @default(now())
+model DealEstimateLine {
+  id          String  @id @default(cuid())
+  estimateId  String
+  position    Int     @default(0)
+  description String
+  quantity    Int     @default(1)
+  unitPrice   Int     @default(0) // minor units
+  amount      Int     @default(0) // minor units (= quantity * unitPrice, server-computed)
+  qbLineId    String?
 
-  organization Organization @relation(fields: [orgId], references: [id])
-  deal         Deal         @relation(fields: [dealId], references: [id])
+  estimate DealEstimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
 
-  @@unique([orgId, qbInvoiceId])
+  @@index([estimateId])
+}
+
+model DealInvoice {
+  id               String    @id @default(cuid())
+  orgId            String
+  dealId           String
+  source           String    @default("native") // native | quickbooks
+  status           String    @default("draft")  // draft | sent | paid | void
+  docNumber        String?
+  currency         String    @default("USD")
+  totalAmount      Int       @default(0)
+  txnDate          DateTime?
+  notes            String?
+  sourceEstimateId String?   // local DealEstimate this invoice was generated from
+  qbId             String?
+  qbSyncToken      String?
+  qbSyncedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  organization   Organization      @relation(fields: [orgId], references: [id])
+  deal           Deal              @relation(fields: [dealId], references: [id])
+  sourceEstimate DealEstimate?     @relation(fields: [sourceEstimateId], references: [id])
+  lines          DealInvoiceLine[]
+
+  @@unique([orgId, source, qbId])
   @@index([orgId, dealId])
+}
+
+model DealInvoiceLine {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  position    Int     @default(0)
+  description String
+  quantity    Int     @default(1)
+  unitPrice   Int     @default(0)
+  amount      Int     @default(0)
+  qbLineId    String?
+
+  invoice DealInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
 }
