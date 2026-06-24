@@ -90,15 +90,15 @@ export class GmailSyncProcessor extends WorkerHost implements OnModuleInit {
     const ids = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean);
     if (!ids.length) return;
 
-    // Skip messages already stored for this user.
+    // Skip messages we've already captured AND labeled; re-fetch unlabeled ones to backfill labels.
     const existing = await this.prisma.message.findMany({
       where: { userId, providerMessageId: { in: ids } },
-      select: { providerMessageId: true },
+      select: { providerMessageId: true, labels: true },
     });
-    const seen = new Set(existing.map((m) => m.providerMessageId));
+    const labeled = new Set(existing.filter((m) => (m.labels?.length ?? 0) > 0).map((m) => m.providerMessageId));
 
     for (const id of ids) {
-      if (seen.has(id)) continue;
+      if (labeled.has(id)) continue;
       const full = await gmail.users.messages.get({
         userId: 'me',
         id,
@@ -118,7 +118,8 @@ export class GmailSyncProcessor extends WorkerHost implements OnModuleInit {
           ? new Date(Number(full.data.internalDate))
           : null;
 
-      const folder = deriveFolder(full.data.labelIds);
+      const labels = full.data.labelIds ?? [];
+      const folder = deriveFolder(labels);
       const others = direction === 'out' ? toAddresses : [fromAddress];
       const personId = others.map((e) => personByEmail.get(e)).find(Boolean) ?? null;
       const dealId = personId
@@ -144,11 +145,12 @@ export class GmailSyncProcessor extends WorkerHost implements OnModuleInit {
           subject: headers.get('subject') ?? null,
           snippet: full.data.snippet ?? null,
           folder,
+          labels,
           personId,
           dealId,
           sentAt,
         },
-        update: { personId, dealId, folder }, // refresh matching + folder (e.g. moved to trash)
+        update: { personId, dealId, folder, labels }, // refresh matching + folder/labels (e.g. moved to trash)
       });
     }
 

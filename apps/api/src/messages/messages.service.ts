@@ -43,6 +43,14 @@ interface ListFilters {
   cursor?: string;
 }
 
+// A message can be in several folders (Gmail labels) — e.g. a self-email is SENT + INBOX.
+const FOLDER_LABEL: Record<string, string> = {
+  inbox: 'INBOX',
+  sent: 'SENT',
+  trash: 'TRASH',
+  spam: 'SPAM',
+};
+
 @Injectable()
 export class MessagesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -50,12 +58,13 @@ export class MessagesService {
   /** Synced emails, newest first, cursor-paginated. Filter by deal, person, mailbox, or folder. */
   async list(orgId: string, filters: ListFilters) {
     const limit = Math.min(filters.limit ?? 25, 100);
+    const label = filters.folder ? FOLDER_LABEL[filters.folder] : undefined;
     const where: Prisma.MessageWhereInput = {
       orgId,
       dealId: filters.dealId,
       personId: filters.personId,
       userId: filters.userId,
-      folder: filters.folder,
+      ...(label ? { labels: { has: label } } : {}),
     };
     const rows = await this.prisma.message.findMany({
       where,
@@ -75,14 +84,15 @@ export class MessagesService {
     return shape(m);
   }
 
-  /** Folder counts for the current user's mailbox (for the screen's tabs). */
+  /** Folder counts for the current user's mailbox (by Gmail label, so multi-label messages count in each). */
   async folderCounts(orgId: string, userId: string) {
-    const grouped = await this.prisma.message.groupBy({
-      by: ['folder'],
-      where: { orgId, userId },
-      _count: { _all: true },
-    });
-    return Object.fromEntries(grouped.map((g) => [g.folder, g._count._all]));
+    const entries = await Promise.all(
+      Object.entries(FOLDER_LABEL).map(async ([folder, label]) => {
+        const count = await this.prisma.message.count({ where: { orgId, userId, labels: { has: label } } });
+        return [folder, count] as const;
+      }),
+    );
+    return Object.fromEntries(entries);
   }
 
   /** Send an email via Gmail and record it as an outbound (Sent) message. */
@@ -125,6 +135,7 @@ export class MessagesService {
         subject: dto.subject,
         snippet: dto.body.slice(0, 200),
         folder: 'sent',
+        labels: ['SENT'], // the next Gmail sync refreshes with the real labels (e.g. + INBOX for self-emails)
         personId,
         dealId: dto.dealId ?? null,
         sentAt: new Date(),

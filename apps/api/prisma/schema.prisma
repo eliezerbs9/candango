@@ -443,7 +443,8 @@ model Message {
   toAddresses       Json     @default("[]")
   subject           String?
   snippet           String?
-  folder            String   @default("inbox") // inbox | sent | trash | spam | other (from Gmail labels)
+  folder            String   @default("inbox") // primary folder hint (kept for display)
+  labels            String[] @default([]) // raw Gmail labelIds — a message can be in several folders (e.g. self-email = SENT+INBOX)
   personId          String?
   dealId            String?
   sentAt            DateTime?
