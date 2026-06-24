@@ -12,11 +12,13 @@ import {
   updateStage,
 } from './pipelines';
 import {
+  archiveDeal,
   createDeal,
   getDeal,
   getDeals,
   getStageHistory,
   loseDeal,
+  reopenDeal,
   updateDeal,
   winDeal,
   type DealFilters,
@@ -399,6 +401,7 @@ export function useWinDeal() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['deals'] });
       qc.invalidateQueries({ queryKey: ['deal'] });
+      qc.invalidateQueries({ queryKey: ['notes'] });
     },
   });
 }
@@ -425,6 +428,33 @@ export function useLoseDeal() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['deals'] });
       qc.invalidateQueries({ queryKey: ['deal'] });
+      qc.invalidateQueries({ queryKey: ['notes'] });
+    },
+  });
+}
+
+export function useReopenDeal() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => reopenDeal(token!, id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deals'] });
+      qc.invalidateQueries({ queryKey: ['deal'] });
+      qc.invalidateQueries({ queryKey: ['notes'] });
+    },
+  });
+}
+
+export function useArchiveDeal() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => archiveDeal(token!, id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deals'] });
+      qc.invalidateQueries({ queryKey: ['deal'] });
+      qc.invalidateQueries({ queryKey: ['notes'] });
     },
   });
 }

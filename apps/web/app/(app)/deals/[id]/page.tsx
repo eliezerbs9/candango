@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
   Anchor,
+  Badge,
   Button,
   Card,
   Center,
@@ -35,11 +36,13 @@ import {
   useCompanies,
   useCreateCompany,
   useCreatePerson,
+  useArchiveDeal,
   useDeal,
   useDealEstimates,
   useLoseDeal,
   usePersons,
   useQuickbooksStatus,
+  useReopenDeal,
   useUpdateDeal,
   useWinDeal,
 } from '@/lib/api/hooks';
@@ -65,6 +68,8 @@ export default function DealDetailPage() {
   const update = useUpdateDeal();
   const win = useWinDeal();
   const lose = useLoseDeal();
+  const reopen = useReopenDeal();
+  const archive = useArchiveDeal();
   const createCompany = useCreateCompany();
   const createPerson = useCreatePerson();
   const { data: qb } = useQuickbooksStatus();
@@ -146,6 +151,11 @@ export default function DealDetailPage() {
             <Text size="sm" c="dimmed">·</Text>
             <Text size="sm">{stageName}</Text>
             <StatusBadge status={deal.status} />
+            {deal.archivedAt && (
+              <Badge color="gray" variant="light">
+                Archived
+              </Badge>
+            )}
           </Group>
         </div>
         <Button variant="light" leftSection={<IconMail size={16} />} onClick={emailCtl.open}>
@@ -224,10 +234,10 @@ export default function DealDetailPage() {
                 Save changes
               </Button>
 
-              {deal.status === 'open' ? (
-                <>
-                  <Divider />
-                  <Group>
+              <Divider />
+              <Group>
+                {deal.status === 'open' && !deal.archivedAt && (
+                  <>
                     <Button
                       color="teal"
                       loading={win.isPending}
@@ -243,17 +253,22 @@ export default function DealDetailPage() {
                     >
                       Mark won
                     </Button>
-                    <Button
-                      color="red"
-                      variant="light"
-                      loading={lose.isPending}
-                      onClick={() => lose.mutate({ id: deal.id })}
-                    >
+                    <Button color="red" variant="light" loading={lose.isPending} onClick={() => lose.mutate({ id: deal.id })}>
                       Mark lost
                     </Button>
-                  </Group>
-                </>
-              ) : null}
+                  </>
+                )}
+                {(deal.status !== 'open' || deal.archivedAt) && (
+                  <Button variant="light" loading={reopen.isPending} onClick={() => reopen.mutate(deal.id, { onError: fail })}>
+                    Reopen
+                  </Button>
+                )}
+                {!deal.archivedAt && (
+                  <Button variant="default" loading={archive.isPending} onClick={() => archive.mutate(deal.id, { onError: fail })}>
+                    Archive
+                  </Button>
+                )}
+              </Group>
             </Stack>
           </Card>
         </Grid.Col>

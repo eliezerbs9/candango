@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button, Center, Group, Loader, Stack, Text } from '@mantine/core';
+import { Button, Center, Group, Loader, Stack, Switch, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconPlus } from '@tabler/icons-react';
 import { PageHeader } from '@/components/primitives/PageHeader';
@@ -14,7 +15,8 @@ import type { ApiDeal } from '@/lib/api/types';
 
 export default function DealsPage() {
   const router = useRouter();
-  const { data: deals = [], isLoading } = useDeals();
+  const [showArchived, setShowArchived] = useState(false);
+  const { data: deals = [], isLoading } = useDeals({ archived: showArchived });
   const { data: stages = [] } = useAllStages();
   const stageName = (id: string) => stages.find((s) => s.id === id)?.name ?? '—';
 
@@ -42,9 +44,16 @@ export default function DealsPage() {
         title="Deals"
         subtitle={`${deals.length} deal${deals.length === 1 ? '' : 's'}`}
         actions={
-          <Button leftSection={<IconPlus size={16} />} onClick={modalCtl.open}>
-            New deal
-          </Button>
+          <Group gap="sm">
+            <Switch
+              label="Archived"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.currentTarget.checked)}
+            />
+            <Button leftSection={<IconPlus size={16} />} onClick={modalCtl.open}>
+              New deal
+            </Button>
+          </Group>
         }
       />
 

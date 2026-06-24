@@ -37,6 +37,7 @@ export interface ApiDeal {
   billTo: Record<string, unknown> | null;
   qbSubcustomerId: string | null;
   refNumber: number | null;
+  archivedAt: string | null;
 }
 
 export type DocSource = 'native' | 'quickbooks';

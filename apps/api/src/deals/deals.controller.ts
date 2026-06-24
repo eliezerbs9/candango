@@ -29,8 +29,9 @@ export class DealsController {
     @Query('stage_id') stageId?: string,
     @Query('status') status?: string,
     @Query('owner_user_id') ownerUserId?: string,
+    @Query('archived') archived?: string,
   ) {
-    return this.svc.list(u.orgId, { pipelineId, stageId, status, ownerUserId });
+    return this.svc.list(u.orgId, { pipelineId, stageId, status, ownerUserId, archived: archived === 'true' });
   }
 
   @Post()
@@ -67,12 +68,24 @@ export class DealsController {
   @Post(':id/win')
   @Scopes('deals:write')
   win(@CurrentUser() u: AuthContext, @Param('id') id: string) {
-    return this.svc.win(u.orgId, id);
+    return this.svc.win(u.orgId, id, u.userId);
   }
 
   @Post(':id/lose')
   @Scopes('deals:write')
   lose(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() dto: LoseDealDto) {
-    return this.svc.lose(u.orgId, id, dto.lostReason);
+    return this.svc.lose(u.orgId, id, u.userId, dto.lostReason);
+  }
+
+  @Post(':id/reopen')
+  @Scopes('deals:write')
+  reopen(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.reopen(u.orgId, id, u.userId);
+  }
+
+  @Post(':id/archive')
+  @Scopes('deals:write')
+  archive(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.archive(u.orgId, id, u.userId);
   }
 }

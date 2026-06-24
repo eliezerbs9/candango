@@ -9,6 +9,7 @@ export interface DealFilters {
   stageId?: string;
   status?: string;
   ownerUserId?: string;
+  archived?: boolean;
 }
 
 @Injectable()
@@ -52,6 +53,7 @@ export class DealsService {
       where: {
         orgId,
         deletedAt: null,
+        archivedAt: filters.archived ? { not: null } : null, // active by default; archived view on request
         pipelineId: filters.pipelineId,
         stageId: filters.stageId,
         status: filters.status,
@@ -145,20 +147,48 @@ export class DealsService {
     this.emit(orgId, 'deal.deleted', { id });
   }
 
-  async win(orgId: string, id: string) {
+  /** System note on the deal timeline recording a lifecycle change. */
+  private logStatusNote(orgId: string, dealId: string, userId: string, body: string) {
+    return this.prisma.note.create({ data: { orgId, dealId, authorUserId: userId, body } });
+  }
+
+  async win(orgId: string, id: string, userId: string) {
     await this.get(orgId, id);
     const deal = await this.prisma.deal.update({ where: { id }, data: { status: 'won' } });
+    await this.logStatusNote(orgId, id, userId, '✅ Deal marked won');
     this.emit(orgId, 'deal.won', deal);
     return deal;
   }
 
-  async lose(orgId: string, id: string, lostReason?: string) {
+  async lose(orgId: string, id: string, userId: string, lostReason?: string) {
     await this.get(orgId, id);
     const deal = await this.prisma.deal.update({
       where: { id },
       data: { status: 'lost', lostReason: lostReason ?? null },
     });
+    await this.logStatusNote(orgId, id, userId, `🔴 Deal marked lost${lostReason ? `: ${lostReason}` : ''}`);
     this.emit(orgId, 'deal.lost', deal);
+    return deal;
+  }
+
+  /** Reopen a won/lost/archived deal back to open (clears archive + lost reason; resets rotting timer). */
+  async reopen(orgId: string, id: string, userId: string) {
+    await this.get(orgId, id);
+    const deal = await this.prisma.deal.update({
+      where: { id },
+      data: { status: 'open', lostReason: null, archivedAt: null, stageChangedAt: new Date() },
+    });
+    await this.logStatusNote(orgId, id, userId, '↩️ Deal reopened');
+    this.emit(orgId, 'deal.reopened', deal);
+    return deal;
+  }
+
+  /** Archive a deal: hidden from active views but kept (distinct from delete). */
+  async archive(orgId: string, id: string, userId: string) {
+    await this.get(orgId, id);
+    const deal = await this.prisma.deal.update({ where: { id }, data: { archivedAt: new Date() } });
+    await this.logStatusNote(orgId, id, userId, '📦 Deal archived');
+    this.emit(orgId, 'deal.archived', deal);
     return deal;
   }
 }

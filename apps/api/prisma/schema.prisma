@@ -204,6 +204,7 @@ model Deal {
   shipTo             Json?    // work/job-site address -> QBO ShipAddr
   billTo             Json?    // payer details -> QBO BillAddr
   valueOverridden    Boolean  @default(false) // when true, estimate sync won't overwrite value
+  archivedAt         DateTime? // archived = hidden from active board/list but kept (distinct from deletedAt)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   deletedAt          DateTime?
