@@ -6,24 +6,36 @@ import { format, getDay, parse, startOfWeek } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './calendar.css';
+import Link from 'next/link';
 import {
   ActionIcon,
+  Anchor,
   Badge,
   Button,
   Center,
   Checkbox,
   Group,
+  HoverCard,
   Loader,
   Paper,
   SegmentedControl,
   Stack,
   Text,
+  ThemeIcon,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconChevronLeft, IconChevronRight, IconMapPin, IconPlus, IconVideo } from '@tabler/icons-react';
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconCloudCheck,
+  IconCloudOff,
+  IconMapPin,
+  IconPlus,
+  IconVideo,
+} from '@tabler/icons-react';
 import { PageHeader } from '@/components/primitives/PageHeader';
 import { ActivityForm } from '@/components/activities/ActivityForm';
-import { useActivities, useCompleteActivity } from '@/lib/api/hooks';
+import { useActivities, useCompleteActivity, useGoogleStatus } from '@/lib/api/hooks';
 import type { ActivityType, ApiActivity } from '@/lib/api/activities';
 
 const localizer = dateFnsLocalizer({
@@ -89,6 +101,8 @@ function whenLabel(a: ApiActivity) {
 export default function ActivitiesPage() {
   const { data: items = [], isLoading } = useActivities({ assignee: 'me' });
   const complete = useCompleteActivity();
+  const gs = useGoogleStatus();
+  const calConnected = gs.data?.calendar?.status === 'connected';
   const [opened, ctl] = useDisclosure(false);
   const [editing, setEditing] = useState<ApiActivity | null>(null);
   const [mode, setMode] = useState<Mode>('month');
@@ -131,6 +145,28 @@ export default function ActivitiesPage() {
         subtitle="Calendar of your tasks, calls and meetings"
         actions={
           <Group>
+            <HoverCard width={250} shadow="md" position="bottom-end" withArrow openDelay={120}>
+              <HoverCard.Target>
+                <ThemeIcon variant="subtle" color={calConnected ? 'teal' : 'gray'} size="sm" style={{ cursor: 'help' }}>
+                  {calConnected ? <IconCloudCheck size={17} /> : <IconCloudOff size={17} />}
+                </ThemeIcon>
+              </HoverCard.Target>
+              <HoverCard.Dropdown>
+                {calConnected ? (
+                  <Text size="xs" c="dimmed">
+                    Synced two-way with your Google Calendar.
+                  </Text>
+                ) : (
+                  <Text size="xs" c="dimmed">
+                    Not synced to Google.{' '}
+                    <Anchor component={Link} href="/settings/integrations" size="xs">
+                      Connect
+                    </Anchor>{' '}
+                    to sync two-way. Activities still work here without it.
+                  </Text>
+                )}
+              </HoverCard.Dropdown>
+            </HoverCard>
             <SegmentedControl
               value={mode}
               onChange={(v) => setMode(v as Mode)}
