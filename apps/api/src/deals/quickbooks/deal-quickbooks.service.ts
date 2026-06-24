@@ -30,27 +30,32 @@ export class DealQuickbooksService {
   // --- Account linking ---
   async link(orgId: string, dealId: string, dto: LinkQuickbooksDto) {
     const deal = await this.requireDeal(orgId, dealId);
-    const clientType = deal.companyId ? 'company' : 'person';
-    const clientId = deal.companyId ?? deal.primaryPersonId;
-    if (!clientId) {
-      throw new BadRequestException('Add a company or primary contact to the deal before linking QuickBooks');
-    }
+    const clientType = deal.companyId ? 'company' : deal.primaryPersonId ? 'person' : null;
+    const clientId = deal.companyId ?? deal.primaryPersonId ?? null;
     const clientName = deal.company?.name ?? deal.primaryPerson?.name ?? deal.title;
 
     // Resolve the parent Customer: explicit id → existing link → create from the client.
     let parentCustomerId = dto.parentCustomerId ?? null;
     if (!parentCustomerId) {
+      if (!clientType || !clientId) {
+        throw new BadRequestException(
+          'Add a company or primary contact to the deal, or pick an existing QuickBooks customer to bill under',
+        );
+      }
       const existing = await this.prisma.quickBooksCustomerLink.findFirst({ where: { orgId, clientType, clientId } });
       if (existing) parentCustomerId = existing.qbCustomerId;
       else if (dto.createParent !== false) parentCustomerId = (await this.qbo.createCustomer(orgId, clientName)).id;
       else throw new BadRequestException('Choose an existing QuickBooks customer or allow creating one');
     }
 
-    await this.prisma.quickBooksCustomerLink.upsert({
-      where: { orgId_clientType_clientId: { orgId, clientType, clientId } },
-      create: { orgId, clientType, clientId, qbCustomerId: parentCustomerId },
-      update: { qbCustomerId: parentCustomerId },
-    });
+    // Remember the client → parent mapping so other deals of the same client reuse it.
+    if (clientType && clientId) {
+      await this.prisma.quickBooksCustomerLink.upsert({
+        where: { orgId_clientType_clientId: { orgId, clientType, clientId } },
+        create: { orgId, clientType, clientId, qbCustomerId: parentCustomerId },
+        update: { qbCustomerId: parentCustomerId },
+      });
+    }
 
     const sub = await this.qbo.createSubCustomer(orgId, {
       displayName: deal.title,

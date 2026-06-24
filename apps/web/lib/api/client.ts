@@ -31,8 +31,16 @@ export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}) as Record<string, unknown>);
-    const err = (body as { error?: { code?: string; message?: string } }).error ?? {};
-    throw new ApiError(res.status, err.code ?? 'error', err.message ?? res.statusText);
+    // Supports both our envelope ({ error: { code, message } }) and Nest's
+    // default ({ message, error, statusCode }, where message may be an array).
+    const envelope = (body as { error?: { code?: string; message?: string } }).error;
+    const nestMessage = (body as { message?: string | string[] }).message;
+    const message =
+      (Array.isArray(nestMessage) ? nestMessage.join(', ') : nestMessage) ||
+      envelope?.message ||
+      res.statusText;
+    const code = envelope?.code ?? 'error';
+    throw new ApiError(res.status, code, message);
   }
 
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
