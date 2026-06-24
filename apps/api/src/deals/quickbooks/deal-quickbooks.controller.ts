@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiAuthGuard } from '../../auth/api-auth.guard';
 import { Scopes } from '../../auth/scopes.decorator';
 import { CurrentUser, type AuthContext } from '../../auth/current-user.decorator';
@@ -90,6 +91,15 @@ export class DealQuickbooksController {
     return this.svc.sendEstimate(u.orgId, id, eid, dto.email);
   }
 
+  @Get('estimates/:eid/pdf')
+  @Scopes('deals:read')
+  async estimatePdf(@CurrentUser() u: AuthContext, @Param('id') id: string, @Param('eid') eid: string, @Res() res: Response) {
+    const pdf = await this.svc.docPdf(u.orgId, id, 'estimate', eid);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="estimate.pdf"');
+    res.send(pdf);
+  }
+
   // --- Invoices ---
   @Get('invoices')
   @Scopes('deals:read')
@@ -125,6 +135,15 @@ export class DealQuickbooksController {
   @Scopes('deals:write')
   sendInvoice(@CurrentUser() u: AuthContext, @Param('id') id: string, @Param('invid') invid: string, @Body() dto: SendDocDto) {
     return this.svc.sendInvoice(u.orgId, id, invid, dto.email);
+  }
+
+  @Get('invoices/:invid/pdf')
+  @Scopes('deals:read')
+  async invoicePdf(@CurrentUser() u: AuthContext, @Param('id') id: string, @Param('invid') invid: string, @Res() res: Response) {
+    const pdf = await this.svc.docPdf(u.orgId, id, 'invoice', invid);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="invoice.pdf"');
+    res.send(pdf);
   }
 
   @Patch('invoices/:invid/status')

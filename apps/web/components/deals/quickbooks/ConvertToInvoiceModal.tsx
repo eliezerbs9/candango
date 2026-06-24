@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Button, Group, List, Modal, Select, Stack, Text, TextInput, Textarea } from '@mantine/core';
+import { Button, Group, List, Modal, Stack, Text, TextInput, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { Money } from '@/components/primitives/Money';
 import { ApiError } from '@/lib/api/client';
@@ -26,15 +26,15 @@ export function ConvertToInvoiceModal({
   const convert = useConvertToInvoice(dealId);
   const [memo, setMemo] = useState('');
   const [txnDate, setTxnDate] = useState('');
-  const [status, setStatus] = useState<string>('draft');
 
+  // Prefill the memo from the (first selected) estimate's memo.
+  const sourceMemo = estimates.find((e) => e.notes)?.notes ?? '';
   useEffect(() => {
     if (opened) {
-      setMemo('');
+      setMemo(sourceMemo);
       setTxnDate('');
-      setStatus('draft');
     }
-  }, [opened]);
+  }, [opened, sourceMemo]);
 
   const total = estimates.reduce((s, e) => s + e.totalAmount, 0);
 
@@ -44,7 +44,6 @@ export function ConvertToInvoiceModal({
         estimateIds: estimates.map((e) => e.id),
         memo: memo || undefined,
         txnDate: txnDate || undefined,
-        status,
       });
       notifications.show({ message: 'Invoice created from estimate(s)', color: 'green' });
       onConverted();
@@ -75,16 +74,7 @@ export function ConvertToInvoiceModal({
           Invoice total: <Money value={total} currency={currency} />
         </Text>
 
-        <Group grow>
-          <TextInput type="date" label="Invoice date" value={txnDate} onChange={(e) => setTxnDate(e.currentTarget.value)} />
-          <Select
-            label="Status"
-            data={['draft', 'sent', 'paid', 'void']}
-            value={status}
-            onChange={(v) => setStatus(v ?? 'draft')}
-            allowDeselect={false}
-          />
-        </Group>
+        <TextInput type="date" label="Invoice date" value={txnDate} onChange={(e) => setTxnDate(e.currentTarget.value)} />
         <Textarea
           label="Memo"
           description="Shown on the invoice in QuickBooks"

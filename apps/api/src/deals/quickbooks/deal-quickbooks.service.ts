@@ -238,6 +238,17 @@ export class DealQuickbooksService {
     return this.recomputeDealValue(orgId, dealId);
   }
 
+  /** The official QuickBooks PDF for a doc (only for QBO-synced docs). */
+  async docPdf(orgId: string, dealId: string, kind: 'estimate' | 'invoice', docId: string): Promise<Buffer> {
+    const doc =
+      kind === 'estimate'
+        ? await this.prisma.dealEstimate.findFirst({ where: { id: docId, orgId, dealId } })
+        : await this.prisma.dealInvoice.findFirst({ where: { id: docId, orgId, dealId } });
+    if (!doc) throw new NotFoundException('Document not found');
+    if (!doc.qbId) throw new BadRequestException('This document is not in QuickBooks');
+    return this.qbo.getDocPdf(orgId, kind, doc.qbId);
+  }
+
   /** Mark/unmark invoices for the deal value (default included), then recompute. */
   async includeInvoicesInValue(orgId: string, dealId: string, invoiceIds: string[], include: boolean) {
     await this.requireDeal(orgId, dealId);

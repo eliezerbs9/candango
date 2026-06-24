@@ -9,14 +9,14 @@ import type { DealDoc } from '@/lib/api/types';
 
 export function SendDocModal({
   dealId,
-  doc,
+  docs,
   kind,
   opened,
   onClose,
   onSent,
 }: {
   dealId: string;
-  doc: DealDoc | null;
+  docs: DealDoc[];
   kind: 'estimate' | 'invoice';
   opened: boolean;
   onClose: () => void;
@@ -29,12 +29,12 @@ export function SendDocModal({
     if (opened) setEmail('');
   }, [opened]);
 
-  if (!doc) return null;
+  if (!docs.length) return null;
 
   const submit = async () => {
     try {
-      await send.mutateAsync({ kind, docId: doc.id, email: email || undefined });
-      notifications.show({ message: `${kind === 'invoice' ? 'Invoice' : 'Estimate'} sent`, color: 'green' });
+      for (const d of docs) await send.mutateAsync({ kind, docId: d.id, email: email || undefined });
+      notifications.show({ message: `${docs.length} ${kind}${docs.length > 1 ? 's' : ''} sent`, color: 'green' });
       onSent();
       onClose();
     } catch (e) {
@@ -43,11 +43,11 @@ export function SendDocModal({
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title={`Send ${kind}`} centered>
+    <Modal opened={opened} onClose={onClose} title={`Send ${docs.length > 1 ? `${docs.length} ${kind}s` : kind}`} centered>
       <Stack gap="sm">
         <Text size="sm" c="dimmed">
-          QuickBooks will email this {kind} to the customer. Leave the address blank to use the customer&apos;s email
-          on file.
+          QuickBooks will email {docs.length > 1 ? `these ${docs.length} ${kind}s` : `this ${kind}`} to the customer.
+          Leave the address blank to use the customer&apos;s email on file.
         </Text>
         <TextInput
           label="Send to (optional)"

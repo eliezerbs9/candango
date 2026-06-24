@@ -11,12 +11,14 @@ export function DocViewModal({
   opened,
   onClose,
   onEdit,
+  onPrint,
 }: {
   doc: DealDoc | null;
   kind: 'Estimate' | 'Invoice';
   opened: boolean;
   onClose: () => void;
   onEdit?: () => void;
+  onPrint?: () => void;
 }) {
   if (!doc) return null;
   return (
@@ -105,13 +107,11 @@ export function DocViewModal({
         )}
 
         <Group justify="flex-end" mt="xs">
-          <Button
-            variant="default"
-            leftSection={<IconPrinter size={16} />}
-            onClick={() => window.open(`/print/${kind.toLowerCase()}/${doc.dealId}/${doc.id}`, '_blank')}
-          >
-            Print
-          </Button>
+          {onPrint && (
+            <Button variant="default" leftSection={<IconPrinter size={16} />} onClick={onPrint}>
+              View / print
+            </Button>
+          )}
           {onEdit && (
             <Button variant="light" leftSection={<IconPencil size={16} />} onClick={onEdit}>
               Edit

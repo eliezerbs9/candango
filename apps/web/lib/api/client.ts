@@ -45,3 +45,12 @@ export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<
 
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
 }
+
+/** Fetch a binary response (e.g. a PDF) with the bearer token. */
+export async function apiFetchBlob(path: string, opts: { token?: string } = {}): Promise<Blob> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: { ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}) },
+  });
+  if (!res.ok) throw new ApiError(res.status, 'error', 'Failed to load document');
+  return res.blob();
+}

@@ -1,5 +1,10 @@
-import { apiFetch } from './client';
+import { apiFetch, apiFetchBlob } from './client';
 import type { ConvertToInvoiceInput, CreateDocInput, DealDoc, QbCustomer, QbItem, QbLinkStatus } from './types';
+
+export function fetchDocPdf(token: string, dealId: string, kind: 'estimate' | 'invoice', docId: string) {
+  const path = kind === 'invoice' ? `invoices/${docId}/pdf` : `estimates/${docId}/pdf`;
+  return apiFetchBlob(`/deals/${dealId}/${path}`, { token });
+}
 
 export interface LinkAccountInput {
   parentCustomerId?: string;

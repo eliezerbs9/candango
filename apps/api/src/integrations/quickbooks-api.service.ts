@@ -336,6 +336,18 @@ export class QuickbooksApiService {
     return this.listDocs(orgId, 'Invoice', customerId);
   }
 
+  /** Fetch the official QuickBooks PDF for an estimate/invoice. */
+  async getDocPdf(orgId: string, resource: 'estimate' | 'invoice', qbId: string): Promise<Buffer> {
+    const { accessToken, realmId } = await this.authContext(orgId);
+    const url = `${this.baseUrl()}/v3/company/${realmId}/${resource}/${qbId}/pdf?minorversion=${MINOR_VERSION}`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/pdf' },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) throw new BadRequestException(`QuickBooks PDF unavailable (${res.status})`);
+    return Buffer.from(await res.arrayBuffer());
+  }
+
   /** Email a doc to the customer via QuickBooks (uses the customer's email on file unless `email` is given). */
   async sendDoc(orgId: string, resource: 'estimate' | 'invoice', qbId: string, email?: string): Promise<NormalizedDoc> {
     const path = email ? `${resource}/${qbId}/send?sendTo=${encodeURIComponent(email)}` : `${resource}/${qbId}/send`;
