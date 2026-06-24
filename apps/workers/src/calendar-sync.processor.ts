@@ -1,12 +1,17 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
+import { OnModuleInit } from '@nestjs/common';
+import { Job, Queue } from 'bullmq';
 import { Prisma } from '@prisma/client';
+import type { calendar_v3 } from 'googleapis';
 import { PrismaService } from './prisma.service';
 import { calendarFor, tasksFor } from './google.util';
 
 type CalendarSyncJob =
   | { op: 'upsert'; activityId: string }
   | { op: 'delete'; userId: string; kind: 'event' | 'task'; externalId: string };
+
+const INBOUND_POLL_MS = 5 * 60 * 1000;
+const INITIAL_WINDOW_MS = 30 * 24 * 60 * 60 * 1000; // first inbound sync looks back 30 days
 
 const firstEmail = (emails: Prisma.JsonValue): string | null => ((emails as string[]) ?? [])[0] ?? null;
 
@@ -16,9 +21,17 @@ const firstEmail = (emails: Prisma.JsonValue): string | null => ((emails as stri
  * isn't connected; throws to trigger BullMQ retries.
  */
 @Processor('calendar-sync')
-export class CalendarSyncProcessor extends WorkerHost {
-  constructor(private readonly prisma: PrismaService) {
+export class CalendarSyncProcessor extends WorkerHost implements OnModuleInit {
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectQueue('calendar-sync') private readonly queue: Queue,
+  ) {
     super();
+  }
+
+  async onModuleInit() {
+    // Periodic inbound reconcile across all connected calendars (push channels would need a public URL).
+    await this.queue.add('pull-all', {}, { repeat: { every: INBOUND_POLL_MS }, removeOnComplete: true, removeOnFail: true });
   }
 
   private async connectionFor(userId: string) {
@@ -26,23 +39,39 @@ export class CalendarSyncProcessor extends WorkerHost {
     return conn && conn.status === 'connected' && conn.refreshToken ? conn : null;
   }
 
-  async process(job: Job<CalendarSyncJob>): Promise<void> {
-    if (job.data.op === 'delete') {
-      const conn = await this.connectionFor(job.data.userId);
+  async process(job: Job): Promise<void> {
+    // --- Inbound poll (Google → Candango) ---
+    if (job.name === 'pull-all') {
+      const conns = await this.prisma.calendarConnection.findMany({
+        where: { status: 'connected' },
+        select: { userId: true },
+      });
+      for (const c of conns) await this.queue.add('pull-user', { userId: c.userId });
+      return;
+    }
+    if (job.name === 'pull-user') {
+      await this.pullCalendar((job.data as { userId: string }).userId);
+      return;
+    }
+
+    // --- Outbound (Candango → Google) ---
+    const data = job.data as CalendarSyncJob;
+    if (data.op === 'delete') {
+      const conn = await this.connectionFor(data.userId);
       if (!conn) return;
-      if (job.data.kind === 'event') {
+      if (data.kind === 'event') {
         await calendarFor(conn)
-          .events.delete({ calendarId: 'primary', eventId: job.data.externalId, sendUpdates: 'none' })
+          .events.delete({ calendarId: 'primary', eventId: data.externalId, sendUpdates: 'none' })
           .catch(() => undefined);
       } else {
         await tasksFor(conn)
-          .tasks.delete({ tasklist: '@default', task: job.data.externalId })
+          .tasks.delete({ tasklist: '@default', task: data.externalId })
           .catch(() => undefined);
       }
       return;
     }
 
-    const { activityId } = job.data;
+    const { activityId } = data;
     const activity = await this.prisma.activity.findUnique({
       where: { id: activityId },
       include: {
@@ -150,5 +179,157 @@ export class CalendarSyncProcessor extends WorkerHost {
         await this.prisma.activity.update({ where: { id: activity.id }, data: { googleTaskId: res.data.id } });
       }
     }
+  }
+
+  // --- Inbound: pull Google Calendar changes into Candango (incremental via syncToken) ---
+  private async pullCalendar(userId: string): Promise<void> {
+    const conn = await this.connectionFor(userId);
+    if (!conn) return;
+    const cal = calendarFor(conn);
+
+    // Contact email → personId map, to import only events that involve a known contact.
+    const persons = await this.prisma.person.findMany({
+      where: { orgId: conn.orgId, deletedAt: null },
+      select: { id: true, emails: true },
+    });
+    const personByEmail = new Map<string, string>();
+    for (const p of persons) for (const e of (p.emails as string[]) ?? []) personByEmail.set(e.toLowerCase(), p.id);
+
+    let syncToken = conn.syncToken ?? undefined;
+    let pageToken: string | undefined;
+    let nextSyncToken: string | undefined;
+
+    for (;;) {
+      const params: calendar_v3.Params$Resource$Events$List = {
+        calendarId: 'primary',
+        singleEvents: true,
+        showDeleted: true,
+        maxResults: 250,
+        pageToken,
+      };
+      if (syncToken) params.syncToken = syncToken;
+      else params.timeMin = new Date(Date.now() - INITIAL_WINDOW_MS).toISOString();
+
+      let res;
+      try {
+        res = await cal.events.list(params);
+      } catch (e) {
+        const status = (e as { code?: number; response?: { status?: number } }).code ?? (e as { response?: { status?: number } }).response?.status;
+        if (status === 410 && syncToken) {
+          // Stored syncToken expired — drop it and do a bounded full resync.
+          syncToken = undefined;
+          pageToken = undefined;
+          await this.prisma.calendarConnection.update({ where: { userId }, data: { syncToken: null } });
+          continue;
+        }
+        throw e;
+      }
+
+      for (const ev of res.data.items ?? []) await this.applyInbound(conn, personByEmail, ev);
+      if (res.data.nextSyncToken) nextSyncToken = res.data.nextSyncToken;
+      pageToken = res.data.nextPageToken ?? undefined;
+      if (!pageToken) break;
+    }
+
+    if (nextSyncToken) {
+      await this.prisma.calendarConnection.update({ where: { userId }, data: { syncToken: nextSyncToken } });
+    }
+  }
+
+  private async applyInbound(
+    conn: { orgId: string; userId: string },
+    personByEmail: Map<string, string>,
+    ev: calendar_v3.Schema$Event,
+  ): Promise<void> {
+    const externalId = ev.id;
+    if (!externalId) return;
+    const link = await this.prisma.calendarEvent.findFirst({
+      where: { orgId: conn.orgId, externalEventId: externalId },
+    });
+
+    // Cancelled/deleted in Google → remove the linked activity (if any).
+    if (ev.status === 'cancelled') {
+      if (link) {
+        await this.prisma.calendarEvent.delete({ where: { id: link.id } }).catch(() => undefined);
+        await this.prisma.activity.delete({ where: { id: link.activityId } }).catch(() => undefined);
+      }
+      return;
+    }
+
+    const startRaw = ev.start?.dateTime ?? ev.start?.date ?? null;
+    const endRaw = ev.end?.dateTime ?? ev.end?.date ?? null;
+    const startAt = startRaw ? new Date(startRaw) : null;
+    const endAt = endRaw ? new Date(endRaw) : null;
+    const subject = ev.summary ?? '(no title)';
+    const location = ev.location ?? null;
+    const conferenceUrl = ev.hangoutLink ?? null;
+
+    // Known event → reflect Google-side edits onto the linked activity.
+    if (link) {
+      // Only overwrite conferenceUrl when Google actually has a link — outbound events don't
+      // round-trip our manual join URL, so we mustn't null it out.
+      const data: Prisma.ActivityUncheckedUpdateInput = { subject, startAt, endAt, location };
+      if (conferenceUrl) data.conferenceUrl = conferenceUrl;
+      await this.prisma.activity.update({ where: { id: link.activityId }, data }).catch(() => undefined);
+      await this.prisma.calendarEvent.update({
+        where: { id: link.id },
+        data: { etag: ev.etag ?? null, lastSyncedAt: new Date() },
+      });
+      return;
+    }
+
+    // New external event → import only when a known contact is an attendee (skip personal events).
+    const emails = (ev.attendees ?? [])
+      .map((a) => a.email?.toLowerCase())
+      .filter((e): e is string => !!e);
+    const personId = emails.map((e) => personByEmail.get(e)).find(Boolean) ?? null;
+    if (!personId || !startAt) return;
+
+    const dealId = await this.resolveDeal(conn.orgId, personId);
+    await this.prisma.activity.create({
+      data: {
+        orgId: conn.orgId,
+        type: 'meeting',
+        subject,
+        startAt,
+        endAt,
+        location,
+        conferenceUrl,
+        locationType: conferenceUrl ? 'video' : location ? 'in_person' : 'none',
+        assignedUserId: conn.userId,
+        personId,
+        dealId,
+        calendarEventId: externalId,
+        participants: { create: [{ personId }] },
+        calendarEvent: {
+          create: {
+            orgId: conn.orgId,
+            externalEventId: externalId,
+            etag: ev.etag ?? null,
+            lastSyncedAt: new Date(),
+            syncDirection: 'inbound',
+          },
+        },
+      },
+    });
+  }
+
+  /** Newest open deal the contact is tied to (primary, participant, or via their company). */
+  private async resolveDeal(orgId: string, personId: string): Promise<string | null> {
+    const deal = await this.prisma.deal.findFirst({
+      where: {
+        orgId,
+        status: 'open',
+        deletedAt: null,
+        OR: [
+          { primaryPersonId: personId },
+          { participants: { some: { personId } } },
+          { company: { contacts: { some: { personId } } } },
+        ],
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true },
+    });
+    return deal?.id ?? null;
   }
 }
