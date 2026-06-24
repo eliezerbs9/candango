@@ -718,6 +718,7 @@ model DealInvoice {
   notes            String?
   sourceEstimateId String?   // primary local DealEstimate this invoice was generated from
   sourceEstimateIds String[] @default([]) // all local estimates combined into this invoice
+  includeInValue   Boolean  @default(true) // invoices count toward deal value by default; can be unmarked
   qbId             String?
   qbSyncToken      String?
   qbSyncedAt       DateTime?

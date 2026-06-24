@@ -74,6 +74,7 @@ export interface ConvertToInvoiceInput {
   estimateIds: string[];
   memo?: string;
   txnDate?: string;
+  status?: string;
 }
 
 export interface DocLineInput {

@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsEmail,
   IsIn,
   IsInt,
   IsOptional,
@@ -12,6 +13,8 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+
+const INVOICE_STATUSES = ['draft', 'sent', 'paid', 'void'];
 
 export class LinkQuickbooksDto {
   /** Nest the deal's sub-account under an existing QBO Customer (its id). */
@@ -77,6 +80,26 @@ export class ConvertToInvoiceDto {
   @IsOptional()
   @IsDateString()
   txnDate?: string;
+
+  @IsOptional()
+  @IsIn(INVOICE_STATUSES)
+  status?: string;
+}
+
+export class SendDocDto {
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+}
+
+export class IncludeInvoicesInValueDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  invoiceIds!: string[];
+
+  @IsBoolean()
+  include!: boolean;
 }
 
 export class IncludeInValueDto {

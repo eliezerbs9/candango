@@ -10,6 +10,7 @@ import {
   useDealEstimates,
   useDealInvoices,
   useIncludeEstimatesInValue,
+  useIncludeInvoicesInValue,
   useQbItems,
   useQuickbooksStatus,
   useSetEstimateStatus,
@@ -24,6 +25,8 @@ import { DocEditorModal } from './DocEditorModal';
 import { DocViewModal } from './DocViewModal';
 import { LinkAccountModal } from './LinkAccountModal';
 import { ConvertToInvoiceModal } from './ConvertToInvoiceModal';
+import { SendDocModal } from './SendDocModal';
+import { MoveStageModal } from './MoveStageModal';
 
 const ESTIMATE_STATUSES = ['draft', 'sent', 'accepted', 'rejected', 'closed'];
 const INVOICE_STATUSES = ['draft', 'sent', 'paid', 'void'];
@@ -55,11 +58,14 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const setEstStatus = useSetEstimateStatus(deal.id);
   const setInvStatus = useSetInvoiceStatus(deal.id);
   const includeInValue = useIncludeEstimatesInValue(deal.id);
+  const includeInvoices = useIncludeInvoicesInValue(deal.id);
 
   const [estEditing, setEstEditing] = useState<DealDoc | null>(null);
   const [invEditing, setInvEditing] = useState<DealDoc | null>(null);
   const [view, setView] = useState<{ doc: DealDoc; kind: 'Estimate' | 'Invoice' } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sendTarget, setSendTarget] = useState<{ doc: DealDoc; kind: 'estimate' | 'invoice' } | null>(null);
+  const [stageOpen, stageCtl] = useDisclosure(false);
 
   const itemList = mode === 'qbo' ? items.data : undefined;
   const estimateDocs = estimates.data ?? [];
@@ -169,6 +175,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
           onSetStatus={(id, status) => setEstStatus.mutate({ id, status }, { onError: fail })}
           onToggleInValue={(id, include) => setInValue([id], include)}
           onPrint={(doc) => openPrint('estimate', doc)}
+          onSend={mode === 'qbo' ? (doc) => setSendTarget({ doc, kind: 'estimate' }) : undefined}
           onOpen={(doc) => setView({ doc, kind: 'Estimate' })}
           selectedIds={canSelect ? selected : undefined}
           onToggleSelect={canSelect ? toggleSelect : undefined}
@@ -188,10 +195,13 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
             <DocList
               docs={invoices.data ?? []}
               statuses={INVOICE_STATUSES}
-              onSetStatus={(id, status) => setInvStatus.mutate({ id, status }, { onError: fail })}
+              onSetStatus={(id, status) =>
+                setInvStatus.mutate({ id, status }, { onSuccess: () => stageCtl.open(), onError: fail })
+              }
+              onToggleInValue={(id, include) => includeInvoices.mutate({ invoiceIds: [id], include }, { onError: fail })}
               onPrint={(doc) => openPrint('invoice', doc)}
+              onSend={(doc) => setSendTarget({ doc, kind: 'invoice' })}
               onOpen={(doc) => setView({ doc, kind: 'Invoice' })}
-              alwaysInValue
               emptyText="No invoices yet — select estimate(s) above and convert them."
             />
           </>
@@ -221,6 +231,25 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         opened={!!view}
         onClose={() => setView(null)}
         onEdit={editFromView}
+      />
+
+      <SendDocModal
+        dealId={deal.id}
+        doc={sendTarget?.doc ?? null}
+        kind={sendTarget?.kind ?? 'estimate'}
+        opened={!!sendTarget}
+        onClose={() => setSendTarget(null)}
+        onSent={() => {
+          if (sendTarget?.kind === 'invoice') stageCtl.open();
+        }}
+      />
+
+      <MoveStageModal
+        dealId={deal.id}
+        pipelineId={deal.pipelineId}
+        currentStageId={deal.stageId}
+        opened={stageOpen}
+        onClose={stageCtl.close}
       />
 
       <DocEditorModal

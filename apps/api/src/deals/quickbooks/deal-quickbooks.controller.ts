@@ -7,7 +7,9 @@ import {
   ConvertToInvoiceDto,
   CreateDocDto,
   IncludeInValueDto,
+  IncludeInvoicesInValueDto,
   LinkQuickbooksDto,
+  SendDocDto,
   UpdateDocStatusDto,
 } from './dto/quickbooks.dto';
 
@@ -82,6 +84,12 @@ export class DealQuickbooksController {
     return this.svc.includeEstimatesInValue(u.orgId, id, dto.estimateIds, dto.include);
   }
 
+  @Post('estimates/:eid/send')
+  @Scopes('deals:write')
+  sendEstimate(@CurrentUser() u: AuthContext, @Param('id') id: string, @Param('eid') eid: string, @Body() dto: SendDocDto) {
+    return this.svc.sendEstimate(u.orgId, id, eid, dto.email);
+  }
+
   // --- Invoices ---
   @Get('invoices')
   @Scopes('deals:read')
@@ -105,6 +113,18 @@ export class DealQuickbooksController {
     @Body() dto: CreateDocDto,
   ) {
     return this.svc.updateInvoice(u.orgId, id, invid, dto);
+  }
+
+  @Post('invoices/include-in-value')
+  @Scopes('deals:write')
+  includeInvoicesInValue(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() dto: IncludeInvoicesInValueDto) {
+    return this.svc.includeInvoicesInValue(u.orgId, id, dto.invoiceIds, dto.include);
+  }
+
+  @Post('invoices/:invid/send')
+  @Scopes('deals:write')
+  sendInvoice(@CurrentUser() u: AuthContext, @Param('id') id: string, @Param('invid') invid: string, @Body() dto: SendDocDto) {
+    return this.svc.sendInvoice(u.orgId, id, invid, dto.email);
   }
 
   @Patch('invoices/:invid/status')

@@ -58,6 +58,23 @@ export function includeEstimatesInValue(token: string, dealId: string, estimateI
   });
 }
 
+export function includeInvoicesInValue(token: string, dealId: string, invoiceIds: string[], include: boolean) {
+  return apiFetch<{ value: number }>(`/deals/${dealId}/invoices/include-in-value`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ invoiceIds, include }),
+  });
+}
+
+export function sendDealDoc(token: string, dealId: string, kind: 'estimate' | 'invoice', docId: string, email?: string) {
+  const path = kind === 'invoice' ? `invoices/${docId}/send` : `estimates/${docId}/send`;
+  return apiFetch<DealDoc>(`/deals/${dealId}/${path}`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ email }),
+  });
+}
+
 export function getDealInvoices(token: string, dealId: string) {
   return apiFetch<DealDoc[]>(`/deals/${dealId}/invoices`, { token });
 }

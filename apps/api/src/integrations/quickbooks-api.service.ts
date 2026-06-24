@@ -336,6 +336,13 @@ export class QuickbooksApiService {
     return this.listDocs(orgId, 'Invoice', customerId);
   }
 
+  /** Email a doc to the customer via QuickBooks (uses the customer's email on file unless `email` is given). */
+  async sendDoc(orgId: string, resource: 'estimate' | 'invoice', qbId: string, email?: string): Promise<NormalizedDoc> {
+    const path = email ? `${resource}/${qbId}/send?sendTo=${encodeURIComponent(email)}` : `${resource}/${qbId}/send`;
+    const r = await this.request(orgId, 'POST', path);
+    return this.normalizeDoc(resource === 'estimate' ? r.Estimate : r.Invoice);
+  }
+
   /** Sparse-update an estimate's TxnStatus (Pending|Accepted|Rejected|Closed). */
   async updateEstimateStatus(orgId: string, qbId: string, syncToken: string, txnStatus: string): Promise<NormalizedDoc> {
     const r = await this.request(orgId, 'POST', 'estimate', {

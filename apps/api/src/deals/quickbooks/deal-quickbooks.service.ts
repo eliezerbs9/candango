@@ -238,6 +238,43 @@ export class DealQuickbooksService {
     return this.recomputeDealValue(orgId, dealId);
   }
 
+  /** Mark/unmark invoices for the deal value (default included), then recompute. */
+  async includeInvoicesInValue(orgId: string, dealId: string, invoiceIds: string[], include: boolean) {
+    await this.requireDeal(orgId, dealId);
+    await this.prisma.dealInvoice.updateMany({
+      where: { id: { in: invoiceIds }, orgId, dealId },
+      data: { includeInValue: include },
+    });
+    return this.recomputeDealValue(orgId, dealId);
+  }
+
+  /** Email an estimate to the customer via QuickBooks and mark it sent. */
+  async sendEstimate(orgId: string, dealId: string, estimateId: string, email?: string) {
+    const est = await this.prisma.dealEstimate.findFirst({ where: { id: estimateId, orgId, dealId } });
+    if (!est?.qbId) throw new BadRequestException('Estimate is not in QuickBooks');
+    const doc = await this.qbo.sendDoc(orgId, 'estimate', est.qbId, email);
+    const row = await this.prisma.dealEstimate.update({
+      where: { id: estimateId },
+      data: { status: 'sent', qbSyncToken: doc.syncToken, qbSyncedAt: new Date() },
+      include: { lines: lineSelect },
+    });
+    return shapeDoc(row);
+  }
+
+  /** Email an invoice to the customer via QuickBooks and mark it sent. */
+  async sendInvoice(orgId: string, dealId: string, invoiceId: string, email?: string) {
+    const inv = await this.prisma.dealInvoice.findFirst({ where: { id: invoiceId, orgId, dealId } });
+    if (!inv?.qbId) throw new BadRequestException('Invoice is not in QuickBooks');
+    const doc = await this.qbo.sendDoc(orgId, 'invoice', inv.qbId, email);
+    const row = await this.prisma.dealInvoice.update({
+      where: { id: invoiceId },
+      data: { status: 'sent', qbSyncToken: doc.syncToken, qbSyncedAt: new Date() },
+      include: { lines: lineSelect },
+    });
+    await this.recomputeDealValue(orgId, dealId);
+    return shapeDoc(row);
+  }
+
   /**
    * Deal value = every non-void invoice (always — an invoice is a made sale) + every estimate
    * explicitly marked for value (excluding closed/rejected). Only overrides the value when there
@@ -246,7 +283,7 @@ export class DealQuickbooksService {
   async recomputeDealValue(orgId: string, dealId: string) {
     const [invoices, estimates] = await Promise.all([
       this.prisma.dealInvoice.findMany({
-        where: { orgId, dealId, deletedAt: null, status: { not: 'void' } },
+        where: { orgId, dealId, deletedAt: null, includeInValue: true, status: { not: 'void' } },
         select: { totalAmount: true },
       }),
       this.prisma.dealEstimate.findMany({
@@ -335,7 +372,7 @@ export class DealQuickbooksService {
         orgId,
         dealId,
         source: 'quickbooks',
-        status: 'sent',
+        status: dto.status ?? 'draft',
         docNumber: doc.docNumber,
         currency: deal.currency,
         totalAmount: doc.totalAmount,

@@ -1,0 +1,1 @@
+ALTER TABLE "DealInvoice" ADD COLUMN "includeInValue" BOOLEAN NOT NULL DEFAULT true;

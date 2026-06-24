@@ -1,7 +1,7 @@
 'use client';
 
 import { ActionIcon, Badge, Checkbox, Group, Menu, Table, Text, UnstyledButton } from '@mantine/core';
-import { IconChevronDown, IconCurrencyDollar, IconDots, IconPrinter, IconX } from '@tabler/icons-react';
+import { IconChevronDown, IconCurrencyDollar, IconDots, IconPrinter, IconSend, IconX } from '@tabler/icons-react';
 import { Money } from '@/components/primitives/Money';
 import type { DealDoc } from '@/lib/api/types';
 
@@ -21,10 +21,10 @@ export function DocList({
   onSetStatus,
   onToggleInValue,
   onPrint,
+  onSend,
   onOpen,
   selectedIds,
   onToggleSelect,
-  alwaysInValue,
   emptyText,
 }: {
   docs: DealDoc[];
@@ -32,10 +32,10 @@ export function DocList({
   onSetStatus: (id: string, status: string) => void;
   onToggleInValue?: (id: string, include: boolean) => void;
   onPrint?: (doc: DealDoc) => void;
+  onSend?: (doc: DealDoc) => void;
   onOpen?: (doc: DealDoc) => void;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
-  alwaysInValue?: boolean; // invoices always count toward the deal value
   emptyText: string;
 }) {
   if (!docs.length) {
@@ -50,7 +50,7 @@ export function DocList({
     <Table verticalSpacing="xs" highlightOnHover>
       <Table.Tbody>
         {docs.map((d) => {
-          const inValue = alwaysInValue || d.includeInValue;
+          const inValue = d.includeInValue;
           return (
             <Table.Tr key={d.id}>
               {onToggleSelect && (
@@ -113,7 +113,7 @@ export function DocList({
                       ))}
                     </Menu.Dropdown>
                   </Menu>
-                  {(onToggleInValue || onPrint) && (
+                  {(onToggleInValue || onPrint || onSend) && (
                     <Menu position="bottom-end" withinPortal>
                       <Menu.Target>
                         <ActionIcon variant="subtle" color="gray">
@@ -121,6 +121,11 @@ export function DocList({
                         </ActionIcon>
                       </Menu.Target>
                       <Menu.Dropdown>
+                        {onSend && (
+                          <Menu.Item leftSection={<IconSend size={14} />} onClick={() => onSend(d)}>
+                            Send to customer
+                          </Menu.Item>
+                        )}
                         {onToggleInValue &&
                           (d.includeInValue ? (
                             <Menu.Item leftSection={<IconX size={14} />} onClick={() => onToggleInValue(d.id, false)}>

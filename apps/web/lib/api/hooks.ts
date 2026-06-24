@@ -103,6 +103,8 @@ import {
   updateDealEstimate,
   updateDealInvoice,
   includeEstimatesInValue,
+  includeInvoicesInValue,
+  sendDealDoc,
   type LinkAccountInput,
 } from './quickbooks';
 import type { CustomFieldType } from './customFields';
@@ -954,6 +956,32 @@ export function useIncludeEstimatesInValue(dealId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['deal', dealId] });
       qc.invalidateQueries({ queryKey: ['estimates', dealId] });
+    },
+  });
+}
+
+export function useIncludeInvoicesInValue(dealId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ invoiceIds, include }: { invoiceIds: string[]; include: boolean }) =>
+      includeInvoicesInValue(token!, dealId, invoiceIds, include),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deal', dealId] });
+      qc.invalidateQueries({ queryKey: ['invoices', dealId] });
+    },
+  });
+}
+
+export function useSendDoc(dealId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ kind, docId, email }: { kind: 'estimate' | 'invoice'; docId: string; email?: string }) =>
+      sendDealDoc(token!, dealId, kind, docId, email),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: [vars.kind === 'invoice' ? 'invoices' : 'estimates', dealId] });
+      if (vars.kind === 'invoice') qc.invalidateQueries({ queryKey: ['deal', dealId] });
     },
   });
 }
