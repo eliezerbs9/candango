@@ -115,9 +115,52 @@ export class BillingService {
 
   /** Read-only lock: trial elapsed (or dunning exhausted) without an active paid subscription. */
   private isLocked(sub: SubRow) {
-    if (sub.status === 'active') return false;
-    if (sub.status === 'trialing') return !!sub.trialEndsAt && sub.trialEndsAt.getTime() < Date.now();
-    return sub.status === 'past_due' || sub.status === 'canceled' || sub.status === 'locked';
+    return this.isLockedStatus(sub.status, sub.trialEndsAt);
+  }
+
+  private isLockedStatus(status: string, trialEndsAt: Date | null) {
+    if (status === 'active') return false;
+    if (status === 'trialing') return !!trialEndsAt && trialEndsAt.getTime() < Date.now();
+    return status === 'past_due' || status === 'canceled' || status === 'locked';
+  }
+
+  /**
+   * Cheap lock check for the write guard (FR-10.5) — never creates a Stripe customer.
+   * Falls back to the implicit 7-day trial from org creation when no subscription row exists yet.
+   */
+  async isOrgLocked(orgId: string): Promise<boolean> {
+    const sub = await this.prisma.subscription.findUnique({
+      where: { orgId },
+      select: { status: true, trialEndsAt: true },
+    });
+    if (sub) return this.isLockedStatus(sub.status, sub.trialEndsAt);
+    const org = await this.prisma.organization.findUnique({ where: { id: orgId }, select: { createdAt: true } });
+    if (!org) return false;
+    return org.createdAt.getTime() + TRIAL_MS < Date.now();
+  }
+
+  /**
+   * Keep the Stripe subscription quantity aligned with the active-seat count (FR-10.7).
+   * Called fire-and-forget after members are invited/deactivated/reactivated; never throws.
+   */
+  async syncSeats(orgId: string): Promise<void> {
+    const sub = await this.prisma.subscription.findUnique({ where: { orgId } });
+    if (!sub) return;
+    const seats = await this.activeSeats(orgId);
+    if (sub.stripeSubscriptionId && this.stripe.enabled) {
+      const stripe = this.stripe.require();
+      const remote = await stripe.subscriptions.retrieve(sub.stripeSubscriptionId);
+      const item = remote.items.data[0];
+      if (item && item.quantity !== seats) {
+        await stripe.subscriptions.update(sub.stripeSubscriptionId, {
+          items: [{ id: item.id, quantity: seats }],
+          proration_behavior: 'create_prorations',
+        });
+      }
+    }
+    if (sub.seats !== seats) {
+      await this.prisma.subscription.update({ where: { id: sub.id }, data: { seats } });
+    }
   }
 
   /** Hosted Stripe Checkout to start a paid per-seat subscription. */

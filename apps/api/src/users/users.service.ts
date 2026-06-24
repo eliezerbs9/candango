@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { TokensService } from '../tokens/tokens.service';
+import { BillingService } from '../billing/billing.service';
 import { InviteUserDto, UpdateUserDto } from './dto/user.dto';
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -35,6 +36,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
     private readonly tokens: TokensService,
+    private readonly billing: BillingService,
   ) {}
 
   async list(orgId: string) {
@@ -73,6 +75,8 @@ export class UsersService {
     const token = await this.tokens.issue(orgId, user.id, 'invite', INVITE_TTL_MS);
     await this.mail.sendInvite(user.email, user.name, user.organization.name, token);
 
+    // Keep the Stripe subscription quantity aligned with active seats (FR-10.7).
+    void this.billing.syncSeats(orgId).catch(() => undefined);
     return shape(user);
   }
 
@@ -86,6 +90,7 @@ export class UsersService {
       data: { roleId: dto.roleId, status: dto.status },
       include: { role: true },
     });
+    if (dto.status !== undefined) void this.billing.syncSeats(orgId).catch(() => undefined);
     return shape(updated);
   }
 
@@ -94,5 +99,6 @@ export class UsersService {
     const user = await this.prisma.user.findFirst({ where: { id, orgId } });
     if (!user) throw new NotFoundException('Member not found');
     await this.prisma.user.update({ where: { id }, data: { status: 'deactivated' } });
+    void this.billing.syncSeats(orgId).catch(() => undefined);
   }
 }
