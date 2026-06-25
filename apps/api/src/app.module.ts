@@ -22,6 +22,7 @@ import { IntegrationsModule } from './integrations/integrations.module';
 import { NotesModule } from './notes/notes.module';
 import { MessagesModule } from './messages/messages.module';
 import { BillingModule } from './billing/billing.module';
+import { ContactModule } from './contact/contact.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -50,6 +51,7 @@ import { HealthController } from './health.controller';
     OnboardingModule,
     ApiKeysModule,
     WebhooksModule,
+    ContactModule,
     CustomFieldsModule,
     IntegrationsModule,
     NotesModule,

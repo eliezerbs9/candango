@@ -2,12 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
-import { inviteEmail, passwordResetEmail, verifyEmail, type RenderedEmail } from './templates';
+import { contactEmail, inviteEmail, passwordResetEmail, verifyEmail, type RenderedEmail } from './templates';
 
 /** A fully-rendered message handed to the worker, which sends it via Brevo. */
 export interface EmailJob extends RenderedEmail {
   to: string;
   name?: string | null;
+  /** Optional Reply-To (e.g. so support can reply straight to a contact-form sender). */
+  replyTo?: { email: string; name?: string };
 }
 
 /**
@@ -18,12 +20,14 @@ export interface EmailJob extends RenderedEmail {
 @Injectable()
 export class MailService {
   private readonly appUrl: string;
+  private readonly contactInbox: string;
 
   constructor(
     @InjectQueue('email') private readonly queue: Queue,
     config: ConfigService,
   ) {
     this.appUrl = config.get<string>('APP_URL') ?? 'http://localhost:3000';
+    this.contactInbox = config.get<string>('CONTACT_INBOX') ?? 'hello@candango.app';
   }
 
   private enqueue(job: EmailJob) {
@@ -48,5 +52,14 @@ export class MailService {
   sendEmailVerification(to: string, name: string | null, token: string) {
     const link = `${this.appUrl}/verify-email?token=${token}`;
     return this.enqueue({ to, name, ...verifyEmail({ name, link }) });
+  }
+
+  /** Website contact form → support inbox, with Reply-To set to the sender. */
+  sendContactMessage(name: string, email: string, message: string) {
+    return this.enqueue({
+      to: this.contactInbox,
+      replyTo: { email, name },
+      ...contactEmail({ name, email, message }),
+    });
   }
 }

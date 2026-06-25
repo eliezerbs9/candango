@@ -8,7 +8,12 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true }); // rawBody for Stripe webhook signatures
   app.use(tenantContextMiddleware); // open a per-request tenant scope before routing
   app.setGlobalPrefix('v1');
-  app.enableCors({ origin: process.env.APP_URL ?? 'http://localhost:3000', credentials: true });
+  // Allow the app and the public marketing site (separate origin) to call the API.
+  const corsOrigins = [
+    process.env.APP_URL ?? 'http://localhost:3000',
+    process.env.SITE_URL ?? 'http://localhost:4321',
+  ];
+  app.enableCors({ origin: corsOrigins, credentials: true });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const port = Number(process.env.PORT ?? 4000);

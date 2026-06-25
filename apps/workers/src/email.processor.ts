@@ -8,6 +8,7 @@ interface EmailJob {
   subject: string;
   html: string;
   text: string;
+  replyTo?: { email: string; name?: string };
 }
 
 const BREVO_ENDPOINT = 'https://api.brevo.com/v3/smtp/email';
@@ -27,7 +28,7 @@ export class EmailProcessor extends WorkerHost {
   }
 
   async process(job: Job<EmailJob>): Promise<void> {
-    const { to, name, subject, html, text } = job.data;
+    const { to, name, subject, html, text, replyTo } = job.data;
 
     // Dev fallback: without a Brevo key, log instead of failing so flows are testable.
     if (!this.apiKey) {
@@ -46,6 +47,7 @@ export class EmailProcessor extends WorkerHost {
       body: JSON.stringify({
         sender: { email: this.from, name: this.fromName },
         to: [{ email: to, ...(name ? { name } : {}) }],
+        ...(replyTo ? { replyTo } : {}),
         subject,
         htmlContent: html,
         textContent: text,
