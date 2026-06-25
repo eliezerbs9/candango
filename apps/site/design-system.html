@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Candango — Website Design System (v0)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* Terracotta (brand) */
+    --terra-50:#fff1ea;--terra-100:#f8ddd1;--terra-200:#eeb89f;--terra-300:#e4926d;--terra-400:#dc7243;
+    --terra-500:#d75e2a;--terra-600:#d9552c;--terra-700:#c14a22;--terra-800:#a83f1c;--terra-900:#8a3214;
+    /* Warm neutrals */
+    --cream:#faf6f1;--sand:#f4ece3;--sand-200:#e7ddd2;--sand-300:#d4c8ba;
+    --ink:#1c1a17;--ink-muted:#5c544c;--ink-soft:#8a8076;--white:#ffffff;
+    /* Pine secondary */
+    --pine-50:#e9f2f0;--pine-100:#d7ebe6;--pine-500:#1b5a52;--pine-700:#114039;--pine-900:#0f3d3a;
+    /* Semantic */
+    --success:#1b5a52;--warning:#e8a33d;--error:#c0392b;
+    --radius-btn:12px;--radius-card:20px;
+    --sh-sm:0 1px 2px rgba(28,26,23,.06);
+    --sh-md:0 10px 30px -12px rgba(28,26,23,.18);
+    --sh-lg:0 30px 60px -20px rgba(28,26,23,.25);
+    --ease:cubic-bezier(.22,1,.36,1);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--cream);color:var(--ink);font-family:Inter,system-ui,sans-serif;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .display{font-family:"Bricolage Grotesque",Inter,sans-serif}
+  .mono{font-family:"Space Mono",ui-monospace,monospace}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 32px}
+  section{padding:72px 0;border-top:1px solid var(--sand-200)}
+  .eyebrow{font-family:"Space Mono",monospace;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--terra-700);margin:0 0 10px}
+  h2.sec{font-family:"Bricolage Grotesque";font-weight:800;font-size:clamp(26px,3vw,34px);letter-spacing:-.02em;margin:0 0 6px}
+  .sec-note{color:var(--ink-muted);margin:0 0 28px;max-width:60ch}
+  .grid{display:grid;gap:16px}
+  /* swatches */
+  .ramp{grid-template-columns:repeat(10,1fr)}
+  .sw{border-radius:12px;overflow:hidden;box-shadow:var(--sh-sm);background:var(--white)}
+  .sw .chip{height:64px}
+  .sw .meta{padding:8px 10px;font-size:12px}
+  .sw .name{font-weight:600}
+  .sw .hex{font-family:"Space Mono",monospace;color:var(--ink-soft);font-size:11px}
+  .pal{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+  .tag{display:inline-block;font-size:11px;padding:2px 7px;border-radius:99px;background:var(--sand);color:var(--ink-muted);margin-left:6px}
+  .tag.warn{background:#fbe7d3;color:#9a6a16}
+  /* type scale rows */
+  .trow{display:flex;align-items:baseline;gap:18px;padding:14px 0;border-bottom:1px dashed var(--sand-200)}
+  .trow .lbl{flex:0 0 150px;font-family:"Space Mono",monospace;font-size:12px;color:var(--ink-soft)}
+  /* buttons */
+  .btn{font-family:Inter;font-weight:600;font-size:16px;border:0;border-radius:var(--radius-btn);padding:13px 22px;cursor:pointer;transition:transform .2s var(--ease),box-shadow .2s var(--ease),background .2s var(--ease)}
+  .btn-primary{background:var(--terra-700);color:#fff;box-shadow:var(--sh-md)}
+  .btn-primary:hover{background:linear-gradient(135deg,var(--terra-600),var(--terra-300));transform:translateY(-1px);box-shadow:var(--sh-lg)}
+  .btn-secondary{background:transparent;color:var(--ink);border:1.5px solid var(--ink)}
+  .btn-secondary:hover{background:var(--sand)}
+  .btn-ghost{background:transparent;color:var(--terra-700);padding-left:6px;padding-right:6px}
+  .btn-ghost:hover{text-decoration:underline}
+  /* cards */
+  .cards{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+  .card{background:var(--white);border-radius:var(--radius-card);padding:24px;box-shadow:var(--sh-md);transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
+  .card:hover{transform:translateY(-2px);box-shadow:var(--sh-lg)}
+  .ico{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--terra-50);color:var(--terra-700);margin-bottom:14px}
+  .card h3{font-family:"Bricolage Grotesque";font-weight:700;font-size:20px;margin:0 0 6px}
+  .card p{color:var(--ink-muted);font-size:15px;margin:0}
+  /* hero mock */
+  .hero{background:radial-gradient(1200px 500px at 70% -10%,rgba(217,85,44,.16),transparent),var(--ink);color:#fff;border-radius:24px;padding:64px 48px;box-shadow:var(--sh-lg);overflow:hidden;position:relative}
+  .hero .eyebrow{color:var(--terra-300)}
+  .hero h1{font-family:"Bricolage Grotesque";font-weight:800;font-size:clamp(36px,5vw,64px);line-height:1.05;letter-spacing:-.03em;margin:0 0 16px;max-width:18ch}
+  .hero p{font-size:clamp(17px,2vw,21px);line-height:1.55;color:#e7ddd2;max-width:48ch;margin:0 0 28px}
+  .shot{margin-top:34px;height:160px;border-radius:14px;background:linear-gradient(180deg,var(--cream),var(--sand));box-shadow:var(--sh-lg);display:grid;place-items:center;color:var(--ink-soft);font-size:13px;border:6px solid #2a2723}
+  .gradbar{height:90px;border-radius:16px;box-shadow:var(--sh-sm)}
+  .elev{grid-template-columns:repeat(3,1fr)}
+  .elev .box{background:#fff;border-radius:16px;height:110px;display:grid;place-items:center;font-size:12px;color:var(--ink-soft)}
+  .topbar{position:sticky;top:0;z-index:5;backdrop-filter:saturate(1.4) blur(10px);background:rgba(250,246,241,.8);border-bottom:1px solid var(--sand-200)}
+  .topbar .wrap{display:flex;align-items:center;justify-content:space-between;height:62px}
+  .logo{font-family:"Bricolage Grotesque";font-weight:800;font-size:22px;letter-spacing:-.035em}
+  .logo b{color:var(--terra-600);font-weight:800}
+  .navlinks{display:flex;gap:22px;align-items:center;color:var(--ink-muted);font-size:15px}
+  .footnote{color:var(--ink-soft);font-size:13px}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="topbar"><div class="wrap">
+  <div class="logo"><b>C</b>andango</div>
+  <div class="navlinks"><span>Features</span><span>Pricing</span><span>Docs</span>
+    <button class="btn btn-primary" style="padding:9px 16px;font-size:14px">Start free</button></div>
+</div></div>
+
+<div class="wrap" style="padding-top:56px;padding-bottom:8px">
+  <p class="eyebrow">Candango · Website Design System</p>
+  <h1 class="display" style="font-weight:800;font-size:clamp(32px,4.5vw,52px);letter-spacing:-.03em;margin:0 0 8px">The terracotta marketing system</h1>
+  <p style="color:var(--ink-muted);max-width:60ch;margin:0">A living preview of <span class="mono">Website Design System.md</span> — colors, type, components rendered with the real fonts. Built on the app's brand primitives.</p>
+</div>
+
+<section><div class="wrap">
+  <p class="eyebrow">01 — Color</p>
+  <h2 class="sec">Terracotta (brand ramp)</h2>
+  <p class="sec-note">The app's 10-step terracotta. <b>#d9552c</b> is the brand; <b>700 #c14a22</b> is the AA-safe button shade.</p>
+  <div class="grid ramp" id="terra"></div>
+
+  <h2 class="sec" style="margin-top:40px">Warm neutrals &amp; Pine secondary</h2>
+  <p class="sec-note">Cream/sand replace pure gray-white; pine is the earthy complement for accents &amp; alternating sections.</p>
+  <div class="grid pal" id="neutrals"></div>
+</div></section>
+
+<section><div class="wrap">
+  <p class="eyebrow">02 — Typography</p>
+  <h2 class="sec">Type scale</h2>
+  <p class="sec-note">Bricolage Grotesque for display/headings, Inter for body, Space Mono for eyebrows/labels.</p>
+  <div id="type"></div>
+</div></section>
+
+<section><div class="wrap">
+  <p class="eyebrow">03 — Buttons</p>
+  <h2 class="sec">Actions</h2>
+  <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+    <button class="btn btn-primary">Start free trial</button>
+    <button class="btn btn-secondary">Book a demo</button>
+    <button class="btn btn-ghost">Learn more →</button>
+  </div>
+  <p class="footnote">Hover a button to see the lift + warm gradient. Primary uses #c14a22 so white text passes AA.</p>
+</div></section>
+
+<section><div class="wrap">
+  <p class="eyebrow">04 — Cards &amp; elevation</p>
+  <h2 class="sec">Feature cards</h2>
+  <div class="grid cards" style="margin-bottom:30px">
+    <div class="card"><div class="ico">◆</div><h3>Visual pipeline</h3><p>Drag deals through stages and see weighted forecasts update live.</p></div>
+    <div class="card"><div class="ico">✉</div><h3>Email in context</h3><p>Gmail threads land on the deal timeline automatically.</p></div>
+    <div class="card"><div class="ico">↻</div><h3>QuickBooks sync</h3><p>Turn won deals into estimates and invoices without leaving the deal.</p></div>
+  </div>
+  <div class="grid elev">
+    <div class="box" style="box-shadow:var(--sh-sm)">shadow-sm</div>
+    <div class="box" style="box-shadow:var(--sh-md)">shadow-md</div>
+    <div class="box" style="box-shadow:var(--sh-lg)">shadow-lg</div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <p class="eyebrow">05 — Gradients</p>
+  <h2 class="sec">Accent surfaces</h2>
+  <div class="grid" style="grid-template-columns:1fr 1fr">
+    <div class="gradbar" style="background:linear-gradient(135deg,var(--terra-600),var(--terra-300))"></div>
+    <div class="gradbar" style="background:radial-gradient(600px 200px at 70% -30%,rgba(217,85,44,.4),transparent),var(--ink)"></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <p class="eyebrow">06 — Composition</p>
+  <h2 class="sec">Hero mock</h2>
+  <p class="sec-note">How the tokens come together on a dark hero section.</p>
+  <div class="hero">
+    <p class="eyebrow">The CRM for builders</p>
+    <h1>Close more deals on red-earth roots.</h1>
+    <p>Candango is the warm, fast sales CRM — pipeline, email, calendar and QuickBooks billing in one place.</p>
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <button class="btn btn-primary">Start 7-day free trial</button>
+      <button class="btn btn-secondary" style="color:#fff;border-color:rgba(255,255,255,.4)">See it in action</button>
+    </div>
+    <div class="shot">[ product screenshot in a browser frame ]</div>
+  </div>
+</div></section>
+
+<div class="wrap" style="padding:40px 32px 70px"><p class="footnote">Candango Website Design System v0 · open questions: confirm the pine secondary · dark-section rhythm · final domain. Edit <span class="mono">06 - Delivery/Website Design System.md</span>.</p></div>
+
+<script>
+  const terra=[['50','#fff1ea'],['100','#f8ddd1'],['200','#eeb89f'],['300','#e4926d'],['400','#dc7243'],['500','#d75e2a'],['600','#d9552c'],['700','#c14a22'],['800','#a83f1c'],['900','#8a3214']];
+  const neutrals=[['cream','#faf6f1'],['sand','#f4ece3'],['sand-200','#e7ddd2'],['sand-300','#d4c8ba'],['ink','#1c1a17'],['ink-muted','#5c544c'],['ink-soft','#8a8076'],['pine-50','#e9f2f0'],['pine-100','#d7ebe6'],['pine-500','#1b5a52'],['pine-700','#114039'],['pine-900','#0f3d3a'],['warning','#e8a33d'],['error','#c0392b']];
+  const sw=(name,hex)=>`<div class="sw"><div class="chip" style="background:${hex}"></div><div class="meta"><div class="name">${name}</div><div class="hex">${hex}</div></div></div>`;
+  document.getElementById('terra').innerHTML=terra.map(([n,h])=>sw(n,h)).join('');
+  document.getElementById('neutrals').innerHTML=neutrals.map(([n,h])=>sw(n,h)).join('');
+  const type=[
+    ['display-xl','Bricolage 800','clamp(48px,8vw,80px)','800','-.03em','Close more deals.'],
+    ['display','Bricolage 800','clamp(40px,5vw,60px)','800','-.03em','Built on red earth.'],
+    ['h1','Bricolage 700','clamp(32px,4vw,44px)','700','-.02em','Your pipeline, alive.'],
+    ['h2','Bricolage 700','clamp(26px,3vw,34px)','700','-.01em','Everything in one place.'],
+    ['h3','Bricolage 700','22px','700','0','Visual pipeline'],
+    ['lead','Inter 400','21px','400','0','The warm, fast sales CRM for small teams that move quickly.'],
+    ['body','Inter 400','17px','400','0','Candango keeps deals, contacts, email and billing together so reps stop tab-hopping.'],
+    ['small','Inter 400','15px','400','0','No credit card required · 7-day free trial.'],
+  ];
+  document.getElementById('type').innerHTML=type.map(([lbl,meta,size,wt,ls,txt])=>{
+    const fam = lbl.startsWith('h')||lbl.startsWith('display')?'"Bricolage Grotesque"':'Inter';
+    return `<div class="trow"><div class="lbl">${lbl}<br><span style="color:var(--sand-300)">${meta}</span></div>
+      <div style="font-family:${fam};font-size:${size};font-weight:${wt};letter-spacing:${ls};line-height:1.1">${txt}</div></div>`;
+  }).join('')
+   + `<div class="trow"><div class="lbl">eyebrow<br><span style="color:var(--sand-300)">Space Mono</span></div><div class="mono" style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--terra-700)">The CRM for builders</div></div>`;
+</script>
+</body>
+</html>
