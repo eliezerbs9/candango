@@ -46,6 +46,16 @@ export class DealQuickbooksService {
     return conn?.status === 'connected';
   }
 
+  /**
+   * QuickBooks-sourced documents become READ-ONLY while QuickBooks is disconnected — we keep the
+   * data, but the user can't create/edit/send them until they reconnect. Native docs are unaffected.
+   */
+  private async requireQboWritable(orgId: string, source: string) {
+    if (source === 'quickbooks' && !(await this.isConnected(orgId))) {
+      throw new BadRequestException('Reconnect QuickBooks to edit estimates and invoices synced with it');
+    }
+  }
+
   /** Build the QBO doc payload from a linked deal + the request DTO. */
   private qboDocInput(deal: DealForQbo, dto: CreateDocDto): DocInput {
     return {
@@ -198,6 +208,7 @@ export class DealQuickbooksService {
     if (est.status === 'closed') {
       throw new BadRequestException('This estimate was converted to an invoice and can no longer be edited');
     }
+    await this.requireQboWritable(orgId, est.source);
     if (est.source === 'quickbooks' && est.qbId) {
       const deal = await this.requireLinked(orgId, dealId);
       const doc = await this.qbo.updateEstimate(orgId, est.qbId, this.qboDocInput(deal, dto));
@@ -266,6 +277,7 @@ export class DealQuickbooksService {
   async sendEstimate(orgId: string, dealId: string, estimateId: string, email?: string) {
     const est = await this.prisma.dealEstimate.findFirst({ where: { id: estimateId, orgId, dealId } });
     if (!est?.qbId) throw new BadRequestException('Estimate is not in QuickBooks');
+    await this.requireQboWritable(orgId, est.source);
     const doc = await this.qbo.sendDoc(orgId, 'estimate', est.qbId, email);
     const row = await this.prisma.dealEstimate.update({
       where: { id: estimateId },
@@ -279,6 +291,7 @@ export class DealQuickbooksService {
   async sendInvoice(orgId: string, dealId: string, invoiceId: string, email?: string) {
     const inv = await this.prisma.dealInvoice.findFirst({ where: { id: invoiceId, orgId, dealId } });
     if (!inv?.qbId) throw new BadRequestException('Invoice is not in QuickBooks');
+    await this.requireQboWritable(orgId, inv.source);
     const doc = await this.qbo.sendDoc(orgId, 'invoice', inv.qbId, email);
     const row = await this.prisma.dealInvoice.update({
       where: { id: invoiceId },
@@ -320,6 +333,7 @@ export class DealQuickbooksService {
     if (est.status === 'closed') {
       throw new BadRequestException('This estimate was converted to an invoice and can no longer be changed');
     }
+    await this.requireQboWritable(orgId, est.source);
     if (est.source === 'quickbooks' && est.qbId && est.qbSyncToken) {
       const doc = await this.qbo.updateEstimateStatus(orgId, est.qbId, est.qbSyncToken, TO_TXN_STATUS[status] ?? 'Pending');
       const row = await this.prisma.dealEstimate.update({
@@ -351,6 +365,7 @@ export class DealQuickbooksService {
    * estimates are combined into a single QBO invoice, linked back to each estimate.
    */
   async createInvoiceFromEstimates(orgId: string, dealId: string, dto: ConvertToInvoiceDto, userId: string) {
+    await this.requireQboWritable(orgId, 'quickbooks');
     const deal = await this.requireLinked(orgId, dealId);
     const estimates = await this.prisma.dealEstimate.findMany({
       where: { id: { in: dto.estimateIds }, orgId, dealId, deletedAt: null },
@@ -429,6 +444,7 @@ export class DealQuickbooksService {
   async updateInvoice(orgId: string, dealId: string, invoiceId: string, dto: CreateDocDto) {
     const inv = await this.prisma.dealInvoice.findFirst({ where: { id: invoiceId, orgId, dealId } });
     if (!inv) throw new NotFoundException('Invoice not found');
+    await this.requireQboWritable(orgId, inv.source);
     const deal = await this.requireLinked(orgId, dealId);
     if (!inv.qbId) throw new BadRequestException('Invoice is not linked to QuickBooks');
     const doc = await this.qbo.updateInvoice(orgId, inv.qbId, this.qboDocInput(deal, dto));
@@ -452,6 +468,7 @@ export class DealQuickbooksService {
   async setInvoiceStatus(orgId: string, dealId: string, invoiceId: string, status: string) {
     const inv = await this.prisma.dealInvoice.findFirst({ where: { id: invoiceId, orgId, dealId } });
     if (!inv) throw new NotFoundException('Invoice not found');
+    await this.requireQboWritable(orgId, inv.source);
     const row = await this.prisma.dealInvoice.update({ where: { id: invoiceId }, data: { status }, include: { lines: lineSelect } });
     await this.recomputeDealValue(orgId, dealId); // void invoices drop out of the value
     return shapeDoc(row);

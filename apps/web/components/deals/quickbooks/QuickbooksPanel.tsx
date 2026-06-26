@@ -68,6 +68,8 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const linked = !!deal.qbSubcustomerId;
   const mode: 'native' | 'link' | 'qbo' = !connected ? 'native' : linked ? 'qbo' : 'link';
   const canSelect = mode !== 'link';
+  // QBO-sourced docs are kept after a disconnect, but become read-only (can't edit/change status/send).
+  const isReadOnlyDoc = (d: DealDoc) => !connected && d.source === 'quickbooks';
 
   const estimates = useDealEstimates(deal.id);
   const invoices = useDealInvoices(deal.id);
@@ -95,6 +97,9 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const itemList = mode === 'qbo' ? items.data : undefined;
   const estimateDocs = estimates.data ?? [];
   const invoiceDocs = invoices.data ?? [];
+  // Show the invoices section while connected, OR when disconnected docs were kept (read-only).
+  const showInvoices = mode === 'qbo' || invoiceDocs.length > 0;
+  const hasKeptQboDocs = !connected && [...estimateDocs, ...invoiceDocs].some((d) => d.source === 'quickbooks');
   const selEstimates = estimateDocs.filter((e) => estSel.has(e.id));
   const selInvoices = invoiceDocs.filter((i) => invSel.has(i.id));
   // Closed (already-invoiced) estimates are terminal: value / convert / send don't apply to them.
@@ -271,16 +276,16 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
           onOpen={(doc) => setView({ doc, kind: 'Estimate' })}
           selectedIds={canSelect ? estSel : undefined}
           onToggleSelect={canSelect ? toggle(setEstSel) : undefined}
-          isStatusLocked={(d) => d.status === 'closed'}
+          isStatusLocked={(d) => d.status === 'closed' || isReadOnlyDoc(d)}
           emptyText={mode === 'link' ? 'Link the deal to add estimates.' : 'No estimates yet.'}
         />
 
-        {/* Invoices — only when connected; created only by converting estimates */}
-        {mode === 'qbo' && (
+        {/* Invoices — created only by converting estimates; shown read-only if kept after a disconnect */}
+        {showInvoices && (
           <>
             <Divider />
             <Text fw={500}>Invoices</Text>
-            {invSel.size > 0 && (
+            {mode === 'qbo' && invSel.size > 0 && (
               <Group gap="xs">
                 <Text size="sm" c="dimmed">{invSel.size} selected</Text>
                 <Button size="xs" variant="light" leftSection={<IconSend size={14} />} onClick={() => startSend(selInvoices, 'invoice')}>
@@ -299,17 +304,25 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
               statuses={INVOICE_STATUSES}
               onSetStatus={(id, status) => setInvStatus.mutate({ id, status }, { onSuccess: () => stageCtl.open(), onError: fail })}
               onOpen={(doc) => setView({ doc, kind: 'Invoice' })}
-              selectedIds={invSel}
-              onToggleSelect={toggle(setInvSel)}
+              selectedIds={mode === 'qbo' ? invSel : undefined}
+              onToggleSelect={mode === 'qbo' ? toggle(setInvSel) : undefined}
+              isStatusLocked={(d) => isReadOnlyDoc(d)}
               emptyText="No invoices yet — select estimate(s) above and convert them."
             />
           </>
         )}
 
-        {mode === 'native' && (
-          <Text size="xs" c="dimmed">
-            Connect QuickBooks in Settings → Integrations to create invoices.
-          </Text>
+        {hasKeptQboDocs ? (
+          <Alert variant="light" color="gray" icon={<IconInfoCircle size={16} />}>
+            QuickBooks is disconnected. Estimates and invoices synced with it are kept here but read-only —
+            reconnect in Settings → Integrations to edit or send them.
+          </Alert>
+        ) : (
+          mode === 'native' && (
+            <Text size="xs" c="dimmed">
+              Connect QuickBooks in Settings → Integrations to create invoices.
+            </Text>
+          )
         )}
       </Stack>
 
@@ -357,7 +370,11 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         kind={view?.kind ?? 'Estimate'}
         opened={!!view}
         onClose={() => setView(null)}
-        onEdit={view && !(view.kind === 'Estimate' && view.doc.status === 'closed') ? editFromView : undefined}
+        onEdit={
+          view && !(view.kind === 'Estimate' && view.doc.status === 'closed') && !isReadOnlyDoc(view.doc)
+            ? editFromView
+            : undefined
+        }
         onPrint={view ? () => openDoc(view.doc, view.kind === 'Invoice' ? 'invoice' : 'estimate') : undefined}
       />
 

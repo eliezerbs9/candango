@@ -153,7 +153,31 @@ export class GoogleOAuthService {
   }
 
   async disconnect(userId: string) {
+    // Remove the connections.
     await this.prisma.calendarConnection.deleteMany({ where: { userId } });
     await this.prisma.mailboxConnection.deleteMany({ where: { userId } });
+
+    // Clean synced Gmail data — every Message row is Gmail-originated.
+    await this.prisma.message.deleteMany({ where: { userId } });
+
+    // Calendar: drop Google-IMPORTED activities; keep the user's own (just unlink them).
+    const linked = await this.prisma.activity.findMany({
+      where: { assignedUserId: userId, calendarEventId: { not: null } },
+      select: { id: true, calendarEvent: { select: { id: true, syncDirection: true } } },
+    });
+    const eventIds = linked.map((a) => a.calendarEvent?.id).filter((x): x is string => !!x);
+    const importedActivityIds = linked
+      .filter((a) => a.calendarEvent?.syncDirection === 'inbound')
+      .map((a) => a.id);
+    // Delete the sync links first (FK), then the imported activities.
+    if (eventIds.length) await this.prisma.calendarEvent.deleteMany({ where: { id: { in: eventIds } } });
+    if (importedActivityIds.length) {
+      await this.prisma.activity.deleteMany({ where: { id: { in: importedActivityIds } } });
+    }
+    // Unlink the user's own (outbound-synced) activities so they survive as plain activities.
+    await this.prisma.activity.updateMany({
+      where: { assignedUserId: userId, calendarEventId: { not: null } },
+      data: { calendarEventId: null },
+    });
   }
 }
