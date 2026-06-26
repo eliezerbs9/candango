@@ -21,7 +21,7 @@ import { QboRefreshProcessor } from './qbo-refresh.processor';
             port: Number(url.port || 6379),
             username: url.username || undefined,
             password: url.password || undefined,
-            tls: url.protocol === 'rediss:' ? {} : undefined, // managed Redis (TLS)
+            tls: url.protocol === 'rediss:' ? { rejectUnauthorized: false } : undefined, // managed Redis (TLS; DO uses its own CA)
             maxRetriesPerRequest: null, // required by BullMQ
           },
         };
