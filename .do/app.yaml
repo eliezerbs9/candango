@@ -1,0 +1,104 @@
+# DigitalOcean App Platform — App Spec for the Candango app (PRODUCTION).
+#   Validate:  doctl apps spec validate .do/app.yaml
+#   Create:    doctl apps create --spec .do/app.yaml      (or paste in the console)
+#   Update:    doctl apps update <app-id> --spec .do/app.yaml
+#
+# STAGING: copy to .do/app.staging.yaml and change: `name` → candango-staging,
+#   every `branch` → main, the domain → app.staging.candango.bsbtechub.com,
+#   and point DATABASE_URL/REDIS_URL/secrets at the STAGING clusters + TEST creds.
+#
+# Architecture: ONE app, path-routed under a single domain (no web↔api CORS):
+#   app.candango.bsbtechub.com/      → web (Next.js)
+#   app.candango.bsbtechub.com/v1/*  → api (NestJS)   + worker (no route)
+#
+# Secret VALUES are NOT committed — set them in the console or via
+#   `doctl apps update <id> --spec` after filling a local (gitignored) copy.
+# Shared backend config lives at app-level `envs` (inherited by all components);
+# per-component env (esp. role-specific DATABASE_URL) is set on each component.
+
+name: candango-prod
+region: nyc
+
+domains:
+  - domain: app.candango.bsbtechub.com
+    type: PRIMARY
+
+# ---- Shared (inherited by all components). Set SECRET values in the console. ----
+envs:
+  - { key: REDIS_URL, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }   # rediss://… , BullMQ: maxRetriesPerRequest=null
+  - { key: GOOGLE_CLIENT_ID, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }
+  - { key: GOOGLE_CLIENT_SECRET, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }
+  - { key: GOOGLE_TOKEN_ENC_KEY, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }   # MUST match across api+worker
+  - { key: GOOGLE_REDIRECT_URI, scope: RUN_TIME, value: "https://app.candango.bsbtechub.com/v1/integrations/google/callback" }
+  - { key: QBO_CLIENT_ID, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }
+  - { key: QBO_CLIENT_SECRET, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }
+  - { key: QBO_REDIRECT_URI, scope: RUN_TIME, value: "https://app.candango.bsbtechub.com/v1/integrations/quickbooks/callback" }
+  - { key: QBO_ENVIRONMENT, scope: RUN_TIME, value: "production" }
+
+services:
+  - name: web
+    github: { repo: eliezerbs9/candango, branch: production, deploy_on_push: true }
+    source_dir: apps/web
+    build_command: npm ci && npm run build
+    run_command: npm run start
+    instance_size_slug: apps-s-1vcpu-1gb
+    instance_count: 1
+    http_port: 8080
+    routes:
+      - path: /
+    envs:
+      - { key: NEXT_PUBLIC_API_URL, scope: BUILD_TIME, value: "/v1" }   # same-origin → relative
+      - { key: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, scope: BUILD_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }
+
+  - name: api
+    github: { repo: eliezerbs9/candango, branch: production, deploy_on_push: true }
+    source_dir: apps/api
+    build_command: npm ci && npx prisma generate && npm run build
+    run_command: npm run start:prod
+    instance_size_slug: apps-s-1vcpu-1gb
+    instance_count: 1
+    http_port: 8080
+    routes:
+      - path: /v1
+    health_check:
+      http_path: /v1/health
+    envs:
+      - { key: DATABASE_URL, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }   # candango_app role (subject to RLS)
+      - { key: DIRECT_URL, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }      # doadmin (owner)
+      - { key: JWT_SECRET, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }
+      - { key: APP_URL, scope: RUN_TIME, value: "https://app.candango.bsbtechub.com" }
+      - { key: API_URL, scope: RUN_TIME, value: "https://app.candango.bsbtechub.com/v1" }
+      - { key: SITE_URL, scope: RUN_TIME, value: "https://candango.bsbtechub.com" }   # CORS allow for the Vercel marketing site
+      - { key: CONTACT_INBOX, scope: RUN_TIME, value: "support@bsbtechub.com" }
+      - { key: GOOGLE_AUTH_REDIRECT_URI, scope: RUN_TIME, value: "https://app.candango.bsbtechub.com/v1/auth/google/callback" }
+      - { key: STRIPE_SECRET_KEY, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }
+      - { key: STRIPE_WEBHOOK_SECRET, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }
+      - { key: STRIPE_PRICE_ID, scope: RUN_TIME, value: "price_REPLACE" }
+      - { key: TURNSTILE_SECRET, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }
+
+workers:
+  - name: worker
+    github: { repo: eliezerbs9/candango, branch: production, deploy_on_push: true }
+    source_dir: apps/workers
+    build_command: npm ci && npm run build
+    run_command: npm run start:prod
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    instance_count: 1
+    envs:
+      # doadmin + bypass RLS via connection options (managed PG has no real superuser)
+      - { key: DATABASE_URL, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }   # …?options=-c%20app.bypass_rls%3Don
+      - { key: BREVO_API_KEY, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }
+      - { key: EMAIL_FROM, scope: RUN_TIME, value: "info@bsbtechub.com" }
+      - { key: EMAIL_FROM_NAME, scope: RUN_TIME, value: "Candango" }
+
+jobs:
+  - name: migrate
+    kind: PRE_DEPLOY   # runs `prisma migrate deploy` before each release
+    github: { repo: eliezerbs9/candango, branch: production }
+    source_dir: apps/api
+    build_command: npm ci && npx prisma generate && npm run build
+    run_command: npx prisma migrate deploy
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - { key: DATABASE_URL, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }   # doadmin
+      - { key: DIRECT_URL, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }      # doadmin (migrate uses this)

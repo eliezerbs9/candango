@@ -15,7 +15,16 @@ import { QboRefreshProcessor } from './qbo-refresh.processor';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const url = new URL(config.get<string>('REDIS_URL') ?? 'redis://localhost:6379');
-        return { connection: { host: url.hostname, port: Number(url.port || 6379) } };
+        return {
+          connection: {
+            host: url.hostname,
+            port: Number(url.port || 6379),
+            username: url.username || undefined,
+            password: url.password || undefined,
+            tls: url.protocol === 'rediss:' ? {} : undefined, // managed Redis (TLS)
+            maxRetriesPerRequest: null, // required by BullMQ
+          },
+        };
       },
     }),
     BullModule.registerQueue({ name: 'webhook-delivery' }),
