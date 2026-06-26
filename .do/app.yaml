@@ -16,7 +16,7 @@
 # Shared backend config lives at app-level `envs` (inherited by all components);
 # per-component env (esp. role-specific DATABASE_URL) is set on each component.
 
-name: candango-prod
+name: candango-portfolio
 region: nyc
 
 domains:
@@ -33,11 +33,11 @@ envs:
   - { key: QBO_CLIENT_ID, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }
   - { key: QBO_CLIENT_SECRET, scope: RUN_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }
   - { key: QBO_REDIRECT_URI, scope: RUN_TIME, value: "https://app.candango.bsbtechub.com/v1/integrations/quickbooks/callback" }
-  - { key: QBO_ENVIRONMENT, scope: RUN_TIME, value: "production" }
+  - { key: QBO_ENVIRONMENT, scope: RUN_TIME, value: "sandbox" }
 
 services:
   - name: web
-    github: { repo: eliezerbs9/candango, branch: production, deploy_on_push: true }
+    github: { repo: eliezerbs9/candango, branch: main, deploy_on_push: true }
     source_dir: apps/web
     build_command: npm ci && npm run build
     run_command: npm run start
@@ -51,7 +51,7 @@ services:
       - { key: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, scope: BUILD_TIME, type: SECRET, value: "REPLACE_IN_CONSOLE" }
 
   - name: api
-    github: { repo: eliezerbs9/candango, branch: production, deploy_on_push: true }
+    github: { repo: eliezerbs9/candango, branch: main, deploy_on_push: true }
     source_dir: apps/api
     build_command: npm ci && npx prisma generate && npm run build
     run_command: npm run start:prod
@@ -78,7 +78,7 @@ services:
 
 workers:
   - name: worker
-    github: { repo: eliezerbs9/candango, branch: production, deploy_on_push: true }
+    github: { repo: eliezerbs9/candango, branch: main, deploy_on_push: true }
     source_dir: apps/workers
     build_command: npm ci && npm run build
     run_command: npm run start:prod
@@ -94,7 +94,7 @@ workers:
 jobs:
   - name: migrate
     kind: PRE_DEPLOY   # runs `prisma migrate deploy` before each release
-    github: { repo: eliezerbs9/candango, branch: production }
+    github: { repo: eliezerbs9/candango, branch: main }
     source_dir: apps/api
     build_command: npm ci && npx prisma generate && npm run build
     run_command: npx prisma migrate deploy

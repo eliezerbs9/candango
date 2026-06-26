@@ -70,8 +70,13 @@ async function main() {
 
   // 3) Wipe previous demo CRM data (children → parents)
   const oldDeals = await prisma.deal.findMany({ where: { orgId: org.id }, select: { id: true } });
+  await prisma.message.deleteMany({ where: { orgId: org.id } });
   await prisma.note.deleteMany({ where: { orgId: org.id } });
+  await prisma.calendarEvent.deleteMany({ where: { orgId: org.id } }); // FK before activities
   await prisma.activity.deleteMany({ where: { orgId: org.id } }); // cascades activity participants
+  await prisma.dealStageEvent.deleteMany({ where: { orgId: org.id } });
+  await prisma.dealInvoice.deleteMany({ where: { orgId: org.id } }); // cascades invoice lines
+  await prisma.dealEstimate.deleteMany({ where: { orgId: org.id } }); // cascades estimate lines
   await prisma.dealParticipant.deleteMany({ where: { dealId: { in: oldDeals.map((d) => d.id) } } });
   await prisma.deal.deleteMany({ where: { orgId: org.id } });
   await prisma.person.deleteMany({ where: { orgId: org.id } }); // cascades company contacts
@@ -183,6 +188,21 @@ async function main() {
     task('Send updated quote to Cedar & Co.', 1, 5),
     task('Prepare onboarding plan — Northwind', 2, 1),
     task('Draft renewal terms — Acme', 5, 9),
+    // Earlier in the month — fills the calendar (offsets are days before "today")
+    call('Intro call — Acme Robotics', -25, 10, 2),
+    meet('Kickoff — Northwind', -24, 14, 45, 0),
+    task('Research Brightwave stack', -22, 3),
+    meet('Demo — Helio Systems', -21, 11, 60, 6),
+    call('Qualification — Vantage', -18, 15, 8),
+    task('Send NDA to Cedar & Co.', -17, 5),
+    meet('Requirements — Acme renewal', -15, 9, 30, 9),
+    call('Pricing discussion — Northwind', -14, 16, 1),
+    meet('Stakeholder review — Helio', -11, 13, 45, 7),
+    task('Prepare proposal — Brightwave', -10, 3),
+    call('Follow-up — Vantage pilot', -8, 10, 8),
+    meet('Negotiation — Cedar migration', -7, 14, 60, 5),
+    task('Update CRM notes — Acme', -4, 2),
+    meet('Check-in — Northwind expansion', -3, 11, 30, 11),
   ];
   for (const a of activities) await prisma.activity.create({ data: a });
 
@@ -195,9 +215,42 @@ async function main() {
   ];
   for (const n of notes) await prisma.note.create({ data: { orgId: org.id, dealId: deals[n.dealIdx].id, authorUserId: user.id, body: n.body } });
 
+  // 8) Synced emails (fictional — for the /emails screen, so no real Gmail data is shown)
+  const PERSON = (co, p = 0) => companies[co].people[p];
+  const emailDefs = [
+    { co: 0, p: 0, deal: 0, dir: 'in',  thread: 't1', subj: 'Re: Annual platform license', snip: 'Thanks for the proposal — legal is reviewing the MSA and we should have feedback by Friday.', d: -1 },
+    { co: 0, p: 0, deal: 0, dir: 'out', thread: 't1', subj: 'Re: Annual platform license', snip: 'Perfect. Happy to jump on a quick call if any clauses need clarifying — just say the word.', d: -1 },
+    { co: 1, p: 0, deal: 2, dir: 'in',  thread: 't2', subj: 'Fleet automation rollout — next steps', snip: 'Budget got approved for Q2. Could you send over the seat-count options so we can plan?', d: -2 },
+    { co: 2, p: 0, deal: 3, dir: 'in',  thread: 't3', subj: 'Content workflow subscription', snip: 'The team loved the demo. What does onboarding look like for 15 users?', d: -3 },
+    { co: 4, p: 0, deal: 6, dir: 'in',  thread: 't4', subj: 'Re: Enterprise rollout (50 seats)', snip: 'Grace here — we’d love an integration demo with our data warehouse next week. Tuesday?', d: -4 },
+    { co: 5, p: 0, deal: 8, dir: 'out', thread: 't5', subj: 'Logistics dashboard pilot — plan', snip: 'Sharing the pilot plan and timeline. Let me know if the milestones work on your end.', d: -5 },
+    { co: 3, p: 0, deal: 10, dir: 'in', thread: 't6', subj: 'Security & compliance package', snip: 'Signed and sent! Looking forward to getting started — who will be our point of contact?', d: -6 },
+    { co: 0, p: 1, deal: 1, dir: 'in',  thread: 't7', subj: 'Onboarding & training package', snip: 'Marcus from procurement — could you send the W-9 and a formal order form?', d: -8 },
+    { co: 1, p: 0, deal: 9, dir: 'out', thread: 't8', subj: 'Renewal — robotics suite', snip: 'Here are the renewal terms for next year. Want to find 20 minutes to review together?', d: -10 },
+  ];
+  let mi = 0;
+  for (const e of emailDefs) {
+    mi += 1;
+    const person = PERSON(e.co, e.p);
+    const contactEmail = person.emails[0];
+    await prisma.message.create({
+      data: {
+        orgId: org.id, userId: user.id, direction: e.dir,
+        providerMessageId: `demo-msg-${mi}`, threadId: e.thread,
+        fromAddress: e.dir === 'in' ? contactEmail : DEMO_EMAIL,
+        toAddresses: e.dir === 'in' ? [DEMO_EMAIL] : [contactEmail],
+        subject: e.subj, snippet: e.snip,
+        folder: e.dir === 'in' ? 'inbox' : 'sent',
+        labels: e.dir === 'in' ? ['INBOX'] : ['SENT'],
+        personId: person.id, dealId: deals[e.deal].id,
+        sentAt: at(e.d, 9 + (mi % 7)),
+      },
+    });
+  }
+
   const open = deals.filter((d) => d.status === 'open').length;
   const won = deals.filter((d) => d.status === 'won').length;
-  console.log(`✅ Demo org seeded: ${companies.length} companies, ${companies.reduce((s, c) => s + c.people.length, 0)} people, ${deals.length} deals (${open} open / ${won} won), ${activities.length} activities, ${notes.length} notes.`);
+  console.log(`✅ Demo org seeded: ${companies.length} companies, ${companies.reduce((s, c) => s + c.people.length, 0)} people, ${deals.length} deals (${open} open / ${won} won), ${activities.length} activities, ${notes.length} notes, ${emailDefs.length} emails.`);
   console.log(`   Login:  ${DEMO_EMAIL}  /  ${DEMO_PASSWORD}`);
 }
 

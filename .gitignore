@@ -21,3 +21,6 @@ build/
 *.log
 coverage/
 .turbo/
+
+# DO App Spec copy with real secret values (never commit)
+.do/*.local.yaml
