@@ -2,15 +2,15 @@
 
 Multi-tenant, Pipedrive-style sales CRM. Monorepo: `apps/api` (NestJS + Prisma + Postgres), `apps/workers` (BullMQ consumers — webhook delivery + transactional email), `apps/web` (Next.js + Mantine v8).
 
-The **product docs & requirements** live in a separate Obsidian vault:
-`~/Project Notes/Candango/` — start by reading its `06 - Delivery/Progress Tracker.md` (source of truth for status) before non-trivial work.
+The **product docs & requirements** live in the BSB Tech Hub Obsidian vault, alongside this repo:
+`~/Projects/BSB Tech Hub/Project Notes/Candango/` — start by reading its `06 - Delivery/Progress Tracker.md` (source of truth for status) before non-trivial work.
 
 ## ⚠️ When you change behavior, update the requirements (in the vault)
 
 **Whenever a change alters behavior, the data model, or the public API that is described in the vault's requirements, update those docs in the same change — don't let them go stale.** Specifically, check/update:
 
-- `~/Project Notes/Candango/02 - Requirements/Functional Requirements.md` — edit the matching `FR-*` item, or add a new one (with a P0/P1/P2 priority + stable ID) for new capability. Never leave an FR asserting something now false.
-- `~/Project Notes/Candango/02 - Requirements/User Stories.md` — add/adjust the story + its `(FR-x)` ref.
+- `~/Projects/BSB Tech Hub/Project Notes/Candango/02 - Requirements/Functional Requirements.md` — edit the matching `FR-*` item, or add a new one (with a P0/P1/P2 priority + stable ID) for new capability. Never leave an FR asserting something now false.
+- `~/Projects/BSB Tech Hub/Project Notes/Candango/02 - Requirements/User Stories.md` — add/adjust the story + its `(FR-x)` ref.
 - The contradicted `04 - Features/*` note, `03 - Architecture/Data Model.md` (schema/relationships), and `05 - API/REST API Reference.md` (endpoints/payloads).
 - `06 - Delivery/Progress Tracker.md` — flip statuses + add a one-line session-log entry.
 
@@ -23,7 +23,7 @@ Requirements describe *behavior*, not implementation status — keep done/in-pro
 - **During development, work directly on `main`** — commit each verified feature straight to `main`; do **not** create feature branches for now, and keep all work merged into `main` (revisit this branching policy before production/release).
 - **One logical commit per feature/step**, not a giant batch. Conventional Commits with an app scope: `feat(api): …`, `feat(web): …`, `feat(workers): …`, `docs: …`.
 - Include the matching Prisma **migration** + `package.json`/lockfile changes in the same commit as the code that needs them.
-- Also commit the **vault doc updates** if the vault is under version control (it may be a separate repo — check).
+- The **product-notes updates** now live in the BSB Tech Hub vault (`~/Projects/BSB Tech Hub/Project Notes/Candango/`), which is **not** part of this git repo — update those notes in the same session, but they are not committed here.
 - End every commit message with the `Co-Authored-By` trailer (see harness rules).
 - **Push only when explicitly asked** (committing is authorized by this rule; pushing is not).
 
