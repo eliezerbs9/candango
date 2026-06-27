@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
@@ -28,65 +29,12 @@ export class AuthService {
     private readonly tokens: TokensService,
   ) {}
 
-  /** Create an organization (tenant) + an Admin role + the first admin user. */
+  /** Create an organization (tenant) + an Admin role + the first admin user (email/password). */
   async signup(dto: SignupDto) {
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
-    const slug = `${slugify(dto.orgName)}-${Math.random().toString(36).slice(2, 7)}`;
-
-    const { org, user } = await this.prisma.$tx(async (tx) => {
-      const org = await tx.organization.create({
-        data: { name: dto.orgName, slug },
-      });
-      // The three built-in roles are system roles — protected from edit/delete
-      // in the UI; admins add their own custom roles on top (FR-6.3).
-      const adminRole = await tx.role.create({
-        data: { orgId: org.id, name: 'Admin', isSystem: true, permissions: ['*'], visibility: 'org' },
-      });
-      await tx.role.createMany({
-        data: [
-          {
-            orgId: org.id,
-            name: 'Manager',
-            isSystem: true,
-            permissions: ['deals:read', 'deals:write', 'persons:read', 'persons:write', 'pipelines:manage', 'reports:read'],
-            visibility: 'team',
-          },
-          {
-            orgId: org.id,
-            name: 'Rep',
-            isSystem: true,
-            permissions: ['deals:read', 'deals:write', 'persons:read', 'persons:write'],
-            visibility: 'own',
-          },
-        ],
-      });
-      const user = await tx.user.create({
-        data: {
-          orgId: org.id,
-          email: dto.email,
-          name: dto.name ?? null,
-          passwordHash,
-          roleId: adminRole.id,
-          status: 'active',
-        },
-      });
-
-      // Seed a default pipeline + stages so the workspace is usable immediately
-      // (see Tenant Onboarding: "a default is seeded").
-      const pipeline = await tx.pipeline.create({
-        data: { orgId: org.id, name: 'Sales Pipeline', isDefault: true, position: 0 },
-      });
-      await tx.stage.createMany({
-        data: [
-          { orgId: org.id, pipelineId: pipeline.id, name: 'Lead', position: 0, probability: 10 },
-          { orgId: org.id, pipelineId: pipeline.id, name: 'Qualified', position: 1, probability: 25 },
-          { orgId: org.id, pipelineId: pipeline.id, name: 'Proposal', position: 2, probability: 50 },
-          { orgId: org.id, pipelineId: pipeline.id, name: 'Negotiation', position: 3, probability: 75 },
-        ],
-      });
-
-      return { org, user };
-    });
+    const { org, user } = await this.prisma.$tx((tx) =>
+      this.provisionWorkspace(tx, { orgName: dto.orgName, email: dto.email, name: dto.name ?? null, passwordHash }),
+    );
 
     // Send an email-verification link (the account is usable immediately; this
     // just confirms ownership of the address).
@@ -95,6 +43,78 @@ export class AuthService {
 
     const token = await this.signToken(user.id, org.id, 'Admin');
     return { token, user: this.publicUser(user, org.name, 'Admin') };
+  }
+
+  /**
+   * Sign up with Google: the person becomes the OWNER of a brand-new workspace
+   * (no password — they log in with Google). The workspace gets a default name they
+   * can rename in Settings. Their Google email is already verified.
+   */
+  async signupWithGoogle(opts: { email: string; name: string | null }) {
+    const first = opts.name?.trim().split(/\s+/)[0] || opts.email.split('@')[0];
+    const orgName = `${first}'s workspace`;
+    const { org, user } = await this.prisma.$tx((tx) =>
+      this.provisionWorkspace(tx, { orgName, email: opts.email, name: opts.name, passwordHash: null, emailVerified: true }),
+    );
+    return { token: await this.signToken(user.id, org.id, 'Admin'), user: this.publicUser(user, org.name, 'Admin') };
+  }
+
+  /** Shared workspace provisioning: org + system roles + owner user + default pipeline/stages. */
+  private async provisionWorkspace(
+    tx: Prisma.TransactionClient,
+    opts: { orgName: string; email: string; name: string | null; passwordHash: string | null; emailVerified?: boolean },
+  ) {
+    const slug = `${slugify(opts.orgName)}-${Math.random().toString(36).slice(2, 7)}`;
+    const org = await tx.organization.create({ data: { name: opts.orgName, slug } });
+    // The three built-in roles are system roles — protected from edit/delete in the UI;
+    // admins add their own custom roles on top (FR-6.3).
+    const adminRole = await tx.role.create({
+      data: { orgId: org.id, name: 'Admin', isSystem: true, permissions: ['*'], visibility: 'org' },
+    });
+    await tx.role.createMany({
+      data: [
+        {
+          orgId: org.id,
+          name: 'Manager',
+          isSystem: true,
+          permissions: ['deals:read', 'deals:write', 'persons:read', 'persons:write', 'pipelines:manage', 'reports:read'],
+          visibility: 'team',
+        },
+        {
+          orgId: org.id,
+          name: 'Rep',
+          isSystem: true,
+          permissions: ['deals:read', 'deals:write', 'persons:read', 'persons:write'],
+          visibility: 'own',
+        },
+      ],
+    });
+    const user = await tx.user.create({
+      data: {
+        orgId: org.id,
+        email: opts.email,
+        name: opts.name,
+        passwordHash: opts.passwordHash,
+        roleId: adminRole.id,
+        status: 'active',
+        ...(opts.emailVerified ? { emailVerifiedAt: new Date() } : {}),
+      },
+    });
+
+    // Seed a default pipeline + stages so the workspace is usable immediately
+    // (see Tenant Onboarding: "a default is seeded").
+    const pipeline = await tx.pipeline.create({
+      data: { orgId: org.id, name: 'Sales Pipeline', isDefault: true, position: 0 },
+    });
+    await tx.stage.createMany({
+      data: [
+        { orgId: org.id, pipelineId: pipeline.id, name: 'Lead', position: 0, probability: 10 },
+        { orgId: org.id, pipelineId: pipeline.id, name: 'Qualified', position: 1, probability: 25 },
+        { orgId: org.id, pipelineId: pipeline.id, name: 'Proposal', position: 2, probability: 50 },
+        { orgId: org.id, pipelineId: pipeline.id, name: 'Negotiation', position: 3, probability: 75 },
+      ],
+    });
+    return { org, user };
   }
 
   /** Sends a password-reset link. Always succeeds (never reveals whether the email exists). */

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { google } from 'googleapis';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthService } from './auth.service';
 
 /** Identity-only scopes — this is sign-in, not the Calendar/Gmail data integration. */
 const LOGIN_SCOPES = ['openid', 'email', 'profile'];
@@ -12,10 +13,10 @@ interface LoginState {
 }
 
 /**
- * "Sign in with Google" (FR-1). Authenticates an **existing** member by their
- * verified Google email — no auto-provisioning (new workspaces still sign up with
- * email). Reuses the same Google OAuth client as the data integration, with its own
- * redirect URI (GOOGLE_AUTH_REDIRECT_URI). See [[Transactional Email]] / Auth docs.
+ * "Continue with Google" (FR-1). If the verified Google email matches an existing
+ * member → sign them in (activating an invited member). If not → **create a new
+ * workspace with that person as the owner** (sign-up). Reuses the same Google OAuth
+ * client as the data integration, with its own redirect URI (GOOGLE_AUTH_REDIRECT_URI).
  */
 @Injectable()
 export class GoogleAuthService {
@@ -23,6 +24,7 @@ export class GoogleAuthService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly jwt: JwtService,
+    private readonly auth: AuthService,
   ) {}
 
   /** Whether sign-in with Google is configured (client id/secret present). */
@@ -74,17 +76,21 @@ export class GoogleAuthService {
       throw new UnauthorizedException('Your Google email is not verified');
     }
 
-    // Sign-in only matches an existing active member (no auto-provisioning).
     const user = await this.prisma.user.findFirst({
       where: { email: profile.email, deletedAt: null, status: { not: 'deactivated' } },
       include: { organization: true, role: true },
       orderBy: { lastLoginAt: 'desc' },
     });
-    if (!user) throw new UnauthorizedException('No Candango account for this Google email');
 
+    // No matching member → this Google user becomes the OWNER of a brand-new workspace.
+    if (!user) {
+      return this.auth.signupWithGoogle({ email: profile.email, name: profile.name ?? null });
+    }
+
+    // Existing member → sign in (and activate an invited member who chose Google).
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { lastLoginAt: new Date(), emailVerifiedAt: user.emailVerifiedAt ?? new Date() },
+      data: { lastLoginAt: new Date(), emailVerifiedAt: user.emailVerifiedAt ?? new Date(), status: 'active' },
     });
     const role = user.role?.name ?? 'Member';
     const token = await this.jwt.signAsync({ sub: user.id, orgId: user.orgId, role });
