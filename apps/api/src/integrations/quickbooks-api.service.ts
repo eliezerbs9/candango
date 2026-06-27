@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OAuthClient from 'intuit-oauth';
 import { PrismaService } from '../prisma/prisma.service';
@@ -68,6 +68,7 @@ export interface NormalizedDoc {
 /** Low-level QuickBooks Online Accounting API client with refresh-on-use. One connection per org. */
 @Injectable()
 export class QuickbooksApiService {
+  private readonly logger = new Logger(QuickbooksApiService.name);
   private itemRefCache = new Map<string, string>(); // realmId → default Service item id
 
   constructor(
@@ -150,10 +151,19 @@ export class QuickbooksApiService {
       ...(body ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(15_000),
     });
+    // intuit_tid: Intuit's per-request trace id — capture it from every response so it can
+    // be quoted to Intuit support when troubleshooting (recommended in their app review).
+    const tid = res.headers.get('intuit_tid') ?? 'none';
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const msg = json?.Fault?.Error?.[0]?.Detail ?? json?.Fault?.Error?.[0]?.Message ?? `QBO error ${res.status}`;
-      throw new BadRequestException(`QuickBooks: ${msg}`);
+      const fault = json?.Fault?.Error?.[0];
+      const msg = fault?.Detail ?? fault?.Message ?? `QBO error ${res.status}`;
+      // Structured error log for troubleshooting: trace id + status + endpoint + QBO fault code/message.
+      this.logger.error(
+        `QBO API error — status=${res.status} intuit_tid=${tid} method=${method} path=${path} ` +
+          `code=${fault?.code ?? 'n/a'} message=${fault?.Message ?? msg}`,
+      );
+      throw new BadRequestException(`QuickBooks: ${msg} (ref: ${tid})`);
     }
     return json;
   }
