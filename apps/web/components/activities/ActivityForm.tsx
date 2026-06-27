@@ -86,7 +86,11 @@ export function ActivityForm({
     }
   }, [opened, activity, defaultDealId]);
 
-  const timed = type === 'meeting' || type === 'call';
+  // Only meetings are timed calendar events; calls/tasks/emails are to-dos with a due date
+  // (calls sync to Google Tasks, not Calendar).
+  const timed = type === 'meeting';
+  // When opened from a deal (defaultDealId set), the deal is fixed — hide the picker.
+  const lockedDeal = Boolean(defaultDealId);
 
   const submit = () => {
     if (!subject.trim()) {
@@ -130,15 +134,17 @@ export function ActivityForm({
         />
         <TextInput label="Subject" required value={subject} onChange={(e) => setSubject(e.currentTarget.value)} />
 
-        <Select
-          label="Deal"
-          placeholder="Link to a deal (optional)"
-          data={deals.map((d) => ({ value: d.id, label: d.title }))}
-          value={dealId}
-          onChange={setDealId}
-          searchable
-          clearable
-        />
+        {!lockedDeal && (
+          <Select
+            label="Deal"
+            placeholder="Link to a deal (optional)"
+            data={deals.map((d) => ({ value: d.id, label: d.title }))}
+            value={dealId}
+            onChange={setDealId}
+            searchable
+            clearable
+          />
+        )}
         <CreatableMultiSelect
           label="Participants"
           placeholder={dealId ? "Defaults to the deal's people" : 'Search or create people'}

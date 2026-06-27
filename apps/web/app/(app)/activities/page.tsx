@@ -46,9 +46,9 @@ const localizer = dateFnsLocalizer({
   locales: { 'en-US': enUS },
 });
 
-// Events (meetings/calls) use the brand terracotta; tasks are blue; email kept distinct (teal).
+// Meetings are timed events (brand terracotta); calls/tasks are to-dos (blue); email kept distinct (teal).
 const TYPE_COLORS: Record<ActivityType, string> = {
-  call: 'candango',
+  call: 'blue',
   meeting: 'candango',
   task: 'blue',
   email: 'teal',

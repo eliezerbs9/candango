@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Badge, Button, Group, Paper, Stack, Text, Textarea, ThemeIcon, Timeline } from '@mantine/core';
+import { Badge, Button, Checkbox, Group, Paper, Stack, Text, Textarea, ThemeIcon, Timeline } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import {
@@ -21,6 +21,7 @@ import {
   useDealMessages,
   useNotes,
   useStageHistory,
+  useUpdateActivity,
 } from '@/lib/api/hooks';
 import type { ApiActivity } from '@/lib/api/activities';
 import type { ApiNote } from '@/lib/api/notes';
@@ -41,6 +42,8 @@ export function DealTimeline({ dealId }: { dealId: string }) {
   const { data: messages = [] } = useDealMessages(dealId);
   const { data: stages = [] } = useStageHistory(dealId);
   const createNote = useCreateNote();
+  const updateActivity = useUpdateActivity();
+  const toggleActivity = (a: ApiActivity) => updateActivity.mutate({ id: a.id, done: !a.done });
 
   const [noteBody, setNoteBody] = useState('');
   const [actOpen, actCtl] = useDisclosure(false);
@@ -104,7 +107,7 @@ export function DealTimeline({ dealId }: { dealId: string }) {
       ) : (
         <Timeline active={-1} bulletSize={26} lineWidth={2}>
           {items.map((it) => (
-            <Timeline.Item key={`${it.kind}-${itemKey(it)}`} bullet={bullet(it)} title={titleOf(it)}>
+            <Timeline.Item key={`${it.kind}-${itemKey(it)}`} bullet={bullet(it)} title={titleOf(it, toggleActivity)}>
               <Text size="xs" c="dimmed">
                 {fmt(it.date)}
               </Text>
@@ -142,7 +145,7 @@ function bullet(it: Item) {
   );
 }
 
-function titleOf(it: Item): React.ReactNode {
+function titleOf(it: Item, onToggleActivity: (a: ApiActivity) => void): React.ReactNode {
   switch (it.kind) {
     case 'note':
       return <Text fw={500} size="sm">Note · {it.data.authorName}</Text>;
@@ -163,7 +166,13 @@ function titleOf(it: Item): React.ReactNode {
       );
     case 'activity':
       return (
-        <Group gap={6}>
+        <Group gap={6} wrap="nowrap">
+          <Checkbox
+            size="xs"
+            checked={it.data.done}
+            onChange={() => onToggleActivity(it.data)}
+            aria-label={it.data.done ? 'Mark not done' : 'Mark done'}
+          />
           <Text fw={500} size="sm" td={it.data.done ? 'line-through' : undefined}>
             {it.data.subject}
           </Text>
