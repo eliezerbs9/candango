@@ -15,6 +15,28 @@ export function buildCaptureAddress(token: string, domain: string): string {
   return `${token}@${domain}`;
 }
 
+/** A deal's capture address: `deal-<token>@<domain>` (the `deal-` prefix routes it to that deal). */
+export function buildDealCaptureAddress(token: string, domain: string): string {
+  return `deal-${token}@${domain}`;
+}
+
+/** What a parsed capture address points at. */
+export type CaptureTarget = { kind: 'deal' | 'user'; token: string };
+
+/**
+ * Classify a capture address: `deal-<token>@domain` → a deal, `<token>@domain` → a user.
+ * Returns null when the address isn't on the capture domain.
+ */
+export function parseCaptureAddress(address: string, domain: string): CaptureTarget | null {
+  const local = parseCaptureToken(address, domain);
+  if (!local) return null;
+  if (local.startsWith('deal-')) {
+    const token = local.slice('deal-'.length);
+    return token ? { kind: 'deal', token } : null;
+  }
+  return { kind: 'user', token: local };
+}
+
 /** Strip a display name → bare lowercased email (`"Jo <a@b>"` → `a@b`). */
 export function emailOf(raw: string): string {
   const m = raw.match(/<([^>]+)>/);

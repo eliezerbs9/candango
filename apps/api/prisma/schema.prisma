@@ -190,6 +190,7 @@ model Deal {
   id                 String   @id @default(cuid())
   orgId              String
   refNumber          Int?     // human-readable per-tenant deal number (Pipedrive-style); cuid stays the real id
+  emailCaptureToken  String?  @unique // local-part suffix of this deal's BCC capture address: deal-<token>@… (FR-5.8)
   title              String
   value              Int      @default(0) // minor units
   currency           String   @default("USD")
@@ -447,6 +448,7 @@ model Message {
   userId            String
   direction         String   // in | out
   providerMessageId String
+  rfcMessageId      String?  // RFC 5322 Message-ID — set on CRM sends so the BCC'd copy dedupes on the way back in (FR-5.8)
   threadId          String?
   fromAddress       String
   toAddresses       Json     @default("[]")
@@ -466,6 +468,7 @@ model Message {
   @@unique([userId, providerMessageId])
   @@index([orgId, personId])
   @@index([orgId, dealId])
+  @@index([orgId, rfcMessageId])
   @@index([userId, folder, sentAt])
 }
 

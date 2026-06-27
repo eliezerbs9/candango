@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { runWithOrg } from '../prisma/tenant-context';
-import { emailOf, parseCaptureToken } from './capture.util';
+import { emailOf, parseCaptureAddress, parseCaptureToken, type CaptureTarget } from './capture.util';
 
 /** A parsed inbound email, normalized across provider payload shapes. */
 interface NormalizedMail {
@@ -49,44 +49,81 @@ export class InboundEmailService {
     const mail = normalizeInbound(body);
     if (!mail) return { ignored: true };
 
-    // Which capture address (token) was this delivered to? (For a BCC, only the envelope shows it.)
-    const token = mail.recipients.map((r) => parseCaptureToken(r, domain)).find(Boolean);
-    if (!token) {
+    // Which capture address was this delivered to? `deal-<token>@…` routes to a deal; `<token>@…` to a user.
+    const target = mail.recipients
+      .map((r) => parseCaptureAddress(r, domain))
+      .find((t): t is CaptureTarget => t !== null);
+    if (!target) {
       this.logger.warn('Inbound email had no capture address; ignoring');
       return { ignored: true };
     }
 
-    // Resolve the user. Unscoped on purpose — we don't know the org yet, and the token is globally unique.
-    const user = await this.prisma.user.findUnique({
-      where: { emailCaptureToken: token },
-      select: { id: true, orgId: true, email: true },
-    });
-    if (!user) {
-      this.logger.warn(`Inbound capture token not recognized: ${token.slice(0, 4)}…`);
-      return { ignored: true };
+    // Resolve org + the owning user + (for deal addresses) a forced deal. Unscoped: token is globally unique.
+    let orgId: string;
+    let userId: string;
+    let userEmails: string[];
+    let forcedDealId: string | null = null;
+    if (target.kind === 'deal') {
+      const deal = await this.prisma.deal.findUnique({
+        where: { emailCaptureToken: target.token },
+        select: { id: true, orgId: true, ownerUserId: true },
+      });
+      if (!deal) {
+        this.logger.warn(`Inbound deal capture token not recognized: ${target.token.slice(0, 4)}…`);
+        return { ignored: true };
+      }
+      orgId = deal.orgId;
+      userId = deal.ownerUserId;
+      forcedDealId = deal.id;
+      const owner = await this.prisma.user.findUnique({ where: { id: deal.ownerUserId }, select: { email: true } });
+      userEmails = owner ? [owner.email.toLowerCase()] : [];
+    } else {
+      const user = await this.prisma.user.findUnique({
+        where: { emailCaptureToken: target.token },
+        select: { id: true, orgId: true, email: true },
+      });
+      if (!user) {
+        this.logger.warn(`Inbound user capture token not recognized: ${target.token.slice(0, 4)}…`);
+        return { ignored: true };
+      }
+      orgId = user.orgId;
+      userId = user.id;
+      userEmails = [user.email.toLowerCase()];
     }
 
-    // Everything below runs scoped to the user's org (RLS-enforced).
-    return runWithOrg(user.orgId, async () => {
-      const userEmail = user.email.toLowerCase();
-      const direction = mail.from === userEmail ? 'out' : 'in';
+    // Everything below runs scoped to the resolved org (RLS-enforced).
+    return runWithOrg(orgId, async () => {
+      // Dedupe: a CRM-sent email returning via its own BCC (we already logged it on send).
+      const rfcId = mail.messageId ? mail.messageId.replace(/^<|>$/g, '') : null;
+      if (rfcId) {
+        const existing = await this.prisma.message.findFirst({
+          where: { orgId, rfcMessageId: rfcId },
+          select: { id: true, dealId: true },
+        });
+        if (existing) return { ok: true, deduped: true, messageId: existing.id, dealId: existing.dealId };
+      }
+
+      const direction = userEmails.includes(mail.from) ? 'out' : 'in';
       const counterparts = (direction === 'out' ? [...mail.to, ...mail.cc] : [mail.from]).filter(
-        (e) => e && e !== userEmail && parseCaptureToken(e, domain) === null,
+        (e) => e && !userEmails.includes(e) && parseCaptureToken(e, domain) === null,
       );
 
-      const { personId, dealId } = await this.match(user.orgId, counterparts, mail.threadId);
+      const matched = await this.match(orgId, counterparts, mail.threadId);
+      const dealId = forcedDealId ?? matched.dealId;
+      const personId = matched.personId;
 
       const providerMessageId =
-        mail.messageId ??
+        rfcId ??
         `inbound_${createHash('sha1').update(`${mail.from}|${mail.subject ?? ''}|${mail.date?.toISOString() ?? ''}`).digest('hex')}`;
 
       const msg = await this.prisma.message.upsert({
-        where: { userId_providerMessageId: { userId: user.id, providerMessageId } },
+        where: { userId_providerMessageId: { userId, providerMessageId } },
         create: {
-          orgId: user.orgId,
-          userId: user.id,
+          orgId,
+          userId,
           direction,
           providerMessageId,
+          rfcMessageId: rfcId,
           threadId: mail.threadId ?? null,
           fromAddress: mail.from,
           toAddresses: mail.to as Prisma.InputJsonValue,
@@ -102,7 +139,7 @@ export class InboundEmailService {
       });
 
       this.events.emit('webhook.event', {
-        orgId: user.orgId,
+        orgId,
         type: direction === 'in' ? 'message.received' : 'message.sent',
         data: { messageId: msg.id, dealId },
       });

@@ -3,7 +3,8 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { extractBody, gmailClientFor } from './gmail-read.util';
 import { SendMessageDto } from './dto/send.dto';
-import { buildCaptureAddress, newCaptureToken } from './capture.util';
+import { randomUUID } from 'node:crypto';
+import { buildCaptureAddress, buildDealCaptureAddress, newCaptureToken } from './capture.util';
 
 type MessageRow = {
   id: string;
@@ -98,22 +99,34 @@ export class MessagesService {
     return Object.fromEntries(entries);
   }
 
+  /** Get-or-create a user's capture token. */
+  private async ensureUserToken(userId: string): Promise<string> {
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { emailCaptureToken: true } });
+    if (u?.emailCaptureToken) return u.emailCaptureToken;
+    const token = newCaptureToken();
+    await this.prisma.user.update({ where: { id: userId }, data: { emailCaptureToken: token } });
+    return token;
+  }
+
+  /** Get-or-create a deal's capture token (org-scoped by the Prisma extension). Null if the deal isn't in this org. */
+  private async ensureDealToken(dealId: string): Promise<string | null> {
+    const d = await this.prisma.deal.findFirst({ where: { id: dealId }, select: { emailCaptureToken: true } });
+    if (!d) return null;
+    if (d.emailCaptureToken) return d.emailCaptureToken;
+    const token = newCaptureToken();
+    await this.prisma.deal.update({ where: { id: dealId }, data: { emailCaptureToken: token } });
+    return token;
+  }
+
   /**
    * The user's BCC / inbound-parse capture address (FR-5.8), generating the token on first read.
    * `sendingAs` is the connected Gmail address emails go out as (best-effort).
    */
   async getCaptureAddress(userId: string) {
     const domain = process.env.EMAIL_INBOUND_DOMAIN ?? '';
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, emailCaptureToken: true },
-    });
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
     if (!user) throw new NotFoundException('User not found');
-    let token = user.emailCaptureToken;
-    if (!token) {
-      token = newCaptureToken();
-      await this.prisma.user.update({ where: { id: userId }, data: { emailCaptureToken: token } });
-    }
+    const token = await this.ensureUserToken(userId);
 
     let sendingAs: string | null = null;
     const conn = await this.prisma.mailboxConnection.findUnique({ where: { userId } });
@@ -136,9 +149,26 @@ export class MessagesService {
     const gmail = gmailClientFor(conn);
     const from = (await gmail.users.getProfile({ userId: 'me' })).data.emailAddress ?? '';
 
+    // Auto-BCC the capture address so the email also flows through the inbound pipeline (FR-5.8):
+    // from a deal → that deal's address; from /emails → the user's address. Skipped if no inbound domain.
+    const domain = process.env.EMAIL_INBOUND_DOMAIN ?? '';
+    let bcc: string[] | undefined;
+    if (domain) {
+      if (dto.dealId) {
+        const dealToken = await this.ensureDealToken(dto.dealId);
+        if (dealToken) bcc = [buildDealCaptureAddress(dealToken, domain)];
+      } else {
+        bcc = [buildCaptureAddress(await this.ensureUserToken(userId), domain)];
+      }
+    }
+    // Stable Message-ID so the BCC'd copy dedupes when it returns via the inbound webhook.
+    const rfcMessageId = `${randomUUID()}@${domain || 'candango.app'}`;
+
     const raw = buildMime({
       to: dto.to,
       from,
+      bcc,
+      messageId: rfcMessageId,
       subject: dto.subject,
       body: dto.body,
       html: dto.html,
@@ -166,6 +196,7 @@ export class MessagesService {
         userId,
         direction: 'out',
         providerMessageId: sent.data.id ?? `local_${Date.now()}`,
+        rfcMessageId,
         threadId: sent.data.threadId ?? null,
         fromAddress: from,
         toAddresses: dto.to as Prisma.InputJsonValue,
@@ -243,6 +274,8 @@ export class MessagesService {
 function buildMime(opts: {
   to: string[];
   from: string;
+  bcc?: string[];
+  messageId?: string;
   subject: string;
   body: string;
   html?: boolean;
@@ -251,6 +284,8 @@ function buildMime(opts: {
 }): string {
   const contentType = opts.html ? 'text/html' : 'text/plain';
   const top = [`To: ${opts.to.join(', ')}`, `From: ${opts.from}`, `Subject: ${opts.subject}`, 'MIME-Version: 1.0'];
+  if (opts.bcc?.length) top.push(`Bcc: ${opts.bcc.join(', ')}`);
+  if (opts.messageId) top.push(`Message-ID: <${opts.messageId}>`);
   if (opts.inReplyTo) top.push(`In-Reply-To: ${opts.inReplyTo}`, `References: ${opts.inReplyTo}`);
 
   const attachments = opts.attachments ?? [];
