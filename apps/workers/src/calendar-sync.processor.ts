@@ -11,7 +11,7 @@ type CalendarSyncJob =
   | { op: 'delete'; userId: string; kind: 'event' | 'task'; externalId: string };
 
 const INBOUND_POLL_MS = 5 * 60 * 1000;
-const INITIAL_WINDOW_MS = 90 * 24 * 60 * 60 * 1000; // first inbound sync looks back 3 months
+const INITIAL_WINDOW_MS = 30 * 24 * 60 * 60 * 1000; // first inbound sync looks back 30 days (unchanged)
 const FORWARD_WINDOW_MS = 365 * 24 * 60 * 60 * 1000; // …and at most 1 year ahead (caps recurring-event expansion)
 
 const firstEmail = (emails: Prisma.JsonValue): string | null => ((emails as string[]) ?? [])[0] ?? null;
