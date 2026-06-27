@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { extractBody, gmailClientFor } from './gmail-read.util';
 import { SendMessageDto } from './dto/send.dto';
+import { buildCaptureAddress, newCaptureToken } from './capture.util';
 
 type MessageRow = {
   id: string;
@@ -95,6 +96,35 @@ export class MessagesService {
       }),
     );
     return Object.fromEntries(entries);
+  }
+
+  /**
+   * The user's BCC / inbound-parse capture address (FR-5.8), generating the token on first read.
+   * `sendingAs` is the connected Gmail address emails go out as (best-effort).
+   */
+  async getCaptureAddress(userId: string) {
+    const domain = process.env.EMAIL_INBOUND_DOMAIN ?? '';
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, emailCaptureToken: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    let token = user.emailCaptureToken;
+    if (!token) {
+      token = newCaptureToken();
+      await this.prisma.user.update({ where: { id: userId }, data: { emailCaptureToken: token } });
+    }
+
+    let sendingAs: string | null = null;
+    const conn = await this.prisma.mailboxConnection.findUnique({ where: { userId } });
+    if (conn && conn.status === 'connected' && conn.refreshToken) {
+      try {
+        sendingAs = (await gmailClientFor(conn).users.getProfile({ userId: 'me' })).data.emailAddress ?? null;
+      } catch {
+        sendingAs = null; // scope/token may not allow getProfile — non-fatal
+      }
+    }
+    return { address: domain ? buildCaptureAddress(token, domain) : null, configured: Boolean(domain), sendingAs };
   }
 
   /** Send an email via Gmail and record it as an outbound (Sent) message. */

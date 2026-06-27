@@ -25,6 +25,7 @@ import {
 } from './deals';
 import { createNote, deleteNote, getNotes } from './notes';
 import {
+  getCaptureAddress,
   getFolderCounts,
   getMessage,
   getMessageBody,
@@ -252,6 +253,11 @@ export function useInbox(folder: MessageFolder) {
 export function useFolderCounts() {
   const token = useToken();
   return useQuery({ queryKey: ['folder-counts'], queryFn: () => getFolderCounts(token!), enabled: !!token });
+}
+
+export function useCaptureAddress() {
+  const token = useToken();
+  return useQuery({ queryKey: ['capture-address'], queryFn: () => getCaptureAddress(token!), enabled: !!token });
 }
 
 /** Trigger a Gmail capture, then refetch the inbox once the worker has run. */

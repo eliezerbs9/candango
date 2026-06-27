@@ -49,6 +49,13 @@ export class MessagesController {
     return this.svc.trash(u.orgId, id);
   }
 
+  /** The user's BCC / inbound-parse capture address (FR-5.8). Defined before `:id` so it isn't shadowed. */
+  @Get('capture-address')
+  @Scopes('deals:read')
+  captureAddress(@CurrentUser() u: AuthContext) {
+    return this.svc.getCaptureAddress(u.userId);
+  }
+
   /** Folder counts for the current user's mailbox (Inbox/Sent/Trash/Spam tabs). */
   @Get('folder-counts')
   @Scopes('deals:read')

@@ -73,6 +73,7 @@ model User {
   teamId       String?
   lastLoginAt  DateTime?
   emailVerifiedAt DateTime?
+  emailCaptureToken String? @unique // local-part of the user's BCC/inbound-parse capture address (FR-5.8)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   deletedAt    DateTime?

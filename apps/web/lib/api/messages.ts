@@ -84,3 +84,15 @@ export function getFolderCounts(token: string) {
 export function getMessageBody(token: string, id: string) {
   return apiFetch<{ html: string | null; text: string | null }>(`/messages/${id}/body`, { token });
 }
+
+export interface CaptureAddress {
+  /** `<token>@<inbound domain>`, or null when EMAIL_INBOUND_DOMAIN isn't configured server-side. */
+  address: string | null;
+  configured: boolean;
+  /** The connected Gmail address emails go out as (best-effort). */
+  sendingAs: string | null;
+}
+
+export function getCaptureAddress(token: string) {
+  return apiFetch<CaptureAddress>('/messages/capture-address', { token });
+}
