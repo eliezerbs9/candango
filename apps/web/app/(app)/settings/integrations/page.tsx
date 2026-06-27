@@ -1,12 +1,11 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Badge, Button, Card, Code, CopyButton, Group, SimpleGrid, Stack, Text } from '@mantine/core';
+import { Alert, Badge, Button, Card, Group, SimpleGrid, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconBrandGoogle, IconMail, IconReceipt } from '@tabler/icons-react';
+import { IconBrandGoogle, IconInfoCircle, IconReceipt } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import {
-  useCaptureAddress,
   useConnectGoogle,
   useConnectQuickbooks,
   useDisconnectGoogle,
@@ -115,62 +114,18 @@ function QuickbooksCard() {
   );
 }
 
-function EmailCaptureCard() {
-  const { data, isLoading } = useCaptureAddress();
-  const address = data?.address ?? null;
-
-  return (
-    <Card withBorder radius="md" padding="lg">
-      <Group justify="space-between" mb="xs">
-        <Group gap="sm">
-          <IconMail size={20} />
-          <Text fw={600}>Email capture (BCC)</Text>
-        </Group>
-        <Badge color={data?.configured ? 'green' : 'gray'} variant="light">
-          {data?.configured ? 'Active' : 'Not set up'}
-        </Badge>
-      </Group>
-      <Text size="sm" c="dimmed" mb="md">
-        BCC or forward emails to your personal capture address and they’re logged on the matching deal
-        automatically — no inbox access needed.
-      </Text>
-      {data?.configured && address ? (
-        <Group gap="xs" wrap="nowrap">
-          <Code style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {address}
-          </Code>
-          <CopyButton value={address}>
-            {({ copied, copy }) => (
-              <Button variant="light" size="xs" onClick={copy}>
-                {copied ? 'Copied' : 'Copy'}
-              </Button>
-            )}
-          </CopyButton>
-        </Group>
-      ) : (
-        <Text size="sm" c="dimmed">
-          {isLoading ? 'Loading…' : 'Email capture isn’t configured on the server yet.'}
-        </Text>
-      )}
-      {data?.sendingAs ? (
-        <Text size="xs" c="dimmed" mt="sm">
-          Sending as {data.sendingAs}
-        </Text>
-      ) : null}
-    </Card>
-  );
-}
-
 export default function IntegrationsPage() {
   return (
     <Stack>
+      <Alert variant="light" color="blue" icon={<IconInfoCircle size={16} />}>
+        Full email sync is pending.
+      </Alert>
       <Text c="dimmed" size="sm">
         Optional integrations. The app works fully without them.
       </Text>
       <SimpleGrid cols={{ base: 1, sm: 2 }}>
         <GoogleCard />
         <QuickbooksCard />
-        <EmailCaptureCard />
       </SimpleGrid>
     </Stack>
   );

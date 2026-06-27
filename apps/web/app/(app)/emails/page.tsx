@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useDisclosure } from '@mantine/hooks';
-import { Badge, Box, Button, Card, Center, Group, Loader, SegmentedControl, Stack, Text } from '@mantine/core';
-import { IconMail, IconMailOff, IconPencil, IconRefresh } from '@tabler/icons-react';
+import { Alert, Badge, Box, Button, Card, Center, Group, Loader, SegmentedControl, Stack, Text } from '@mantine/core';
+import { IconInfoCircle, IconMail, IconMailOff, IconPencil, IconRefresh } from '@tabler/icons-react';
 import { PageHeader } from '@/components/primitives/PageHeader';
 import { ComposeEmail } from '@/components/email/ComposeEmail';
 import { useFolderCounts, useGoogleStatus, useInbox, useSyncEmail } from '@/lib/api/hooks';
@@ -62,6 +62,10 @@ export default function EmailsPage() {
           ) : undefined
         }
       />
+
+      <Alert variant="light" color="blue" icon={<IconInfoCircle size={16} />} mb="md">
+        Full email sync is pending.
+      </Alert>
 
       {googleLoading ? (
         <Center mih="40vh">
