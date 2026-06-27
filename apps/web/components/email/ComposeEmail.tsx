@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Button, FileButton, Group, Modal, Pill, Select, Stack, TagsInput, Text, TextInput } from '@mantine/core';
-import { IconPaperclip } from '@tabler/icons-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, Button, FileButton, Group, Modal, Pill, Select, Stack, TagsInput, Text, TextInput } from '@mantine/core';
+import { IconBulb, IconPaperclip } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { ApiError } from '@/lib/api/client';
 import { RichTextBody } from '@/components/common/RichTextBody';
@@ -85,6 +85,24 @@ export function ComposeEmail({
     if (!reply) setTo(dealEmails(id)); // prefill recipients from the deal's people
   };
 
+  // Smart suggest (FR-5.8): if a typed recipient is a known contact on an open deal and no deal is
+  // selected yet, offer to link that deal so the email is logged to the right place.
+  const suggestion = useMemo(() => {
+    if (dealId || to.length === 0) return null;
+    for (const email of to) {
+      const person = persons.find((p) => (p.email ?? '').toLowerCase() === email.toLowerCase());
+      if (!person) continue;
+      const deal = deals.find(
+        (d) =>
+          d.status === 'open' &&
+          (d.primaryPersonId === person.id ||
+            (d.companyId ? person.companies.some((c) => c.id === d.companyId) : false)),
+      );
+      if (deal) return { person, deal };
+    }
+    return null;
+  }, [to, dealId, persons, deals]);
+
   const addFiles = async (files: File[]) => {
     try {
       const next = await Promise.all(files.map(fileToAttachment));
@@ -138,6 +156,23 @@ export function ComposeEmail({
           clearable
         />
         <TagsInput label="To" placeholder="Type an email and press Enter" value={to} onChange={setTo} />
+        {suggestion ? (
+          <Alert variant="light" color="teal" icon={<IconBulb size={16} />} py="xs">
+            <Group justify="space-between" wrap="nowrap" gap="sm">
+              <Text size="sm">
+                <b>{suggestion.person.name || suggestion.person.email}</b> is on the open deal{' '}
+                <b>
+                  {suggestion.deal.refNumber ? `#${suggestion.deal.refNumber} ` : ''}
+                  {suggestion.deal.title}
+                </b>
+                .
+              </Text>
+              <Button size="xs" variant="light" color="teal" onClick={() => setDealId(suggestion.deal.id)}>
+                Link deal
+              </Button>
+            </Group>
+          </Alert>
+        ) : null}
         <TextInput label="Subject" value={subject} onChange={(e) => setSubject(e.currentTarget.value)} />
         <div>
           <Text size="sm" fw={500} mb={4}>
