@@ -43,7 +43,7 @@ export function SignupForm() {
 
   return (
     <Stack gap="md">
-      <OAuthButton onClick={() => { window.location.href = googleLoginUrl(); }} />
+      <OAuthButton onClick={() => { window.location.href = googleLoginUrl('signup'); }} />
       <Divider label="or" labelPosition="center" />
       <form onSubmit={handleSubmit}>
         <Stack gap="sm">

@@ -34,7 +34,10 @@ export function LoginForm() {
     if (error) {
       notifications.show({
         color: 'red',
-        message: error === 'google' ? 'Google sign-in failed. Please try again.' : 'Sign-in failed.',
+        message:
+          error === 'google'
+            ? "Google sign-in failed — no account for that email. Sign up first, or check it's verified."
+            : 'Sign-in failed.',
       });
       router.replace('/login');
     } else if (token) {
@@ -79,7 +82,7 @@ export function LoginForm() {
 
   return (
     <Stack gap="md">
-      <OAuthButton onClick={() => { window.location.href = googleLoginUrl(); }} />
+      <OAuthButton onClick={() => { window.location.href = googleLoginUrl('login'); }} />
       <Divider label="or" labelPosition="center" />
       <form onSubmit={handleSubmit}>
         <Stack gap="sm">

@@ -30,8 +30,9 @@ export function apiMe(token: string) {
 }
 
 /** Full URL of the "Sign in with Google" entry point (a browser redirect, not fetch). */
-export function googleLoginUrl() {
-  return `${process.env.NEXT_PUBLIC_API_URL ?? '/v1'}/auth/google`;
+/** `mode='signup'` creates a workspace when there's no account; `'login'` only signs in an existing one. */
+export function googleLoginUrl(mode: 'login' | 'signup' = 'login') {
+  return `${process.env.NEXT_PUBLIC_API_URL ?? '/v1'}/auth/google?mode=${mode}`;
 }
 
 export function apiForgotPassword(body: { email: string }) {

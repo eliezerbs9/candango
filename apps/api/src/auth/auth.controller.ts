@@ -24,8 +24,8 @@ export class AuthController {
 
   /** Step 1 of "Sign in with Google": redirect the browser to Google's consent screen. */
   @Get('google')
-  async google(@Res() res: Response) {
-    return res.redirect(await this.googleAuth.authUrl());
+  async google(@Res() res: Response, @Query('mode') mode?: string) {
+    return res.redirect(await this.googleAuth.authUrl(mode === 'signup' ? 'signup' : 'login'));
   }
 
   /** Step 2: Google redirects here; on success we hand the app JWT back to the web app. */

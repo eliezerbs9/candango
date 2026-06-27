@@ -10,6 +10,7 @@ const LOGIN_SCOPES = ['openid', 'email', 'profile'];
 
 interface LoginState {
   kind: string;
+  mode?: 'login' | 'signup';
 }
 
 /**
@@ -44,9 +45,9 @@ export class GoogleAuthService {
     return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
   }
 
-  /** Build the Google consent URL; the signed `state` guards against CSRF. */
-  async authUrl(): Promise<string> {
-    const state = await this.jwt.signAsync({ kind: 'google_login' }, { expiresIn: '10m' });
+  /** Build the Google consent URL; the signed `state` guards against CSRF and carries the mode. */
+  async authUrl(mode: 'login' | 'signup' = 'login'): Promise<string> {
+    const state = await this.jwt.signAsync({ kind: 'google_login', mode }, { expiresIn: '10m' });
     return this.oauthClient().generateAuthUrl({
       access_type: 'online',
       prompt: 'select_account',
@@ -57,9 +58,11 @@ export class GoogleAuthService {
 
   /** Exchange the code, verify the identity token, and sign in the matching member. */
   async handleCallback(code: string, state: string): Promise<{ token: string }> {
+    let mode: 'login' | 'signup' = 'login';
     try {
       const payload = await this.jwt.verifyAsync<LoginState>(state);
       if (payload.kind !== 'google_login') throw new Error('bad state');
+      if (payload.mode === 'signup') mode = 'signup';
     } catch {
       throw new BadRequestException('Invalid or expired sign-in state');
     }
@@ -82,9 +85,13 @@ export class GoogleAuthService {
       orderBy: { lastLoginAt: 'desc' },
     });
 
-    // No matching member → this Google user becomes the OWNER of a brand-new workspace.
+    // No matching member: on SIGN-UP, create a new workspace (this Google user is the owner);
+    // on LOGIN, refuse — there's no account to sign into.
     if (!user) {
-      return this.auth.signupWithGoogle({ email: profile.email, name: profile.name ?? null });
+      if (mode === 'signup') {
+        return this.auth.signupWithGoogle({ email: profile.email, name: profile.name ?? null });
+      }
+      throw new UnauthorizedException('No Candango account for this Google email');
     }
 
     // Existing member → sign in (and activate an invited member who chose Google).
