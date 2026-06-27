@@ -1,14 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useDisclosure } from '@mantine/hooks';
 import { Alert, Badge, Box, Button, Card, Center, Group, Loader, SegmentedControl, Stack, Text } from '@mantine/core';
-import { IconInfoCircle, IconMail, IconMailOff, IconPencil, IconRefresh } from '@tabler/icons-react';
+import { IconInfoCircle, IconMail, IconMailOff, IconPencil } from '@tabler/icons-react';
 import { PageHeader } from '@/components/primitives/PageHeader';
 import { ComposeEmail } from '@/components/email/ComposeEmail';
-import { useFolderCounts, useGoogleStatus, useInbox, useSyncEmail } from '@/lib/api/hooks';
+import { useFolderCounts, useGoogleStatus, useInbox } from '@/lib/api/hooks';
 import type { ApiMessage, MessageFolder } from '@/lib/api/messages';
 
 const FOLDERS: { value: MessageFolder; label: string }[] = [
@@ -27,15 +27,8 @@ export default function EmailsPage() {
   const [folder, setFolder] = useState<MessageFolder>('inbox');
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInbox(folder);
   const { data: counts = {} } = useFolderCounts();
-  const sync = useSyncEmail();
   const { data: google, isLoading: googleLoading } = useGoogleStatus();
   const connected = !!google?.mailbox;
-
-  // Pull new mail from Gmail when the screen opens — only if Gmail is connected.
-  useEffect(() => {
-    if (connected) sync.mutate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connected]);
 
   const messages = data?.pages.flatMap((p) => p.data) ?? [];
 
@@ -43,22 +36,12 @@ export default function EmailsPage() {
     <>
       <PageHeader
         title="Email"
-        subtitle="Your synced mailbox"
+        subtitle="Emails logged & captured to your deals"
         actions={
           connected ? (
-            <Group>
-              <Button
-                variant="default"
-                leftSection={<IconRefresh size={16} />}
-                loading={sync.isPending}
-                onClick={() => sync.mutate()}
-              >
-                Sync
-              </Button>
-              <Button leftSection={<IconPencil size={16} />} onClick={composeCtl.open}>
-                Compose
-              </Button>
-            </Group>
+            <Button leftSection={<IconPencil size={16} />} onClick={composeCtl.open}>
+              Compose
+            </Button>
           ) : undefined
         }
       />

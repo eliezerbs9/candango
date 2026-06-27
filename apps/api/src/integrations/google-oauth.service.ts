@@ -132,7 +132,8 @@ export class GoogleOAuthService {
       },
     });
 
-    await this.syncEmail(userId); // initial Gmail backfill
+    // Full Gmail inbox sync is disabled (no-CASA launch) — no email backfill on connect.
+    // Email capture is via BCC / inbound-parse + Reply-To. See [[Email & Messaging Sync]].
     await this.backfillCalendar(orgId, userId); // pull events in + push existing activities up
     return { orgId };
   }

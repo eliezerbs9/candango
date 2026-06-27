@@ -9,8 +9,6 @@ interface SyncUserJob {
   userId: string;
 }
 
-const POLL_MS = 5 * 60 * 1000;
-
 /** Extract a bare email from a header value like `Jane <jane@acme.com>`. */
 function parseAddr(v?: string | null): string | null {
   if (!v) return null;
@@ -33,9 +31,10 @@ function deriveFolder(labelIds?: string[] | null): string {
 }
 
 /**
- * Captures the connected user's recent Gmail and matches each message to a person → deal,
- * storing rows in `messages` (powers the Email screen + deal timeline, FR-5.2/5.5).
- * Runs on connect, on demand, and on a periodic poll. Idempotent via (userId, providerMessageId).
+ * ⛔ Full Gmail inbox sync is **DISABLED** (no-CASA launch). The `gmail.modify` restricted scope it
+ * relies on would require a CASA security assessment, so we capture email via BCC / inbound-parse +
+ * Reply-To instead ([[Email & Messaging Sync]]). The sync code below (`syncMailbox` + helpers) is
+ * **retained, not executed** — it's the deferred CASA tier ([[Gmail Full Inbox Sync (CASA)]]).
  */
 @Processor('gmail-sync')
 export class GmailSyncProcessor extends WorkerHost implements OnModuleInit {
@@ -47,20 +46,15 @@ export class GmailSyncProcessor extends WorkerHost implements OnModuleInit {
   }
 
   async onModuleInit() {
-    // Periodic poll across all connected mailboxes (push notifications need a public URL).
-    await this.queue.add('sync-all', {}, { repeat: { every: POLL_MS }, removeOnComplete: true, removeOnFail: true });
+    // Tear down any previously-scheduled poll so it stops firing where it was already registered
+    // (e.g. prod Redis still has the old repeatable). No new poll is registered while disabled.
+    const repeatables = await this.queue.getRepeatableJobs().catch(() => []);
+    for (const r of repeatables) await this.queue.removeRepeatableByKey(r.key).catch(() => undefined);
   }
 
-  async process(job: Job): Promise<void> {
-    if (job.name === 'sync-all') {
-      const conns = await this.prisma.mailboxConnection.findMany({
-        where: { status: 'connected' },
-        select: { userId: true },
-      });
-      for (const c of conns) await this.queue.add('sync-user', { userId: c.userId });
-      return;
-    }
-    await this.syncMailbox((job.data as SyncUserJob).userId);
+  async process(_job: Job): Promise<void> {
+    // Disabled — see the class doc. Any stale enqueued job is a no-op.
+    return;
   }
 
   private async syncMailbox(userId: string): Promise<void> {
