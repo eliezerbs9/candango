@@ -7,6 +7,7 @@ import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { useAuth } from '@/lib/auth/useAuth';
 import { apiLogin, apiMe, googleLoginUrl } from '@/lib/api/auth';
+import { getOnboarding } from '@/lib/api/onboarding';
 import { ApiError } from '@/lib/api/client';
 import { OAuthButton } from './OAuthButton';
 
@@ -16,6 +17,16 @@ export function LoginForm() {
   const { signIn } = useAuth();
   const [loading, setLoading] = useState(false);
 
+  // New workspaces (incl. Google sign-up) land on the onboarding wizard until it's completed.
+  const routeAfterAuth = async (token: string) => {
+    try {
+      const ob = await getOnboarding(token);
+      router.replace(ob.completed ? '/dashboard' : '/onboarding');
+    } catch {
+      router.replace('/dashboard');
+    }
+  };
+
   // Handle the return from "Sign in with Google" (the API redirects here with ?token / ?error).
   useEffect(() => {
     const token = params.get('token');
@@ -23,10 +34,7 @@ export function LoginForm() {
     if (error) {
       notifications.show({
         color: 'red',
-        message:
-          error === 'google'
-            ? 'Google sign-in failed — no account matches that email. Use email sign-in or ask an admin for an invite.'
-            : 'Sign-in failed.',
+        message: error === 'google' ? 'Google sign-in failed. Please try again.' : 'Sign-in failed.',
       });
       router.replace('/login');
     } else if (token) {
@@ -34,7 +42,7 @@ export function LoginForm() {
         .then((user) => {
           signIn(token, user);
           notifications.show({ message: 'Signed in', color: 'green' });
-          router.replace('/dashboard');
+          return routeAfterAuth(token);
         })
         .catch(() => {
           notifications.show({ color: 'red', message: 'Sign-in failed.' });
@@ -58,7 +66,7 @@ export function LoginForm() {
       const { token, user } = await apiLogin(values);
       signIn(token, user);
       notifications.show({ message: 'Signed in', color: 'green' });
-      router.push('/dashboard');
+      await routeAfterAuth(token);
     } catch (e) {
       notifications.show({
         message: e instanceof ApiError ? e.message : 'Login failed',
