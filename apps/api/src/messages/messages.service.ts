@@ -167,10 +167,10 @@ export class MessagesService {
         }
       }
       bcc = addrs; // hidden — captures the OUTBOUND email (dedupes with the direct send-log)
-      // Reply-To routes the recipient's REPLY to a capture address too, so inbound replies are
+      // Reply-To routes the recipient's REPLY to the capture addresses too, so inbound replies are
       // captured (BCC can't do this — it's hidden from the recipient). Keep the user's real address
-      // so they still receive the reply; the deal address (or user address) catches it for the CRM.
-      replyTo = [from, dealAddr ?? userAddr];
+      // so they still receive the reply; include BOTH capture addresses (user always + deal if any).
+      replyTo = [from, ...addrs];
     }
     // Stable Message-ID so the BCC'd copy dedupes when it returns via the inbound webhook.
     const rfcMessageId = `${randomUUID()}@${domain || 'candango.app'}`;
