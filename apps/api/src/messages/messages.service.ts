@@ -149,17 +149,18 @@ export class MessagesService {
     const gmail = gmailClientFor(conn);
     const from = (await gmail.users.getProfile({ userId: 'me' })).data.emailAddress ?? '';
 
-    // Auto-BCC the capture address so the email also flows through the inbound pipeline (FR-5.8):
-    // from a deal → that deal's address; from /emails → the user's address. Skipped if no inbound domain.
+    // Auto-BCC the capture address(es) so every email flows through the inbound pipeline (FR-5.8):
+    // ALWAYS the logged-in user's address; PLUS the deal's address when the email is about a deal.
+    // Skipped only if no inbound domain is configured.
     const domain = process.env.EMAIL_INBOUND_DOMAIN ?? '';
     let bcc: string[] | undefined;
     if (domain) {
+      const addrs = [buildCaptureAddress(await this.ensureUserToken(userId), domain)];
       if (dto.dealId) {
         const dealToken = await this.ensureDealToken(dto.dealId);
-        if (dealToken) bcc = [buildDealCaptureAddress(dealToken, domain)];
-      } else {
-        bcc = [buildCaptureAddress(await this.ensureUserToken(userId), domain)];
+        if (dealToken) addrs.push(buildDealCaptureAddress(dealToken, domain));
       }
+      bcc = addrs;
     }
     // Stable Message-ID so the BCC'd copy dedupes when it returns via the inbound webhook.
     const rfcMessageId = `${randomUUID()}@${domain || 'candango.app'}`;

@@ -49,10 +49,12 @@ export class InboundEmailService {
     const mail = normalizeInbound(body);
     if (!mail) return { ignored: true };
 
-    // Which capture address was this delivered to? `deal-<token>@…` routes to a deal; `<token>@…` to a user.
-    const target = mail.recipients
+    // Which capture address(es) was this delivered to? An email can carry both the user's and the
+    // deal's address (we BCC both for deal emails) — prefer the deal address for attribution.
+    const targets = mail.recipients
       .map((r) => parseCaptureAddress(r, domain))
-      .find((t): t is CaptureTarget => t !== null);
+      .filter((t): t is CaptureTarget => t !== null);
+    const target = targets.find((t) => t.kind === 'deal') ?? targets.find((t) => t.kind === 'user') ?? null;
     if (!target) {
       this.logger.warn('Inbound email had no capture address; ignoring');
       return { ignored: true };
