@@ -5,7 +5,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { google } from 'googleapis';
 import { PrismaService } from '../prisma/prisma.service';
-import { encryptToken } from './crypto.util';
+import { decryptToken, encryptToken } from './crypto.util';
 
 /**
  * One consent grants Calendar, Tasks, and Gmail send. All scopes are **sensitive** (no CASA):
@@ -172,15 +172,53 @@ export class GoogleOAuthService {
     return { connected: Boolean(calendar || mailbox), calendar, mailbox };
   }
 
+  /** Calendar + Tasks clients authed as the connection's user (for cleanup on disconnect). */
+  private googleClientsFor(conn: { accessToken: string; refreshToken: string }) {
+    const oauth = this.oauthClient();
+    oauth.setCredentials({
+      access_token: conn.accessToken ? decryptToken(conn.accessToken) : undefined,
+      refresh_token: conn.refreshToken ? decryptToken(conn.refreshToken) : undefined,
+    });
+    return { calendar: google.calendar({ version: 'v3', auth: oauth }), tasks: google.tasks({ version: 'v1', auth: oauth }) };
+  }
+
+  /**
+   * Disconnect = undo the sync both ways:
+   *  - Candango-created Google events/tasks are DELETED from Google.
+   *  - Google-imported events are DELETED from Candango (the user's real events stay in Google).
+   *  - The user's own activities survive in the CRM, just unlinked.
+   */
   async disconnect(userId: string) {
-    // Remove the connections.
+    const conn = await this.prisma.calendarConnection.findUnique({ where: { userId } });
+
+    // 1) Best-effort: delete the events/tasks Candango pushed, from Google (while the token is still valid).
+    if (conn?.refreshToken) {
+      const { calendar, tasks } = this.googleClientsFor(conn);
+      const outbound = await this.prisma.activity.findMany({
+        where: { assignedUserId: userId, calendarEvent: { syncDirection: 'outbound' } },
+        select: { calendarEvent: { select: { externalEventId: true } } },
+      });
+      for (const a of outbound) {
+        const eid = a.calendarEvent?.externalEventId;
+        if (eid) await calendar.events.delete({ calendarId: 'primary', eventId: eid, sendUpdates: 'none' }).catch(() => undefined);
+      }
+      const taskActs = await this.prisma.activity.findMany({
+        where: { assignedUserId: userId, googleTaskId: { not: null } },
+        select: { googleTaskId: true },
+      });
+      for (const a of taskActs) {
+        if (a.googleTaskId) await tasks.tasks.delete({ tasklist: '@default', task: a.googleTaskId }).catch(() => undefined);
+      }
+    }
+
+    // 2) Remove the connections.
     await this.prisma.calendarConnection.deleteMany({ where: { userId } });
     await this.prisma.mailboxConnection.deleteMany({ where: { userId } });
 
-    // Clean synced Gmail data — every Message row is Gmail-originated.
+    // 3) Clean synced Gmail data — every Message row is Gmail-originated.
     await this.prisma.message.deleteMany({ where: { userId } });
 
-    // Calendar: drop Google-IMPORTED activities; keep the user's own (just unlink them).
+    // 4) Calendar: drop Google-IMPORTED activities; keep the user's own (just unlink them).
     const linked = await this.prisma.activity.findMany({
       where: { assignedUserId: userId, calendarEventId: { not: null } },
       select: { id: true, calendarEvent: { select: { id: true, syncDirection: true } } },
@@ -189,15 +227,14 @@ export class GoogleOAuthService {
     const importedActivityIds = linked
       .filter((a) => a.calendarEvent?.syncDirection === 'inbound')
       .map((a) => a.id);
-    // Delete the sync links first (FK), then the imported activities.
     if (eventIds.length) await this.prisma.calendarEvent.deleteMany({ where: { id: { in: eventIds } } });
     if (importedActivityIds.length) {
       await this.prisma.activity.deleteMany({ where: { id: { in: importedActivityIds } } });
     }
     // Unlink the user's own (outbound-synced) activities so they survive as plain activities.
     await this.prisma.activity.updateMany({
-      where: { assignedUserId: userId, calendarEventId: { not: null } },
-      data: { calendarEventId: null },
+      where: { assignedUserId: userId, OR: [{ calendarEventId: { not: null } }, { googleTaskId: { not: null } }] },
+      data: { calendarEventId: null, googleTaskId: null },
     });
   }
 }
