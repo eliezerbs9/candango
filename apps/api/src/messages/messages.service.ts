@@ -154,13 +154,23 @@ export class MessagesService {
     // Skipped only if no inbound domain is configured.
     const domain = process.env.EMAIL_INBOUND_DOMAIN ?? '';
     let bcc: string[] | undefined;
+    let replyTo: string[] | undefined;
     if (domain) {
-      const addrs = [buildCaptureAddress(await this.ensureUserToken(userId), domain)];
+      const userAddr = buildCaptureAddress(await this.ensureUserToken(userId), domain);
+      const addrs = [userAddr];
+      let dealAddr: string | undefined;
       if (dto.dealId) {
         const dealToken = await this.ensureDealToken(dto.dealId);
-        if (dealToken) addrs.push(buildDealCaptureAddress(dealToken, domain));
+        if (dealToken) {
+          dealAddr = buildDealCaptureAddress(dealToken, domain);
+          addrs.push(dealAddr);
+        }
       }
-      bcc = addrs;
+      bcc = addrs; // hidden — captures the OUTBOUND email (dedupes with the direct send-log)
+      // Reply-To routes the recipient's REPLY to a capture address too, so inbound replies are
+      // captured (BCC can't do this — it's hidden from the recipient). Keep the user's real address
+      // so they still receive the reply; the deal address (or user address) catches it for the CRM.
+      replyTo = [from, dealAddr ?? userAddr];
     }
     // Stable Message-ID so the BCC'd copy dedupes when it returns via the inbound webhook.
     const rfcMessageId = `${randomUUID()}@${domain || 'candango.app'}`;
@@ -169,6 +179,7 @@ export class MessagesService {
       to: dto.to,
       from,
       bcc,
+      replyTo,
       messageId: rfcMessageId,
       subject: dto.subject,
       body: dto.body,
@@ -276,6 +287,7 @@ function buildMime(opts: {
   to: string[];
   from: string;
   bcc?: string[];
+  replyTo?: string[];
   messageId?: string;
   subject: string;
   body: string;
@@ -286,6 +298,7 @@ function buildMime(opts: {
   const contentType = opts.html ? 'text/html' : 'text/plain';
   const top = [`To: ${opts.to.join(', ')}`, `From: ${opts.from}`, `Subject: ${opts.subject}`, 'MIME-Version: 1.0'];
   if (opts.bcc?.length) top.push(`Bcc: ${opts.bcc.join(', ')}`);
+  if (opts.replyTo?.length) top.push(`Reply-To: ${opts.replyTo.join(', ')}`);
   if (opts.messageId) top.push(`Message-ID: <${opts.messageId}>`);
   if (opts.inReplyTo) top.push(`In-Reply-To: ${opts.inReplyTo}`, `References: ${opts.inReplyTo}`);
 
