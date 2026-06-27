@@ -432,6 +432,7 @@ model MailboxConnection {
   provider     String   @default("gmail")
   accessToken  String   // encrypted at rest
   refreshToken String   // encrypted at rest
+  email        String?  // the connected Gmail address (the From for sends; captured at connect from the id_token)
   historyId    String?
   status       String   @default("connected")
   createdAt    DateTime @default(now())

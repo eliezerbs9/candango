@@ -128,15 +128,8 @@ export class MessagesService {
     if (!user) throw new NotFoundException('User not found');
     const token = await this.ensureUserToken(userId);
 
-    let sendingAs: string | null = null;
     const conn = await this.prisma.mailboxConnection.findUnique({ where: { userId } });
-    if (conn && conn.status === 'connected' && conn.refreshToken) {
-      try {
-        sendingAs = (await gmailClientFor(conn).users.getProfile({ userId: 'me' })).data.emailAddress ?? null;
-      } catch {
-        sendingAs = null; // scope/token may not allow getProfile — non-fatal
-      }
-    }
+    const sendingAs = conn?.status === 'connected' ? conn.email ?? null : null;
     return { address: domain ? buildCaptureAddress(token, domain) : null, configured: Boolean(domain), sendingAs };
   }
 
@@ -147,7 +140,10 @@ export class MessagesService {
       throw new BadRequestException('Connect your Google account to send email');
     }
     const gmail = gmailClientFor(conn);
-    const from = (await gmail.users.getProfile({ userId: 'me' })).data.emailAddress ?? '';
+    // From = the connected Gmail address, captured at connect (we no longer hold a Gmail read scope,
+    // so getProfile isn't available). Null means an old connection — reconnect to record it.
+    const from = conn.email ?? '';
+    if (!from) throw new BadRequestException('Reconnect your Google account to send email');
 
     // Auto-BCC the capture address(es) so every email flows through the inbound pipeline (FR-5.8):
     // ALWAYS the logged-in user's address; PLUS the deal's address when the email is about a deal.

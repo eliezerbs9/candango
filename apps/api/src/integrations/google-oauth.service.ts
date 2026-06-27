@@ -7,16 +7,32 @@ import { google } from 'googleapis';
 import { PrismaService } from '../prisma/prisma.service';
 import { encryptToken } from './crypto.util';
 
-/** One consent grants both Calendar and Gmail; we store a connection for each. */
+/**
+ * One consent grants Calendar, Tasks, and Gmail send. All scopes are **sensitive** (no CASA):
+ * the restricted `gmail.modify`/`gmail.readonly` (full inbox read) is intentionally NOT requested —
+ * email is captured via BCC / inbound-parse + Reply-To. Full inbox sync is deferred to CASA.
+ */
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/tasks',
-  'https://www.googleapis.com/auth/gmail.modify', // read + label changes (mark read) + trash
   'https://www.googleapis.com/auth/gmail.send',
   'openid',
   'email',
   'profile',
 ];
+
+/** Pull the verified email out of Google's id_token (no read scope needed). */
+function emailFromIdToken(idToken?: string | null): string | null {
+  if (!idToken) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(idToken.split('.')[1] ?? '', 'base64url').toString()) as {
+      email?: string;
+    };
+    return typeof payload.email === 'string' ? payload.email.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
 
 interface StatePayload {
   sub: string;
@@ -95,6 +111,7 @@ export class GoogleOAuthService {
     const access = encryptToken(tokens.access_token);
     const refresh = tokens.refresh_token ? encryptToken(tokens.refresh_token) : null;
     const expiry = tokens.expiry_date ? new Date(tokens.expiry_date) : null;
+    const connectedEmail = emailFromIdToken(tokens.id_token); // the From for sends (no read scope needed)
 
     await this.prisma.calendarConnection.upsert({
       where: { userId },
@@ -123,11 +140,13 @@ export class GoogleOAuthService {
         provider: 'gmail',
         accessToken: access,
         refreshToken: refresh ?? '',
+        ...(connectedEmail ? { email: connectedEmail } : {}),
         status: 'connected',
       },
       update: {
         accessToken: access,
         ...(refresh ? { refreshToken: refresh } : {}),
+        ...(connectedEmail ? { email: connectedEmail } : {}),
         status: 'connected',
       },
     });
