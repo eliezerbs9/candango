@@ -125,7 +125,7 @@ export default function ActivitiesPage() {
         const start = a.startAt ? new Date(a.startAt) : a.dueAt ? dateOnlyLocal(a.dueAt) : null;
         if (!start) return [];
         const end = a.endAt ? new Date(a.endAt) : start;
-        return [{ id: a.id, title: a.subject, start, end, allDay: !a.startAt, resource: a }];
+        return [{ id: a.id, title: `${a.done ? '✓ ' : ''}${a.subject}`, start, end, allDay: !a.startAt, resource: a }];
       }),
     [items],
   );
@@ -253,12 +253,15 @@ export default function ActivitiesPage() {
             onSelectEvent={(e: CalEvent) => openEdit(e.resource)}
             eventPropGetter={(e: CalEvent) => {
               const c = TYPE_COLORS[e.resource.type];
+              const done = e.resource.done;
               return {
                 style: {
                   backgroundColor: `var(--mantine-color-${c}-1)`,
                   color: `var(--mantine-color-${c}-9)`,
                   border: `1px solid var(--mantine-color-${c}-2)`,
                   borderLeft: `3px solid var(--mantine-color-${c}-4)`,
+                  // Completed activities are dimmed + struck through.
+                  ...(done ? { opacity: 0.55, textDecoration: 'line-through' } : {}),
                 },
               };
             }}

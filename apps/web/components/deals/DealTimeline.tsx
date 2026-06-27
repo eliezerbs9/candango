@@ -47,6 +47,15 @@ export function DealTimeline({ dealId }: { dealId: string }) {
 
   const [noteBody, setNoteBody] = useState('');
   const [actOpen, actCtl] = useDisclosure(false);
+  const [editing, setEditing] = useState<ApiActivity | null>(null);
+  const openNewActivity = () => {
+    setEditing(null);
+    actCtl.open();
+  };
+  const openEditActivity = (a: ApiActivity) => {
+    setEditing(a);
+    actCtl.open();
+  };
 
   const items = useMemo<Item[]>(() => {
     const out: Item[] = [];
@@ -90,7 +99,7 @@ export function DealTimeline({ dealId }: { dealId: string }) {
             size="xs"
             variant="light"
             leftSection={<IconPlus size={14} />}
-            onClick={actCtl.open}
+            onClick={openNewActivity}
           >
             Log activity
           </Button>
@@ -107,7 +116,7 @@ export function DealTimeline({ dealId }: { dealId: string }) {
       ) : (
         <Timeline active={-1} bulletSize={26} lineWidth={2}>
           {items.map((it) => (
-            <Timeline.Item key={`${it.kind}-${itemKey(it)}`} bullet={bullet(it)} title={titleOf(it, toggleActivity)}>
+            <Timeline.Item key={`${it.kind}-${itemKey(it)}`} bullet={bullet(it)} title={titleOf(it, toggleActivity, openEditActivity)}>
               <Text size="xs" c="dimmed">
                 {fmt(it.date)}
               </Text>
@@ -117,7 +126,7 @@ export function DealTimeline({ dealId }: { dealId: string }) {
         </Timeline>
       )}
 
-      <ActivityForm opened={actOpen} onClose={actCtl.close} defaultDealId={dealId} />
+      <ActivityForm opened={actOpen} onClose={actCtl.close} defaultDealId={dealId} activity={editing} />
     </Stack>
   );
 }
@@ -145,7 +154,11 @@ function bullet(it: Item) {
   );
 }
 
-function titleOf(it: Item, onToggleActivity: (a: ApiActivity) => void): React.ReactNode {
+function titleOf(
+  it: Item,
+  onToggleActivity: (a: ApiActivity) => void,
+  onEditActivity: (a: ApiActivity) => void,
+): React.ReactNode {
   switch (it.kind) {
     case 'note':
       return <Text fw={500} size="sm">Note · {it.data.authorName}</Text>;
@@ -173,7 +186,13 @@ function titleOf(it: Item, onToggleActivity: (a: ApiActivity) => void): React.Re
             onChange={() => onToggleActivity(it.data)}
             aria-label={it.data.done ? 'Mark not done' : 'Mark done'}
           />
-          <Text fw={500} size="sm" td={it.data.done ? 'line-through' : undefined}>
+          <Text
+            fw={500}
+            size="sm"
+            td={it.data.done ? 'line-through' : undefined}
+            style={{ cursor: 'pointer' }}
+            onClick={() => onEditActivity(it.data)}
+          >
             {it.data.subject}
           </Text>
           <Badge size="xs" variant="light" tt="capitalize">
