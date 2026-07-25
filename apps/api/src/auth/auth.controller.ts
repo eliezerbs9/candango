@@ -22,13 +22,28 @@ export class AuthController {
     private readonly config: ConfigService,
   ) {}
 
-  /** Step 1 of "Sign in with Google": redirect the browser to Google's consent screen. */
+  /**
+   * Step 1 of "Sign in with Google": redirect the browser to Google's consent
+   * screen. The mobile app passes `platform=mobile` + its own `redirect` URI so
+   * the callback can hand the token straight back to the app via a deep link.
+   */
   @Get('google')
-  async google(@Res() res: Response, @Query('mode') mode?: string) {
-    return res.redirect(await this.googleAuth.authUrl(mode === 'signup' ? 'signup' : 'login'));
+  async google(
+    @Res() res: Response,
+    @Query('mode') mode?: string,
+    @Query('platform') platform?: string,
+    @Query('redirect') redirect?: string,
+  ) {
+    return res.redirect(
+      await this.googleAuth.authUrl(
+        mode === 'signup' ? 'signup' : 'login',
+        platform === 'mobile' ? 'mobile' : 'web',
+        redirect,
+      ),
+    );
   }
 
-  /** Step 2: Google redirects here; on success we hand the app JWT back to the web app. */
+  /** Step 2: Google redirects here; we hand the app JWT back to the web app (query param) or the mobile app (deep link). */
   @Get('google/callback')
   async googleCallback(
     @Query('code') code: string | undefined,
@@ -39,7 +54,11 @@ export class AuthController {
     const appUrl = this.config.get<string>('APP_URL') ?? 'http://localhost:3000';
     if (error || !code || !state) return res.redirect(`${appUrl}/login?error=google`);
     try {
-      const { token } = await this.googleAuth.handleCallback(code, state);
+      const { token, platform, redirect } = await this.googleAuth.handleCallback(code, state);
+      if (platform === 'mobile' && redirect) {
+        const sep = redirect.includes('?') ? '&' : '?';
+        return res.redirect(`${redirect}${sep}token=${encodeURIComponent(token)}`);
+      }
       return res.redirect(`${appUrl}/login?token=${encodeURIComponent(token)}`);
     } catch {
       return res.redirect(`${appUrl}/login?error=google`);

@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
@@ -29,8 +29,28 @@ export class AuthService {
     private readonly tokens: TokensService,
   ) {}
 
+  /**
+   * Reject an email that already belongs to any workspace. Email is unique
+   * per-org in the schema (`@@unique([orgId, email])`), but we use it as the
+   * global login identifier — so a second self-signup with an existing email
+   * would create a duplicate account and make login ambiguous. Guard both
+   * email/password and Google sign-up paths.
+   */
+  private async assertEmailAvailable(email: string) {
+    const existing = await this.prisma.user.findFirst({
+      where: { email, deletedAt: null },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException(
+        'This email is already registered. Please sign in to your existing account.',
+      );
+    }
+  }
+
   /** Create an organization (tenant) + an Admin role + the first admin user (email/password). */
   async signup(dto: SignupDto) {
+    await this.assertEmailAvailable(dto.email);
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
     const { org, user } = await this.prisma.$tx((tx) =>
       this.provisionWorkspace(tx, { orgName: dto.orgName, email: dto.email, name: dto.name ?? null, passwordHash }),
@@ -51,6 +71,7 @@ export class AuthService {
    * can rename in Settings. Their Google email is already verified.
    */
   async signupWithGoogle(opts: { email: string; name: string | null }) {
+    await this.assertEmailAvailable(opts.email);
     const first = opts.name?.trim().split(/\s+/)[0] || opts.email.split('@')[0];
     const orgName = `${first}'s workspace`;
     const { org, user } = await this.prisma.$tx((tx) =>
