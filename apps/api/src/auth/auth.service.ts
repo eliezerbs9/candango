@@ -186,9 +186,11 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    // NOTE: email is unique per org; for dev we match the first user with this email.
+    // Match the (now globally-unique, per the sign-up guard) active user for this
+    // email. Excludes soft-deleted accounts so a removed account can't be logged
+    // into and a re-created one is unambiguous.
     const user = await this.prisma.user.findFirst({
-      where: { email: dto.email },
+      where: { email: dto.email, deletedAt: null },
       include: { organization: true, role: true },
     });
     if (!user?.passwordHash || !(await bcrypt.compare(dto.password, user.passwordHash))) {
