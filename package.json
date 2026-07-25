@@ -5,6 +5,7 @@
   "description": "Candango — Sales CRM by BSB Tech Hub",
   "workspaces": [
     "apps/*",
+    "!apps/mobile",
     "packages/*"
   ],
   "scripts": {
