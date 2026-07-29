@@ -126,3 +126,22 @@ export interface CreateDealBody {
   companyId?: string;
   primaryPersonId?: string;
 }
+
+export interface ApiMessage {
+  id: string;
+  direction: 'in' | 'out';
+  fromAddress: string;
+  toAddresses: string[];
+  subject: string | null;
+  snippet: string | null;
+  unread: boolean;
+  dealId: string | null;
+  personId: string | null;
+  sentAt: string | null;
+  createdAt: string;
+}
+
+export interface MessagesPage {
+  data: ApiMessage[];
+  nextCursor?: string | null;
+}

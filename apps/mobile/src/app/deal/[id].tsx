@@ -6,6 +6,9 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,10 +16,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { EditDealModal } from '@/components/EditDealModal';
 import { useActivities } from '@/lib/api/activities';
 import { useCompanies, usePersons } from '@/lib/api/contacts';
 import { useDeal, useDealLifecycle, useMoveDeal, useStageHistory, useStages } from '@/lib/api/deals';
+import { useDealMessages } from '@/lib/api/messages';
 import { useCreateNote, useNotes } from '@/lib/api/notes';
 import { formatDate, formatMoney } from '@/lib/format';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
@@ -32,7 +38,8 @@ const headerOptions = {
 type TItem =
   | { kind: 'note'; at: string; id: string; body: string; author: string }
   | { kind: 'activity'; at: string; id: string; atype: string; subject: string; done: boolean }
-  | { kind: 'stage'; at: string; id: string; from: string | null; to: string };
+  | { kind: 'stage'; at: string; id: string; from: string | null; to: string }
+  | { kind: 'email'; at: string; id: string; direction: 'in' | 'out'; subject: string; snippet: string | null };
 
 const ACT_EMOJI: Record<string, string> = { call: '📞', meeting: '🗓️', task: '✅', email: '✉️' };
 
@@ -47,8 +54,12 @@ export default function DealDetailScreen() {
   const notes = useNotes(id);
   const acts = useActivities({ dealId: id });
   const hist = useStageHistory(id);
+  const messages = useDealMessages(id);
   const createNote = useCreateNote(id);
   const [noteText, setNoteText] = useState('');
+  const [editOpen, setEditOpen] = useState(false);
+  const [loseOpen, setLoseOpen] = useState(false);
+  const [loseReason, setLoseReason] = useState('');
 
   const pipelineStages = useMemo(
     () =>
@@ -67,8 +78,18 @@ export default function DealDetailScreen() {
     hist.data?.forEach((e) =>
       items.push({ kind: 'stage', at: e.createdAt, id: e.id, from: e.fromStage?.name ?? null, to: e.toStage.name ?? 'Stage' }),
     );
+    messages.data?.forEach((m) =>
+      items.push({
+        kind: 'email',
+        at: m.sentAt ?? m.createdAt,
+        id: m.id,
+        direction: m.direction,
+        subject: m.subject ?? '(no subject)',
+        snippet: m.snippet,
+      }),
+    );
     return items.sort((a, b) => (a.at < b.at ? 1 : -1));
-  }, [notes.data, acts.data, hist.data]);
+  }, [notes.data, acts.data, hist.data, messages.data]);
 
   const companyName = deal.data?.companyId
     ? companies.data?.find((c) => c.id === deal.data!.companyId)?.name
@@ -113,7 +134,17 @@ export default function DealDetailScreen() {
       keyboardShouldPersistTaps="handled"
       automaticallyAdjustKeyboardInsets
     >
-      <Stack.Screen options={{ ...headerOptions, title: d.title }} />
+      <Stack.Screen
+        options={{
+          ...headerOptions,
+          title: d.title,
+          headerRight: () => (
+            <Pressable onPress={() => setEditOpen(true)} hitSlop={10}>
+              <Text style={styles.headerEdit}>Edit</Text>
+            </Pressable>
+          ),
+        }}
+      />
 
       <Text style={styles.title}>{d.title}</Text>
       <Text style={styles.value}>{formatMoney(d.value, d.currency)}</Text>
@@ -133,7 +164,7 @@ export default function DealDetailScreen() {
         {d.status === 'open' && !d.archivedAt ? (
           <>
             <ActionBtn label="Won" tone="success" busy={busy} onPress={() => life.win.mutate(d.id)} />
-            <ActionBtn label="Lost" tone="danger" busy={busy} onPress={() => life.lose.mutate({ id: d.id })} />
+            <ActionBtn label="Lost" tone="danger" busy={busy} onPress={() => { setLoseReason(''); setLoseOpen(true); }} />
             <ActionBtn label="Archive" tone="neutral" busy={busy} onPress={() => life.archive.mutate(d.id)} />
           </>
         ) : (
@@ -201,6 +232,39 @@ export default function DealDetailScreen() {
       )}
 
       <View style={{ height: space.xl }} />
+
+      <EditDealModal visible={editOpen} deal={d} onClose={() => setEditOpen(false)} />
+
+      <Modal visible={loseOpen} animationType="slide" transparent onRequestClose={() => setLoseOpen(false)}>
+        <KeyboardAvoidingView style={styles.loseBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <SafeAreaView style={styles.loseSheet}>
+            <Text style={styles.loseTitle}>Mark as lost</Text>
+            <TextInput
+              style={styles.loseInput}
+              placeholder="Reason (optional)"
+              placeholderTextColor={colors.textSubtle}
+              value={loseReason}
+              onChangeText={setLoseReason}
+              multiline
+              autoFocus
+            />
+            <View style={styles.loseActions}>
+              <Pressable style={styles.loseCancel} onPress={() => setLoseOpen(false)}>
+                <Text style={styles.loseCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={styles.loseConfirm}
+                onPress={() => {
+                  life.lose.mutate({ id: d.id, lostReason: loseReason.trim() || undefined });
+                  setLoseOpen(false);
+                }}
+              >
+                <Text style={styles.loseConfirmText}>Mark lost</Text>
+              </Pressable>
+            </View>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScrollView>
   );
 }
@@ -224,7 +288,7 @@ function TimelineRow({ item }: { item: TItem }) {
         <Text style={styles.tlMeta}>{item.atype} · {formatDate(item.at)}</Text>
       </>
     );
-  } else {
+  } else if (item.kind === 'stage') {
     icon = '↗️';
     text = (
       <>
@@ -233,6 +297,17 @@ function TimelineRow({ item }: { item: TItem }) {
           {item.from ? ` (from ${item.from})` : ''}
         </Text>
         <Text style={styles.tlMeta}>{formatDate(item.at)}</Text>
+      </>
+    );
+  } else {
+    icon = item.direction === 'in' ? '📥' : '📤';
+    text = (
+      <>
+        <Text style={styles.tlText} numberOfLines={1}>{item.subject}</Text>
+        {item.snippet ? (
+          <Text style={styles.tlMeta} numberOfLines={1}>{item.snippet}</Text>
+        ) : null}
+        <Text style={styles.tlMeta}>{item.direction === 'in' ? 'Received' : 'Sent'} · {formatDate(item.at)}</Text>
       </>
     );
   }
@@ -371,4 +446,25 @@ const styles = StyleSheet.create({
   errorTitle: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.danger },
   retry: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, paddingHorizontal: space.md, paddingVertical: space.sm },
   retryText: { fontFamily: fonts.semibold, color: colors.primary },
+  headerEdit: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.primary },
+  loseBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  loseSheet: { backgroundColor: colors.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: space.lg, gap: space.md },
+  loseTitle: { fontFamily: fonts.display, fontSize: fontSize.xl, color: colors.ink },
+  loseInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 60,
+    fontSize: fontSize.md,
+    fontFamily: fonts.regular,
+    color: colors.ink,
+    backgroundColor: colors.surface,
+  },
+  loseActions: { flexDirection: 'row', gap: 10 },
+  loseCancel: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, paddingVertical: 13, alignItems: 'center' },
+  loseCancelText: { fontFamily: fonts.semibold, color: colors.textMuted },
+  loseConfirm: { flex: 2, backgroundColor: colors.danger, borderRadius: radius.lg, paddingVertical: 13, alignItems: 'center' },
+  loseConfirmText: { fontFamily: fonts.bold, color: colors.white },
 });

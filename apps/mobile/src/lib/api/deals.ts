@@ -88,9 +88,9 @@ type UpdateDealBody = Partial<{
   value: number;
   currency: string;
   stageId: string;
-  companyId: string;
-  primaryPersonId: string;
-  expectedCloseDate: string;
+  companyId: string | null;
+  primaryPersonId: string | null;
+  expectedCloseDate: string | null;
 }>;
 
 export function useUpdateDeal() {
