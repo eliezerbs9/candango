@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ComposeEmailModal, type ComposeInitial } from '@/components/ComposeEmailModal';
 import { EditDealModal } from '@/components/EditDealModal';
 import { useActivities } from '@/lib/api/activities';
 import { useCompanies, usePersons } from '@/lib/api/contacts';
@@ -39,7 +40,7 @@ type TItem =
   | { kind: 'note'; at: string; id: string; body: string; author: string }
   | { kind: 'activity'; at: string; id: string; atype: string; subject: string; done: boolean }
   | { kind: 'stage'; at: string; id: string; from: string | null; to: string }
-  | { kind: 'email'; at: string; id: string; direction: 'in' | 'out'; subject: string; snippet: string | null };
+  | { kind: 'email'; at: string; id: string; direction: 'in' | 'out'; subject: string; snippet: string | null; from: string; threadId: string | null };
 
 const ACT_EMOJI: Record<string, string> = { call: '📞', meeting: '🗓️', task: '✅', email: '✉️' };
 
@@ -60,6 +61,7 @@ export default function DealDetailScreen() {
   const [editOpen, setEditOpen] = useState(false);
   const [loseOpen, setLoseOpen] = useState(false);
   const [loseReason, setLoseReason] = useState('');
+  const [compose, setCompose] = useState<{ open: boolean; initial?: ComposeInitial }>({ open: false });
 
   const pipelineStages = useMemo(
     () =>
@@ -86,6 +88,8 @@ export default function DealDetailScreen() {
         direction: m.direction,
         subject: m.subject ?? '(no subject)',
         snippet: m.snippet,
+        from: m.fromAddress,
+        threadId: m.threadId,
       }),
     );
     return items.sort((a, b) => (a.at < b.at ? 1 : -1));
@@ -120,6 +124,22 @@ export default function DealDetailScreen() {
 
   const d = deal.data;
   const busy = life.win.isPending || life.lose.isPending || life.reopen.isPending || life.archive.isPending;
+  const primaryPersonEmail = d.primaryPersonId
+    ? persons.data?.find((p) => p.id === d.primaryPersonId)?.email ?? null
+    : null;
+
+  const openNewEmail = () =>
+    setCompose({ open: true, initial: { to: primaryPersonEmail ? [primaryPersonEmail] : [] } });
+  const openReply = (it: Extract<TItem, { kind: 'email' }>) =>
+    setCompose({
+      open: true,
+      initial: {
+        to: [it.from],
+        subject: it.subject.startsWith('Re:') ? it.subject : `Re: ${it.subject}`,
+        threadId: it.threadId ?? undefined,
+        inReplyTo: it.id,
+      },
+    });
 
   async function addNote() {
     if (!noteText.trim()) return;
@@ -202,7 +222,12 @@ export default function DealDetailScreen() {
       </View>
 
       {/* Timeline */}
-      <Text style={styles.sectionLabel}>Timeline</Text>
+      <View style={styles.timelineHead}>
+        <Text style={styles.sectionLabel}>Timeline</Text>
+        <Pressable style={styles.emailBtn} onPress={openNewEmail}>
+          <Text style={styles.emailBtnText}>✉️ Email</Text>
+        </Pressable>
+      </View>
       <View style={styles.noteBox}>
         <TextInput
           style={styles.noteInput}
@@ -228,12 +253,19 @@ export default function DealDetailScreen() {
       {timeline.length === 0 ? (
         <Text style={styles.emptyTimeline}>No activity yet.</Text>
       ) : (
-        timeline.map((it) => <TimelineRow key={`${it.kind}-${it.id}`} item={it} />)
+        timeline.map((it) => <TimelineRow key={`${it.kind}-${it.id}`} item={it} onReply={openReply} />)
       )}
 
       <View style={{ height: space.xl }} />
 
       <EditDealModal visible={editOpen} deal={d} onClose={() => setEditOpen(false)} />
+
+      <ComposeEmailModal
+        visible={compose.open}
+        dealId={d.id}
+        initial={compose.initial}
+        onClose={() => setCompose({ open: false })}
+      />
 
       <Modal visible={loseOpen} animationType="slide" transparent onRequestClose={() => setLoseOpen(false)}>
         <KeyboardAvoidingView style={styles.loseBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -269,7 +301,13 @@ export default function DealDetailScreen() {
   );
 }
 
-function TimelineRow({ item }: { item: TItem }) {
+function TimelineRow({
+  item,
+  onReply,
+}: {
+  item: TItem;
+  onReply: (it: Extract<TItem, { kind: 'email' }>) => void;
+}) {
   let icon = '•';
   let text: ReactNode = null;
   if (item.kind === 'note') {
@@ -311,12 +349,16 @@ function TimelineRow({ item }: { item: TItem }) {
       </>
     );
   }
-  return (
+  const inner = (
     <View style={styles.tlRow}>
       <Text style={styles.tlIcon}>{icon}</Text>
       <View style={styles.tlBody}>{text}</View>
     </View>
   );
+  if (item.kind === 'email') {
+    return <Pressable onPress={() => onReply(item)}>{inner}</Pressable>;
+  }
+  return inner;
 }
 
 function ActionBtn({
@@ -447,6 +489,9 @@ const styles = StyleSheet.create({
   retry: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, paddingHorizontal: space.md, paddingVertical: space.sm },
   retryText: { fontFamily: fonts.semibold, color: colors.primary },
   headerEdit: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.primary },
+  timelineHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  emailBtn: { backgroundColor: colors.primaryTint, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 5, marginTop: space.md, marginBottom: space.xs },
+  emailBtnText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
   loseBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
   loseSheet: { backgroundColor: colors.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: space.lg, gap: space.md },
   loseTitle: { fontFamily: fonts.display, fontSize: fontSize.xl, color: colors.ink },

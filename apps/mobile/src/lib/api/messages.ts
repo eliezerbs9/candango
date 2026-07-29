@@ -1,8 +1,8 @@
-/** Deal-scoped emails (read-only, for the deal timeline). */
-import { useQuery } from '@tanstack/react-query';
+/** Deal emails: read (timeline) + send/reply (via the connected Gmail). */
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiFetch } from '@/lib/api/client';
-import type { MessagesPage } from '@/lib/api/types';
+import type { ApiMessage, MessagesPage, SendMessageBody } from '@/lib/api/types';
 import { useAuthStore } from '@/lib/auth/store';
 
 export function useDealMessages(dealId: string) {
@@ -12,5 +12,17 @@ export function useDealMessages(dealId: string) {
     queryFn: () => apiFetch<MessagesPage>(`/messages?deal_id=${dealId}&limit=50`, { token: token! }),
     enabled: !!token && !!dealId,
     select: (page) => page.data,
+  });
+}
+
+export function useSendMessage(dealId?: string) {
+  const token = useAuthStore((s) => s.token);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SendMessageBody) =>
+      apiFetch<ApiMessage>('/messages/send', { method: 'POST', token: token!, body: JSON.stringify(body) }),
+    onSuccess: () => {
+      if (dealId) qc.invalidateQueries({ queryKey: ['messages', 'deal', dealId] });
+    },
   });
 }

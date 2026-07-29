@@ -135,10 +135,20 @@ export interface ApiMessage {
   subject: string | null;
   snippet: string | null;
   unread: boolean;
+  threadId: string | null;
   dealId: string | null;
   personId: string | null;
   sentAt: string | null;
   createdAt: string;
+}
+
+export interface SendMessageBody {
+  to: string[];
+  subject: string;
+  body: string;
+  dealId?: string;
+  threadId?: string;
+  inReplyTo?: string;
 }
 
 export interface MessagesPage {
