@@ -153,6 +153,53 @@ export interface SendMessageBody {
   inReplyTo?: string;
 }
 
+export type DocSource = 'native' | 'quickbooks';
+
+export interface DealDocLine {
+  id: string;
+  position: number;
+  description: string;
+  quantity: number;
+  unitPrice: number; // minor units (cents)
+  amount: number; // minor units
+  itemId: string | null;
+  itemName: string | null;
+}
+
+export interface DealDoc {
+  id: string;
+  dealId: string;
+  source: DocSource;
+  status: string;
+  docNumber: string | null;
+  currency: string;
+  totalAmount: number; // minor units
+  txnDate: string | null;
+  notes: string | null;
+  qbId: string | null;
+  sourceEstimateId: string | null;
+  includeInValue?: boolean;
+  createdAt: string;
+  lines: DealDocLine[];
+}
+
+export interface DocLineInput {
+  description: string;
+  quantity: number;
+  unitPrice: number; // minor units
+  itemId?: string;
+}
+
+export interface CreateDocInput {
+  txnDate?: string;
+  notes?: string;
+  lines: DocLineInput[];
+}
+
+export interface QbStatus {
+  connected: boolean;
+}
+
 export interface MessagesPage {
   data: ApiMessage[];
   nextCursor?: string | null;

@@ -1,0 +1,201 @@
+/**
+ * Estimates & invoices on the deal (mirrors the web QuickbooksPanel, mobile
+ * scope: list + create/edit estimates + status + use-as-value + convert).
+ * Estimates work natively; convert needs QuickBooks connected (API enforces it).
+ */
+import { useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { DocEditorModal } from '@/components/DocEditorModal';
+import { PickerModal } from '@/components/PickerModal';
+import {
+  useConvertToInvoice,
+  useCreateEstimate,
+  useDealEstimates,
+  useDealInvoices,
+  useIncludeEstimatesInValue,
+  useSetEstimateStatus,
+  useSetInvoiceStatus,
+  useUpdateEstimate,
+} from '@/lib/api/quickbooks';
+import type { CreateDocInput, DealDoc } from '@/lib/api/types';
+import { formatMoney } from '@/lib/format';
+import { colors, fonts, fontSize, radius, space } from '@/theme';
+
+const ESTIMATE_STATUSES = ['draft', 'sent', 'accepted', 'rejected'];
+const INVOICE_STATUSES = ['draft', 'sent', 'paid', 'void'];
+
+export function QuickbooksPanel({ dealId, currency }: { dealId: string; currency: string }) {
+  const estimates = useDealEstimates(dealId);
+  const invoices = useDealInvoices(dealId);
+  const createEstimate = useCreateEstimate(dealId);
+  const updateEstimate = useUpdateEstimate(dealId);
+  const setEstStatus = useSetEstimateStatus(dealId);
+  const setInvStatus = useSetInvoiceStatus(dealId);
+  const includeInValue = useIncludeEstimatesInValue(dealId);
+  const convert = useConvertToInvoice(dealId);
+
+  const [editing, setEditing] = useState<DealDoc | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [statusFor, setStatusFor] = useState<{ doc: DealDoc; kind: 'estimate' | 'invoice' } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const estimateDocs = estimates.data ?? [];
+  const invoiceDocs = invoices.data ?? [];
+
+  function newEstimate() {
+    setEditing(null);
+    setEditorOpen(true);
+  }
+  function editEstimate(doc: DealDoc) {
+    setEditing(doc);
+    setEditorOpen(true);
+  }
+  function submitEstimate(input: CreateDocInput) {
+    return editing ? updateEstimate.mutateAsync({ id: editing.id, body: input }) : createEstimate.mutateAsync(input);
+  }
+  function doConvert(id: string) {
+    setError(null);
+    convert.mutate({ estimateIds: [id] }, { onError: (e) => setError(e instanceof Error ? e.message : 'Convert failed. Connect QuickBooks first.') });
+  }
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.headerRow}>
+        <Text style={styles.header}>📄 Estimates{invoiceDocs.length > 0 ? ' & invoices' : ''}</Text>
+      </View>
+
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionTitle}>Estimates</Text>
+        <Pressable onPress={newEstimate} hitSlop={8}>
+          <Text style={styles.newBtn}>＋ New estimate</Text>
+        </Pressable>
+      </View>
+
+      {estimates.isLoading ? (
+        <ActivityIndicator color={colors.primary} style={{ marginVertical: space.md }} />
+      ) : estimateDocs.length === 0 ? (
+        <Text style={styles.empty}>No estimates yet.</Text>
+      ) : (
+        estimateDocs.map((doc) => (
+          <DocRow
+            key={doc.id}
+            doc={doc}
+            currency={currency}
+            onEdit={() => editEstimate(doc)}
+            onStatus={() => setStatusFor({ doc, kind: 'estimate' })}
+            onToggleValue={() => includeInValue.mutate({ estimateIds: [doc.id], include: !doc.includeInValue })}
+            onConvert={doc.status !== 'closed' ? () => doConvert(doc.id) : undefined}
+            converting={convert.isPending}
+          />
+        ))
+      )}
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      {invoiceDocs.length > 0 ? (
+        <>
+          <View style={styles.divider} />
+          <Text style={styles.sectionTitle}>Invoices</Text>
+          {invoiceDocs.map((doc) => (
+            <DocRow key={doc.id} doc={doc} currency={currency} onStatus={() => setStatusFor({ doc, kind: 'invoice' })} />
+          ))}
+        </>
+      ) : null}
+
+      <Text style={styles.hint}>Connect QuickBooks in Settings → Integrations to create invoices.</Text>
+
+      <DocEditorModal
+        visible={editorOpen}
+        title={editing ? 'Edit estimate' : 'New estimate'}
+        submitLabel={editing ? 'Save' : 'Create'}
+        currency={currency}
+        initial={editing}
+        loading={createEstimate.isPending || updateEstimate.isPending}
+        onClose={() => setEditorOpen(false)}
+        onSubmit={submitEstimate}
+      />
+
+      <PickerModal
+        visible={!!statusFor}
+        title="Status"
+        options={(statusFor?.kind === 'invoice' ? INVOICE_STATUSES : ESTIMATE_STATUSES).map((s) => ({ id: s, label: s }))}
+        selectedId={statusFor?.doc.status}
+        onSelect={(status) => {
+          if (!status || !statusFor) return;
+          if (statusFor.kind === 'invoice') setInvStatus.mutate({ id: statusFor.doc.id, status });
+          else setEstStatus.mutate({ id: statusFor.doc.id, status });
+        }}
+        onClose={() => setStatusFor(null)}
+      />
+    </View>
+  );
+}
+
+function DocRow({
+  doc,
+  currency,
+  onEdit,
+  onStatus,
+  onToggleValue,
+  onConvert,
+  converting,
+}: {
+  doc: DealDoc;
+  currency: string;
+  onEdit?: () => void;
+  onStatus?: () => void;
+  onToggleValue?: () => void;
+  onConvert?: () => void;
+  converting?: boolean;
+}) {
+  return (
+    <View style={styles.row}>
+      <Pressable style={styles.rowMain} onPress={onEdit} disabled={!onEdit}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.docTitle}>{doc.docNumber ? `#${doc.docNumber}` : 'Estimate'}</Text>
+          {doc.includeInValue ? <Text style={styles.inValue}>In deal value</Text> : null}
+        </View>
+        <Text style={styles.docTotal}>{formatMoney(doc.totalAmount, currency)}</Text>
+      </Pressable>
+      <View style={styles.rowActions}>
+        <Pressable style={styles.statusPill} onPress={onStatus} disabled={!onStatus}>
+          <Text style={styles.statusText}>{doc.status}</Text>
+        </Pressable>
+        {onToggleValue ? (
+          <Pressable style={styles.miniBtn} onPress={onToggleValue}>
+            <Text style={styles.miniBtnText}>{doc.includeInValue ? '− Value' : '＋ Value'}</Text>
+          </Pressable>
+        ) : null}
+        {onConvert ? (
+          <Pressable style={styles.miniBtn} onPress={onConvert} disabled={converting}>
+            {converting ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={styles.miniBtnText}>→ Invoice</Text>}
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.xl, padding: space.lg, gap: space.sm, marginTop: space.md },
+  headerRow: { flexDirection: 'row', alignItems: 'center' },
+  header: { fontFamily: fonts.display, fontSize: fontSize.xl, color: colors.ink },
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.xs },
+  sectionTitle: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.ink },
+  newBtn: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
+  empty: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSubtle, paddingVertical: space.sm },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: space.sm },
+  hint: { fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textSubtle, marginTop: space.sm },
+  error: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.danger },
+  row: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, padding: space.sm + 2, gap: space.sm, backgroundColor: colors.surface },
+  rowMain: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  docTitle: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.ink },
+  inValue: { fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.success },
+  docTotal: { fontFamily: fonts.bold, fontSize: fontSize.md, color: colors.ink },
+  rowActions: { flexDirection: 'row', gap: space.sm, alignItems: 'center', flexWrap: 'wrap' },
+  statusPill: { backgroundColor: colors.primaryTint, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 3 },
+  statusText: { fontFamily: fonts.semibold, fontSize: fontSize.xs, color: colors.primary, textTransform: 'capitalize' },
+  miniBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: colors.bg },
+  miniBtnText: { fontFamily: fonts.medium, fontSize: fontSize.xs, color: colors.textMuted },
+});

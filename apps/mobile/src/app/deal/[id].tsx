@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActivityFormModal } from '@/components/ActivityFormModal';
 import { ComposeEmailModal, type ComposeInitial } from '@/components/ComposeEmailModal';
 import { EditDealModal } from '@/components/EditDealModal';
+import { QuickbooksPanel } from '@/components/QuickbooksPanel';
 import { useActivities } from '@/lib/api/activities';
 import { useCompanies, usePersons } from '@/lib/api/contacts';
 import { useDeal, useDealLifecycle, useMoveDeal, useStageHistory, useStages } from '@/lib/api/deals';
@@ -262,6 +263,8 @@ export default function DealDetailScreen() {
       ) : (
         timeline.map((it) => <TimelineRow key={`${it.kind}-${it.id}`} item={it} onReply={openReply} />)
       )}
+
+      <QuickbooksPanel dealId={d.id} currency={d.currency} />
 
       <View style={{ height: space.xl }} />
 
