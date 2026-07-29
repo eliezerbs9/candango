@@ -19,6 +19,7 @@ import { useDeals, useStages } from '@/lib/api/deals';
 import type { ApiDeal } from '@/lib/api/types';
 import { useAuthStore } from '@/lib/auth/store';
 import { formatMoney } from '@/lib/format';
+import { colors, fonts, fontSize, radius, space } from '@/theme';
 
 export default function DealsScreen() {
   const router = useRouter();
@@ -58,7 +59,7 @@ export default function DealsScreen() {
   if (deals.isLoading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator />
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
@@ -78,22 +79,24 @@ export default function DealsScreen() {
   }
 
   return (
+    <View style={styles.wrap}>
     <FlatList
+      style={styles.screen}
       data={deals.data ?? []}
       keyExtractor={(d) => d.id}
       contentContainerStyle={[styles.list, (deals.data ?? []).length === 0 && styles.listEmpty]}
       refreshControl={
-        <RefreshControl refreshing={deals.isRefetching} onRefresh={() => deals.refetch()} />
+        <RefreshControl
+          refreshing={deals.isRefetching}
+          onRefresh={() => deals.refetch()}
+          tintColor={colors.primary}
+        />
       }
       ListEmptyComponent={
         <View style={styles.center}>
           <Text style={styles.emptyTitle}>No open deals</Text>
-          <Text style={styles.muted}>
-            Workspace: {orgName ?? '—'}
-          </Text>
-          <Text style={styles.mutedSmall}>
-            Pull down to refresh, or tap the button below.
-          </Text>
+          <Text style={styles.muted}>Workspace: {orgName ?? '—'}</Text>
+          <Text style={styles.mutedSmall}>Pull down to refresh, or tap the button below.</Text>
           <Pressable style={styles.retry} onPress={() => deals.refetch()}>
             <Text style={styles.retryText}>{deals.isRefetching ? 'Refreshing…' : 'Refresh'}</Text>
           </Pressable>
@@ -121,45 +124,68 @@ export default function DealsScreen() {
         );
       }}
     />
+      <Pressable style={styles.fab} onPress={() => router.push('/deal/new')}>
+        <Text style={styles.fabText}>＋</Text>
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 8 },
-  list: { padding: 16, gap: 10 },
+  wrap: { flex: 1, backgroundColor: colors.bg },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  fabText: { color: colors.white, fontSize: 30, lineHeight: 34 },
+  screen: { backgroundColor: colors.bg },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.lg, gap: space.sm },
+  list: { padding: space.md, gap: 10, backgroundColor: colors.bg },
   listEmpty: { flexGrow: 1 },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.bg,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
-    borderRadius: 14,
-    padding: 16,
-    gap: 6,
+    borderColor: colors.border,
+    borderRadius: radius.xl,
+    padding: space.md,
+    gap: space.xs + 2,
   },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
-  title: { fontSize: 16, fontWeight: '600', color: '#18181b', flexShrink: 1 },
-  value: { fontSize: 15, fontWeight: '700', color: '#166534' },
-  sub: { fontSize: 13, color: '#71717a' },
+  title: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.ink, flexShrink: 1 },
+  value: { fontFamily: fonts.bold, fontSize: fontSize.md + 1, color: colors.success },
+  sub: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted },
   badge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#fdf0ea',
-    borderRadius: 999,
+    backgroundColor: colors.primaryTint,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 3,
     marginTop: 2,
   },
-  badgeText: { fontSize: 12, color: '#d9552c', fontWeight: '600' },
-  muted: { fontSize: 14, color: '#71717a' },
-  mutedSmall: { fontSize: 13, color: '#a1a1aa', textAlign: 'center' },
-  emptyTitle: { fontSize: 17, fontWeight: '600', color: '#18181b' },
-  errorTitle: { fontSize: 16, fontWeight: '600', color: '#c0362c' },
+  badgeText: { fontFamily: fonts.semibold, fontSize: fontSize.xs, color: colors.primary },
+  muted: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.textMuted },
+  mutedSmall: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSubtle, textAlign: 'center' },
+  emptyTitle: { fontFamily: fonts.display, fontSize: fontSize.xl, color: colors.ink },
+  errorTitle: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.danger },
   retry: {
-    marginTop: 8,
+    marginTop: space.sm,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
   },
-  retryText: { color: '#2563eb', fontWeight: '600' },
+  retryText: { fontFamily: fonts.semibold, color: colors.primary },
 });

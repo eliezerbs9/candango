@@ -1,12 +1,13 @@
 /**
- * Activities tab — list the org's activities (call/meeting/task/email), create
- * a new one, and mark done. Read + basic create (no date picker yet).
+ * Activities tab — list the org's activities, create a new one, and mark done.
  */
 import { useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -19,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useActivities, useCompleteActivity, useCreateActivity } from '@/lib/api/activities';
 import type { ActivityType } from '@/lib/api/types';
 import { formatDate } from '@/lib/format';
+import { colors, fonts, fontSize, radius, space } from '@/theme';
 
 const TYPE_EMOJI: Record<ActivityType, string> = {
   call: '📞',
@@ -41,12 +43,16 @@ export default function ActivitiesScreen() {
         keyExtractor={(a) => a.id}
         contentContainerStyle={[styles.list, (activities.data ?? []).length === 0 && styles.grow]}
         refreshControl={
-          <RefreshControl refreshing={activities.isRefetching} onRefresh={() => activities.refetch()} />
+          <RefreshControl
+            refreshing={activities.isRefetching}
+            onRefresh={() => activities.refetch()}
+            tintColor={colors.primary}
+          />
         }
         ListEmptyComponent={
           activities.isLoading ? (
             <View style={styles.center}>
-              <ActivityIndicator />
+              <ActivityIndicator color={colors.primary} />
             </View>
           ) : (
             <View style={styles.center}>
@@ -100,7 +106,10 @@ function CreateActivityModal({ visible, onClose }: { visible: boolean; onClose: 
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
+      <KeyboardAvoidingView
+        style={styles.modalBackdrop}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <SafeAreaView style={styles.sheet}>
           <Text style={styles.sheetTitle}>New activity</Text>
 
@@ -121,7 +130,7 @@ function CreateActivityModal({ visible, onClose }: { visible: boolean; onClose: 
           <TextInput
             style={styles.input}
             placeholder="Subject"
-            placeholderTextColor="#a1a1aa"
+            placeholderTextColor={colors.textSubtle}
             value={subject}
             onChangeText={setSubject}
             autoFocus
@@ -137,51 +146,51 @@ function CreateActivityModal({ visible, onClose }: { visible: boolean; onClose: 
               onPress={submit}
             >
               {create.isPending ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.white} />
               ) : (
                 <Text style={styles.createText}>Create</Text>
               )}
             </Pressable>
           </View>
         </SafeAreaView>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#fff' },
-  list: { padding: 16, gap: 10 },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  list: { padding: space.md, gap: 10 },
   grow: { flexGrow: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  muted: { fontSize: 14, color: '#a1a1aa' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.lg },
+  muted: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.textSubtle },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#fff',
+    backgroundColor: colors.bg,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
-    borderRadius: 14,
+    borderColor: colors.border,
+    borderRadius: radius.xl,
     padding: 14,
   },
   emoji: { fontSize: 22 },
   cardBody: { flex: 1, gap: 2 },
-  subject: { fontSize: 15, fontWeight: '600', color: '#18181b' },
-  done: { textDecorationLine: 'line-through', color: '#a1a1aa' },
-  meta: { fontSize: 12, color: '#71717a', textTransform: 'capitalize' },
+  subject: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.ink },
+  done: { textDecorationLine: 'line-through', color: colors.textSubtle },
+  meta: { fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted, textTransform: 'capitalize' },
   check: {
     width: 30,
     height: 30,
     borderRadius: 15,
     borderWidth: 1.5,
-    borderColor: '#d4d4d8',
+    borderColor: colors.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkDone: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  checkMark: { color: '#d4d4d8', fontWeight: '800' },
-  checkMarkDone: { color: '#fff' },
+  checkDone: { backgroundColor: colors.success, borderColor: colors.success },
+  checkMark: { color: colors.borderStrong, fontFamily: fonts.bold },
+  checkMarkDone: { color: colors.white },
   fab: {
     position: 'absolute',
     right: 20,
@@ -189,7 +198,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#d9552c',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -198,56 +207,57 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 4,
   },
-  fabText: { color: '#fff', fontSize: 30, lineHeight: 34, fontWeight: '400' },
+  fabText: { color: colors.white, fontSize: 30, lineHeight: 34 },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.bg,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    padding: 20,
+    padding: space.lg,
     gap: 14,
   },
-  sheetTitle: { fontSize: 18, fontWeight: '700', color: '#18181b' },
-  typeRow: { flexDirection: 'row', gap: 8 },
+  sheetTitle: { fontFamily: fonts.display, fontSize: fontSize.xl, color: colors.ink },
+  typeRow: { flexDirection: 'row', gap: space.sm },
   typeChip: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
-    borderRadius: 10,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
     paddingVertical: 9,
     alignItems: 'center',
-    backgroundColor: '#fafafa',
+    backgroundColor: colors.surface,
   },
-  typeChipActive: { backgroundColor: '#fdf0ea', borderColor: '#d9552c' },
-  typeChipText: { fontSize: 13, color: '#52525b', fontWeight: '500', textTransform: 'capitalize' },
-  typeChipTextActive: { color: '#d9552c', fontWeight: '700' },
+  typeChipActive: { backgroundColor: colors.primaryTint, borderColor: colors.primary },
+  typeChipText: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted, textTransform: 'capitalize' },
+  typeChipTextActive: { fontFamily: fonts.bold, color: colors.primary },
   input: {
     borderWidth: 1,
-    borderColor: '#e4e4e7',
-    borderRadius: 12,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 16,
-    color: '#18181b',
-    backgroundColor: '#fafafa',
+    fontSize: fontSize.lg,
+    fontFamily: fonts.regular,
+    color: colors.ink,
+    backgroundColor: colors.surface,
   },
-  sheetActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  sheetActions: { flexDirection: 'row', gap: 10, marginTop: space.xs },
   cancelBtn: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
-    borderRadius: 12,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
     paddingVertical: 13,
     alignItems: 'center',
   },
-  cancelText: { color: '#52525b', fontWeight: '600' },
+  cancelText: { fontFamily: fonts.semibold, color: colors.textMuted },
   createBtn: {
     flex: 2,
-    backgroundColor: '#d9552c',
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
     paddingVertical: 13,
     alignItems: 'center',
   },
   createBtnOff: { opacity: 0.5 },
-  createText: { color: '#fff', fontWeight: '700' },
+  createText: { fontFamily: fonts.bold, color: colors.white },
 });

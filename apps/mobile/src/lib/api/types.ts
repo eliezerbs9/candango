@@ -98,3 +98,31 @@ export interface ActivityBody {
   endAt?: string;
   dealId?: string;
 }
+
+export interface ApiNote {
+  id: string;
+  body: string;
+  dealId: string | null;
+  personId: string | null;
+  authorUserId: string;
+  authorName: string;
+  createdAt: string;
+}
+
+export interface StageEvent {
+  id: string;
+  fromStage: { id: string; name: string | null } | null;
+  toStage: { id: string; name: string | null };
+  changedByUserId: string | null;
+  createdAt: string;
+}
+
+export interface CreateDealBody {
+  title: string;
+  value?: number; // minor units (cents)
+  currency?: string;
+  pipelineId: string;
+  stageId: string;
+  companyId?: string;
+  primaryPersonId?: string;
+}

@@ -1,7 +1,5 @@
 /**
- * Login screen (email/password). Login-only — no sign-up, no billing (users
- * subscribe on the web). On success stores the JWT + user in the secure store;
- * the root AuthGate then routes into the app.
+ * Login screen (email/password + Google). Login-only — no sign-up, no billing.
  */
 import * as AuthSession from 'expo-auth-session';
 import * as Linking from 'expo-linking';
@@ -23,8 +21,8 @@ import { getMe, useLogin } from '@/lib/api/auth';
 import { ApiError } from '@/lib/api/client';
 import { API_URL } from '@/config';
 import { useAuthStore } from '@/lib/auth/store';
+import { colors, fonts, fontSize, radius, space } from '@/theme';
 
-// Finish any pending auth session (no-op on native, needed for web).
 WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
@@ -42,7 +40,6 @@ export default function LoginScreen() {
     try {
       const { token, user } = await mutateAsync({ email: email.trim(), password });
       signIn(token, user);
-      // AuthGate redirects to "/" once the token is set.
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         setErrorMsg('Incorrect email or password.');
@@ -56,16 +53,12 @@ export default function LoginScreen() {
     setErrorMsg(null);
     setGoogleBusy(true);
     try {
-      // Our redirect URI: exp://… inside Expo Go, candango://… in a standalone build.
       const redirectUri = AuthSession.makeRedirectUri({ path: 'auth' });
       const authUrl =
         `${API_URL}/auth/google?mode=signup&platform=mobile` +
         `&redirect=${encodeURIComponent(redirectUri)}`;
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-      if (result.type !== 'success' || !result.url) {
-        // User dismissed the browser — nothing to do.
-        return;
-      }
+      if (result.type !== 'success' || !result.url) return;
       const { queryParams } = Linking.parse(result.url);
       if (queryParams?.error) {
         setErrorMsg('Google sign-in failed. Please try again.');
@@ -102,7 +95,7 @@ export default function LoginScreen() {
               value={email}
               onChangeText={setEmail}
               placeholder="you@company.com"
-              placeholderTextColor="#a1a1aa"
+              placeholderTextColor={colors.textSubtle}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
@@ -116,7 +109,7 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
               placeholder="••••••••"
-              placeholderTextColor="#a1a1aa"
+              placeholderTextColor={colors.textSubtle}
               secureTextEntry
               textContentType="password"
               editable={!isPending}
@@ -132,7 +125,7 @@ export default function LoginScreen() {
               disabled={!canSubmit}
             >
               {isPending ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.white} />
               ) : (
                 <Text style={styles.buttonText}>Sign in</Text>
               )}
@@ -150,16 +143,14 @@ export default function LoginScreen() {
               disabled={googleBusy}
             >
               {googleBusy ? (
-                <ActivityIndicator color="#52525b" />
+                <ActivityIndicator color={colors.textMuted} />
               ) : (
                 <Text style={styles.googleButtonText}>Continue with Google</Text>
               )}
             </Pressable>
           </View>
 
-          <Text style={styles.hint}>
-            No account? Sign up and subscribe on the Candango website.
-          </Text>
+          <Text style={styles.hint}>No account? Sign up and subscribe on the Candango website.</Text>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -167,45 +158,64 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#fff' },
+  safe: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
-  container: { flex: 1, padding: 24, justifyContent: 'center', gap: 8 },
-  title: { fontSize: 40, fontWeight: '700', textAlign: 'center', color: '#d9552c' },
-  subtitle: { fontSize: 15, textAlign: 'center', color: '#71717a', marginBottom: 24 },
-  form: { gap: 6 },
-  label: { fontSize: 13, color: '#52525b', marginTop: 10 },
+  container: { flex: 1, padding: space.lg, justifyContent: 'center', gap: space.sm },
+  title: {
+    fontFamily: fonts.display,
+    fontSize: fontSize.display,
+    textAlign: 'center',
+    color: colors.primary,
+    letterSpacing: -1,
+  },
+  subtitle: {
+    fontFamily: fonts.regular,
+    fontSize: fontSize.lg,
+    textAlign: 'center',
+    color: colors.textMuted,
+    marginBottom: space.lg,
+  },
+  form: { gap: space.xs + 2 },
+  label: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted, marginTop: space.sm + 2 },
   input: {
     borderWidth: 1,
-    borderColor: '#e4e4e7',
-    borderRadius: 12,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 16,
-    color: '#18181b',
-    backgroundColor: '#fafafa',
+    fontSize: fontSize.lg,
+    fontFamily: fonts.regular,
+    color: colors.ink,
+    backgroundColor: colors.surface,
   },
-  error: { color: '#c0362c', fontSize: 13, marginTop: 8 },
+  error: { fontFamily: fonts.medium, color: colors.danger, fontSize: fontSize.sm, marginTop: space.sm },
   button: {
-    backgroundColor: '#d9552c',
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 18,
+    marginTop: space.md + 2,
   },
   buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16 },
-  divider: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: '#d4d4d8' },
-  dividerText: { color: '#a1a1aa', fontSize: 13 },
+  buttonText: { color: colors.white, fontSize: fontSize.lg, fontFamily: fonts.semibold },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm + 2, marginTop: space.md },
+  divider: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong },
+  dividerText: { fontFamily: fonts.regular, color: colors.textSubtle, fontSize: fontSize.sm },
   googleButton: {
     borderWidth: 1,
-    borderColor: '#e4e4e7',
-    borderRadius: 12,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 16,
-    backgroundColor: '#fff',
+    marginTop: space.md,
+    backgroundColor: colors.bg,
   },
-  googleButtonText: { color: '#18181b', fontSize: 16, fontWeight: '600' },
-  hint: { textAlign: 'center', color: '#a1a1aa', fontSize: 13, marginTop: 24 },
+  googleButtonText: { color: colors.ink, fontSize: fontSize.lg, fontFamily: fonts.semibold },
+  hint: {
+    fontFamily: fonts.regular,
+    textAlign: 'center',
+    color: colors.textSubtle,
+    fontSize: fontSize.sm,
+    marginTop: space.lg,
+  },
 });

@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useHealth } from '@/lib/api/health';
 import { useAuthStore } from '@/lib/auth/store';
+import { colors, fonts, fontSize, radius, space } from '@/theme';
 
 export default function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
@@ -45,16 +46,16 @@ function Row({ label, value, last }: { label: string; value: string; last?: bool
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', padding: 24, gap: 16 },
+  container: { flex: 1, backgroundColor: colors.bg, padding: space.lg, gap: space.md },
   flex: { flex: 1 },
-  header: { marginTop: 8, gap: 2 },
-  name: { fontSize: 26, fontWeight: '700', color: '#18181b' },
-  org: { fontSize: 15, color: '#d9552c', fontWeight: '500' },
+  header: { marginTop: space.sm, gap: 2 },
+  name: { fontFamily: fonts.display, fontSize: fontSize.h2, color: colors.ink },
+  org: { fontFamily: fonts.medium, fontSize: fontSize.lg, color: colors.primary },
   card: {
-    backgroundColor: '#fafafa',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
-    borderRadius: 16,
+    borderColor: colors.border,
+    borderRadius: radius.xl,
   },
   row: {
     flexDirection: 'row',
@@ -63,18 +64,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 13,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#ececee',
+    borderBottomColor: colors.border,
     gap: 12,
   },
   rowLast: { borderBottomWidth: 0 },
-  rowLabel: { fontSize: 14, color: '#71717a' },
-  rowValue: { fontSize: 14, color: '#18181b', fontWeight: '500', flexShrink: 1 },
+  rowLabel: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.textMuted },
+  rowValue: { fontFamily: fonts.medium, fontSize: fontSize.md, color: colors.ink, flexShrink: 1 },
   logout: {
     borderWidth: 1,
-    borderColor: '#e4e4e7',
-    borderRadius: 12,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
     paddingVertical: 14,
     alignItems: 'center',
   },
-  logoutText: { color: '#c0362c', fontSize: 15, fontWeight: '600' },
+  logoutText: { fontFamily: fonts.semibold, color: colors.danger, fontSize: fontSize.lg },
 });

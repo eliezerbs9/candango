@@ -1,7 +1,8 @@
-// Bottom-tab navigator for the authenticated app: Deals, Contacts, Activities,
-// Profile. Icons are emoji to avoid an extra icon dependency.
+// Bottom-tab navigator for the authenticated app. Emoji icons (no extra dep).
 import { Tabs } from 'expo-router';
 import { Text } from 'react-native';
+
+import { colors, fonts } from '@/theme';
 
 function tabIcon(emoji: string) {
   const Icon = ({ focused }: { focused: boolean }) => (
@@ -15,8 +16,13 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#d9552c',
-        headerTitleStyle: { color: '#18181b' },
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarLabelStyle: { fontFamily: fonts.medium, fontSize: 11 },
+        headerStyle: { backgroundColor: colors.bg },
+        headerShadowVisible: false,
+        headerTitleStyle: { fontFamily: fonts.display, fontSize: 18, color: colors.ink },
+        headerTintColor: colors.ink,
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Deals', tabBarIcon: tabIcon('💼') }} />

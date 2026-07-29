@@ -1,6 +1,5 @@
 /**
  * Contacts tab — People and Companies, toggled by a segmented control.
- * Read-first: shows name + email/phone (people) or domain/phone (companies).
  */
 import { useState } from 'react';
 import {
@@ -14,6 +13,7 @@ import {
 } from 'react-native';
 
 import { useCompanies, usePersons } from '@/lib/api/contacts';
+import { colors, fonts, fontSize, radius, space } from '@/theme';
 
 type Tab = 'people' | 'companies';
 
@@ -32,7 +32,7 @@ export default function ContactsScreen() {
 
       {active.isLoading ? (
         <View style={styles.center}>
-          <ActivityIndicator />
+          <ActivityIndicator color={colors.primary} />
         </View>
       ) : tab === 'people' ? (
         <FlatList
@@ -40,7 +40,11 @@ export default function ContactsScreen() {
           keyExtractor={(p) => p.id}
           contentContainerStyle={[styles.list, (persons.data ?? []).length === 0 && styles.grow]}
           refreshControl={
-            <RefreshControl refreshing={persons.isRefetching} onRefresh={() => persons.refetch()} />
+            <RefreshControl
+              refreshing={persons.isRefetching}
+              onRefresh={() => persons.refetch()}
+              tintColor={colors.primary}
+            />
           }
           ListEmptyComponent={<Empty label="No people yet." onRefresh={() => persons.refetch()} />}
           renderItem={({ item }) => (
@@ -60,7 +64,11 @@ export default function ContactsScreen() {
           keyExtractor={(c) => c.id}
           contentContainerStyle={[styles.list, (companies.data ?? []).length === 0 && styles.grow]}
           refreshControl={
-            <RefreshControl refreshing={companies.isRefetching} onRefresh={() => companies.refetch()} />
+            <RefreshControl
+              refreshing={companies.isRefetching}
+              onRefresh={() => companies.refetch()}
+              tintColor={colors.primary}
+            />
           }
           ListEmptyComponent={<Empty label="No companies yet." onRefresh={() => companies.refetch()} />}
           renderItem={({ item }) => (
@@ -99,41 +107,41 @@ function Empty({ label, onRefresh }: { label: string; onRefresh: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#fff' },
-  segment: { flexDirection: 'row', gap: 8, padding: 16, paddingBottom: 8 },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  segment: { flexDirection: 'row', gap: space.sm, padding: space.md, paddingBottom: space.sm },
   segBtn: {
     flex: 1,
     paddingVertical: 9,
-    borderRadius: 10,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
+    borderColor: colors.border,
     alignItems: 'center',
-    backgroundColor: '#fafafa',
+    backgroundColor: colors.surface,
   },
-  segBtnActive: { backgroundColor: '#d9552c', borderColor: '#d9552c' },
-  segText: { fontSize: 14, fontWeight: '600', color: '#52525b' },
-  segTextActive: { color: '#fff' },
-  list: { paddingHorizontal: 16, paddingBottom: 16, gap: 10 },
+  segBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  segText: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.textMuted },
+  segTextActive: { color: colors.white },
+  list: { paddingHorizontal: space.md, paddingBottom: space.md, gap: 10 },
   grow: { flexGrow: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 24 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: space.lg },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.bg,
     borderWidth: 1,
-    borderColor: '#e4e4e7',
-    borderRadius: 14,
-    padding: 16,
+    borderColor: colors.border,
+    borderRadius: radius.xl,
+    padding: space.md,
     gap: 3,
   },
-  name: { fontSize: 16, fontWeight: '600', color: '#18181b' },
-  sub: { fontSize: 13, color: '#71717a' },
-  tag: { fontSize: 12, color: '#d9552c', marginTop: 4 },
-  muted: { fontSize: 14, color: '#a1a1aa' },
+  name: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.ink },
+  sub: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted },
+  tag: { fontFamily: fonts.medium, fontSize: fontSize.xs, color: colors.primary, marginTop: space.xs },
+  muted: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.textSubtle },
   retry: {
     borderWidth: 1,
-    borderColor: '#e4e4e7',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
   },
-  retryText: { color: '#2563eb', fontWeight: '600' },
+  retryText: { fontFamily: fonts.semibold, color: colors.primary },
 });
