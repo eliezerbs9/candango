@@ -1,23 +1,12 @@
 /**
- * Activities tab — list the org's activities, create a new one, and mark done.
+ * Activities tab — list the org's activities (call/meeting/task/email), create
+ * a new one (full form, matching the web), and mark done.
  */
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
-import { useActivities, useCompleteActivity, useCreateActivity } from '@/lib/api/activities';
+import { ActivityFormModal } from '@/components/ActivityFormModal';
+import { useActivities, useCompleteActivity } from '@/lib/api/activities';
 import type { ActivityType } from '@/lib/api/types';
 import { formatDate } from '@/lib/format';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
@@ -28,8 +17,6 @@ const TYPE_EMOJI: Record<ActivityType, string> = {
   task: '✅',
   email: '✉️',
 };
-
-const CREATABLE: ActivityType[] = ['task', 'call', 'meeting'];
 
 export default function ActivitiesScreen() {
   const activities = useActivities();
@@ -43,11 +30,7 @@ export default function ActivitiesScreen() {
         keyExtractor={(a) => a.id}
         contentContainerStyle={[styles.list, (activities.data ?? []).length === 0 && styles.grow]}
         refreshControl={
-          <RefreshControl
-            refreshing={activities.isRefetching}
-            onRefresh={() => activities.refetch()}
-            tintColor={colors.primary}
-          />
+          <RefreshControl refreshing={activities.isRefetching} onRefresh={() => activities.refetch()} tintColor={colors.primary} />
         }
         ListEmptyComponent={
           activities.isLoading ? (
@@ -86,75 +69,8 @@ export default function ActivitiesScreen() {
         <Text style={styles.fabText}>＋</Text>
       </Pressable>
 
-      <CreateActivityModal visible={creating} onClose={() => setCreating(false)} />
+      <ActivityFormModal visible={creating} onClose={() => setCreating(false)} />
     </View>
-  );
-}
-
-function CreateActivityModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const [type, setType] = useState<ActivityType>('task');
-  const [subject, setSubject] = useState('');
-  const create = useCreateActivity();
-
-  async function submit() {
-    if (!subject.trim()) return;
-    await create.mutateAsync({ type, subject: subject.trim() });
-    setSubject('');
-    setType('task');
-    onClose();
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={styles.modalBackdrop}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <SafeAreaView style={styles.sheet}>
-          <Text style={styles.sheetTitle}>New activity</Text>
-
-          <View style={styles.typeRow}>
-            {CREATABLE.map((t) => (
-              <Pressable
-                key={t}
-                style={[styles.typeChip, type === t && styles.typeChipActive]}
-                onPress={() => setType(t)}
-              >
-                <Text style={[styles.typeChipText, type === t && styles.typeChipTextActive]}>
-                  {TYPE_EMOJI[t]} {t}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
-          <TextInput
-            style={styles.input}
-            placeholder="Subject"
-            placeholderTextColor={colors.textSubtle}
-            value={subject}
-            onChangeText={setSubject}
-            autoFocus
-          />
-
-          <View style={styles.sheetActions}>
-            <Pressable style={styles.cancelBtn} onPress={onClose}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.createBtn, (!subject.trim() || create.isPending) && styles.createBtnOff]}
-              disabled={!subject.trim() || create.isPending}
-              onPress={submit}
-            >
-              {create.isPending ? (
-                <ActivityIndicator color={colors.white} />
-              ) : (
-                <Text style={styles.createText}>Create</Text>
-              )}
-            </Pressable>
-          </View>
-        </SafeAreaView>
-      </KeyboardAvoidingView>
-    </Modal>
   );
 }
 
@@ -208,56 +124,4 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   fabText: { color: colors.white, fontSize: 30, lineHeight: 34 },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: colors.bg,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: space.lg,
-    gap: 14,
-  },
-  sheetTitle: { fontFamily: fonts.display, fontSize: fontSize.xl, color: colors.ink },
-  typeRow: { flexDirection: 'row', gap: space.sm },
-  typeChip: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingVertical: 9,
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-  },
-  typeChipActive: { backgroundColor: colors.primaryTint, borderColor: colors.primary },
-  typeChipText: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted, textTransform: 'capitalize' },
-  typeChipTextActive: { fontFamily: fonts.bold, color: colors.primary },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: fontSize.lg,
-    fontFamily: fonts.regular,
-    color: colors.ink,
-    backgroundColor: colors.surface,
-  },
-  sheetActions: { flexDirection: 'row', gap: 10, marginTop: space.xs },
-  cancelBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
-  cancelText: { fontFamily: fonts.semibold, color: colors.textMuted },
-  createBtn: {
-    flex: 2,
-    backgroundColor: colors.primary,
-    borderRadius: radius.lg,
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
-  createBtnOff: { opacity: 0.5 },
-  createText: { fontFamily: fonts.bold, color: colors.white },
 });

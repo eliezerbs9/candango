@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ActivityFormModal } from '@/components/ActivityFormModal';
 import { ComposeEmailModal, type ComposeInitial } from '@/components/ComposeEmailModal';
 import { EditDealModal } from '@/components/EditDealModal';
 import { useActivities } from '@/lib/api/activities';
@@ -62,6 +63,7 @@ export default function DealDetailScreen() {
   const [loseOpen, setLoseOpen] = useState(false);
   const [loseReason, setLoseReason] = useState('');
   const [compose, setCompose] = useState<{ open: boolean; initial?: ComposeInitial }>({ open: false });
+  const [activityOpen, setActivityOpen] = useState(false);
 
   const pipelineStages = useMemo(
     () =>
@@ -224,9 +226,14 @@ export default function DealDetailScreen() {
       {/* Timeline */}
       <View style={styles.timelineHead}>
         <Text style={styles.sectionLabel}>Timeline</Text>
-        <Pressable style={styles.emailBtn} onPress={openNewEmail}>
-          <Text style={styles.emailBtnText}>✉️ Email</Text>
-        </Pressable>
+        <View style={styles.timelineBtns}>
+          <Pressable style={styles.emailBtn} onPress={() => setActivityOpen(true)}>
+            <Text style={styles.emailBtnText}>＋ Activity</Text>
+          </Pressable>
+          <Pressable style={styles.emailBtn} onPress={openNewEmail}>
+            <Text style={styles.emailBtnText}>✉️ Email</Text>
+          </Pressable>
+        </View>
       </View>
       <View style={styles.noteBox}>
         <TextInput
@@ -266,6 +273,8 @@ export default function DealDetailScreen() {
         initial={compose.initial}
         onClose={() => setCompose({ open: false })}
       />
+
+      <ActivityFormModal visible={activityOpen} dealId={d.id} onClose={() => setActivityOpen(false)} />
 
       <Modal visible={loseOpen} animationType="slide" transparent onRequestClose={() => setLoseOpen(false)}>
         <KeyboardAvoidingView style={styles.loseBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -490,6 +499,7 @@ const styles = StyleSheet.create({
   retryText: { fontFamily: fonts.semibold, color: colors.primary },
   headerEdit: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.primary },
   timelineHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  timelineBtns: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
   emailBtn: { backgroundColor: colors.primaryTint, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 5, marginTop: space.md, marginBottom: space.xs },
   emailBtnText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
   loseBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },

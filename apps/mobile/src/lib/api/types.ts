@@ -96,6 +96,8 @@ export interface ActivityBody {
   dueAt?: string;
   startAt?: string;
   endAt?: string;
+  location?: string;
+  conferenceUrl?: string;
   dealId?: string;
 }
 
