@@ -1,11 +1,39 @@
 /**
  * Deals + stages/pipelines API hooks. Mirrors apps/web/lib/api/deals.ts.
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiFetch } from '@/lib/api/client';
-import type { Address, ApiDeal, ApiPipeline, ApiStage, CreateDealBody, StageEvent } from '@/lib/api/types';
+import type {
+  Address,
+  ApiDeal,
+  ApiPipeline,
+  ApiStage,
+  CreateDealBody,
+  StageEvent,
+  TimelinePage,
+} from '@/lib/api/types';
 import { useAuthStore } from '@/lib/auth/store';
+
+const TIMELINE_PAGE_SIZE = 15;
+
+/** Merged deal timeline (notes + activities + emails + stage), cursor-paginated
+ * server-side — each "Load more" fetches the next page instead of the whole feed. */
+export function useDealTimeline(dealId: string) {
+  const token = useAuthStore((s) => s.token);
+  return useInfiniteQuery({
+    queryKey: ['deal', dealId, 'timeline'],
+    enabled: !!token && !!dealId,
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) => {
+      const qs = new URLSearchParams();
+      qs.set('limit', String(TIMELINE_PAGE_SIZE));
+      if (pageParam) qs.set('cursor', pageParam);
+      return apiFetch<TimelinePage>(`/deals/${dealId}/timeline?${qs.toString()}`, { token: token! });
+    },
+    getNextPageParam: (last) => last.nextCursor,
+  });
+}
 
 export type DealFilters = { status?: string; archived?: boolean };
 

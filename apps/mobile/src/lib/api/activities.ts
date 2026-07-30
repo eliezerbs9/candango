@@ -52,6 +52,16 @@ export function useActivitiesInfinite(filters: { done?: boolean; q?: string } = 
   });
 }
 
+/** Fetch a single activity (used to edit one from a paginated deal timeline). */
+export function useActivity(id: string | null) {
+  const token = useAuthStore((s) => s.token);
+  return useQuery({
+    queryKey: ['activity', id],
+    queryFn: () => apiFetch<ApiActivity>(`/activities/${id}`, { token: token! }),
+    enabled: !!token && !!id,
+  });
+}
+
 export function useCreateActivity() {
   const token = useAuthStore((s) => s.token);
   const qc = useQueryClient();

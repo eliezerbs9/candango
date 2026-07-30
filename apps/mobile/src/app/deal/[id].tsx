@@ -18,17 +18,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useQueryClient } from '@tanstack/react-query';
+
 import { ActivityFormModal } from '@/components/ActivityFormModal';
 import { ComposeEmailModal, type ComposeInitial } from '@/components/ComposeEmailModal';
 import { EditDealModal } from '@/components/EditDealModal';
 import { EmailViewModal } from '@/components/EmailViewModal';
 import { QuickbooksPanel } from '@/components/QuickbooksPanel';
-import { useActivities, useUpdateActivity } from '@/lib/api/activities';
+import { useActivity, useUpdateActivity } from '@/lib/api/activities';
 import { useCompanies, usePersons } from '@/lib/api/contacts';
-import type { ApiActivity } from '@/lib/api/types';
-import { useDeal, useDealLifecycle, useMoveDeal, useStageHistory, useStages } from '@/lib/api/deals';
-import { useDealMessages } from '@/lib/api/messages';
-import { useCreateNote, useNotes } from '@/lib/api/notes';
+import { useDeal, useDealLifecycle, useDealTimeline, useMoveDeal, useStages } from '@/lib/api/deals';
+import { useCreateNote } from '@/lib/api/notes';
 import { formatDate, formatMoney } from '@/lib/format';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
 
@@ -56,10 +56,9 @@ export default function DealDetailScreen() {
   const companies = useCompanies();
   const move = useMoveDeal();
   const life = useDealLifecycle();
-  const notes = useNotes(id);
-  const acts = useActivities({ dealId: id });
-  const hist = useStageHistory(id);
-  const messages = useDealMessages(id);
+  const tl = useDealTimeline(id);
+  const qc = useQueryClient();
+  const refreshTimeline = () => qc.invalidateQueries({ queryKey: ['deal', id, 'timeline'] });
   const createNote = useCreateNote(id);
   const [noteText, setNoteText] = useState('');
   const [editOpen, setEditOpen] = useState(false);
@@ -67,8 +66,8 @@ export default function DealDetailScreen() {
   const [loseReason, setLoseReason] = useState('');
   const [compose, setCompose] = useState<{ open: boolean; initial?: ComposeInitial }>({ open: false });
   const [activityOpen, setActivityOpen] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(5); // timeline "load more" window
-  const [editActivity, setEditActivity] = useState<ApiActivity | null>(null);
+  const [editActivityId, setEditActivityId] = useState<string | null>(null);
+  const editActivityQuery = useActivity(editActivityId);
   const [viewEmail, setViewEmail] = useState<Extract<TItem, { kind: 'email' }> | null>(null);
   const updateActivity = useUpdateActivity();
 
@@ -80,29 +79,14 @@ export default function DealDetailScreen() {
     [stages.data, deal.data?.pipelineId],
   );
 
-  const timeline = useMemo(() => {
-    const items: TItem[] = [];
-    notes.data?.forEach((n) => items.push({ kind: 'note', at: n.createdAt, id: n.id, body: n.body, author: n.authorName }));
-    acts.data?.forEach((a) =>
-      items.push({ kind: 'activity', at: a.createdAt, id: a.id, atype: a.type, subject: a.subject, done: a.done }),
-    );
-    hist.data?.forEach((e) =>
-      items.push({ kind: 'stage', at: e.createdAt, id: e.id, from: e.fromStage?.name ?? null, to: e.toStage.name ?? 'Stage' }),
-    );
-    messages.data?.forEach((m) =>
-      items.push({
-        kind: 'email',
-        at: m.sentAt ?? m.createdAt,
-        id: m.id,
-        direction: m.direction,
-        subject: m.subject ?? '(no subject)',
-        snippet: m.snippet,
-        from: m.fromAddress,
-        threadId: m.threadId,
-      }),
-    );
-    return items.sort((a, b) => (a.at < b.at ? 1 : -1));
-  }, [notes.data, acts.data, hist.data, messages.data]);
+  // Server-paginated timeline: flatten the loaded pages (already newest-first).
+  const timeline = useMemo<TItem[]>(
+    () =>
+      (tl.data?.pages.flatMap((p) => p.items) ?? []).map((i) =>
+        i.kind === 'email' ? { ...i, subject: i.subject ?? '(no subject)' } : i,
+      ),
+    [tl.data],
+  );
 
   const companyName = deal.data?.companyId
     ? companies.data?.find((c) => c.id === deal.data!.companyId)?.name
@@ -154,6 +138,7 @@ export default function DealDetailScreen() {
     if (!noteText.trim()) return;
     await createNote.mutateAsync(noteText.trim());
     setNoteText('');
+    refreshTimeline();
   }
 
   return (
@@ -211,7 +196,7 @@ export default function DealDetailScreen() {
               key={s.id}
               style={[styles.stageChip, active && styles.stageChipActive]}
               disabled={active || move.isPending}
-              onPress={() => move.mutate({ id: d.id, stageId: s.id })}
+              onPress={() => move.mutate({ id: d.id, stageId: s.id }, { onSuccess: refreshTimeline })}
             >
               {pending ? (
                 <ActivityIndicator size="small" color={colors.primary} />
@@ -267,25 +252,30 @@ export default function DealDetailScreen() {
         </Pressable>
       </View>
 
-      {timeline.length === 0 ? (
+      {tl.isPending ? (
+        <ActivityIndicator color={colors.primary} style={{ marginTop: space.md }} />
+      ) : timeline.length === 0 ? (
         <Text style={styles.emptyTimeline}>No activity yet.</Text>
       ) : (
         <>
-          {timeline.slice(0, visibleCount).map((it) => (
+          {timeline.map((it) => (
             <TimelineRow
               key={`${it.kind}-${it.id}`}
               item={it}
               onOpen={setViewEmail}
-              onToggleActivity={(aid, done) => updateActivity.mutate({ id: aid, done })}
-              onEditActivity={(aid) => {
-                const a = acts.data?.find((x) => x.id === aid);
-                if (a) setEditActivity(a);
-              }}
+              onToggleActivity={(aid, done) =>
+                updateActivity.mutate({ id: aid, done }, { onSuccess: refreshTimeline })
+              }
+              onEditActivity={(aid) => setEditActivityId(aid)}
             />
           ))}
-          {timeline.length > visibleCount ? (
-            <Pressable style={styles.loadMore} onPress={() => setVisibleCount((n) => n + 10)}>
-              <Text style={styles.loadMoreText}>Load more ({timeline.length - visibleCount})</Text>
+          {tl.hasNextPage ? (
+            <Pressable style={styles.loadMore} onPress={() => tl.fetchNextPage()} disabled={tl.isFetchingNextPage}>
+              {tl.isFetchingNextPage ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={styles.loadMoreText}>Load more</Text>
+              )}
             </Pressable>
           ) : null}
         </>
@@ -299,16 +289,20 @@ export default function DealDetailScreen() {
         visible={compose.open}
         dealId={d.id}
         initial={compose.initial}
-        onClose={() => setCompose({ open: false })}
+        onClose={() => {
+          setCompose({ open: false });
+          refreshTimeline();
+        }}
       />
 
       <ActivityFormModal
-        visible={activityOpen || !!editActivity}
+        visible={activityOpen || !!editActivityQuery.data}
         dealId={d.id}
-        activity={editActivity}
+        activity={editActivityQuery.data ?? null}
         onClose={() => {
           setActivityOpen(false);
-          setEditActivity(null);
+          setEditActivityId(null);
+          refreshTimeline();
         }}
       />
 

@@ -156,6 +156,27 @@ export interface StageEvent {
   createdAt: string;
 }
 
+/** One item of the merged, cursor-paginated deal timeline (GET /deals/:id/timeline). */
+export type TimelineItem =
+  | { kind: 'note'; at: string; id: string; body: string; author: string }
+  | { kind: 'activity'; at: string; id: string; atype: string; subject: string; done: boolean }
+  | { kind: 'stage'; at: string; id: string; from: string | null; to: string }
+  | {
+      kind: 'email';
+      at: string;
+      id: string;
+      direction: 'in' | 'out';
+      subject: string | null;
+      snippet: string | null;
+      from: string;
+      threadId: string | null;
+    };
+
+export interface TimelinePage {
+  items: TimelineItem[];
+  nextCursor: string | null;
+}
+
 export interface CreateDealBody {
   title: string;
   value?: number; // minor units (cents)
