@@ -210,6 +210,8 @@ export class MessagesService {
         toAddresses: dto.to as Prisma.InputJsonValue,
         subject: dto.subject,
         snippet: (dto.html ? dto.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : dto.body).slice(0, 200),
+        bodyHtml: dto.html ? dto.body : null,
+        bodyText: dto.html ? null : dto.body,
         folder: 'sent',
         labels: ['SENT'], // the next Gmail sync refreshes with the real labels (e.g. + INBOX for self-emails)
         personId,
@@ -264,17 +266,27 @@ export class MessagesService {
   async body(orgId: string, id: string) {
     const msg = await this.prisma.message.findFirst({
       where: { id, orgId },
-      select: { providerMessageId: true, userId: true },
+      select: { providerMessageId: true, userId: true, bodyHtml: true, bodyText: true },
     });
     if (!msg) throw new NotFoundException('Message not found');
-    const conn = await this.prisma.mailboxConnection.findUnique({ where: { userId: msg.userId } });
-    if (!conn || conn.status !== 'connected' || !conn.refreshToken) {
-      throw new BadRequestException('Mailbox not connected');
+    // Prefer the body we stored on capture/send — we have no Gmail read scope
+    // to fetch it later (only `gmail.send`).
+    if (msg.bodyHtml || msg.bodyText) {
+      return { html: msg.bodyHtml, text: msg.bodyText };
     }
-    const gmail = gmailClientFor(conn);
-    const full = await gmail.users.messages.get({ userId: 'me', id: msg.providerMessageId, format: 'full' });
-    const { text, html } = extractBody(full.data.payload ?? undefined);
-    return { html: html || null, text: text || null };
+    // Legacy fallback for older messages that predate stored bodies: try Gmail
+    // (only succeeds with a read scope + a real Gmail id). Never throw — return
+    // empty so the client falls back to the snippet.
+    try {
+      const conn = await this.prisma.mailboxConnection.findUnique({ where: { userId: msg.userId } });
+      if (!conn || conn.status !== 'connected' || !conn.refreshToken) return { html: null, text: null };
+      const gmail = gmailClientFor(conn);
+      const full = await gmail.users.messages.get({ userId: 'me', id: msg.providerMessageId, format: 'full' });
+      const { text, html } = extractBody(full.data.payload ?? undefined);
+      return { html: html || null, text: text || null };
+    } catch {
+      return { html: null, text: null };
+    }
   }
 }
 

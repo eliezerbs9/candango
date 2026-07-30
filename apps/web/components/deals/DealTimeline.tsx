@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Badge, Button, Checkbox, Group, Paper, Stack, Text, Textarea, ThemeIcon, Timeline } from '@mantine/core';
+import Link from 'next/link';
+import { Anchor, Badge, Button, Checkbox, Group, Paper, Stack, Text, Textarea, ThemeIcon, Timeline } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import {
@@ -165,7 +166,9 @@ function titleOf(
     case 'message':
       return (
         <Group gap={6}>
-          <Text fw={500} size="sm">{it.data.subject || '(no subject)'}</Text>
+          <Anchor component={Link} href={`/emails/${it.data.id}`} fw={500} size="sm">
+            {it.data.subject || '(no subject)'}
+          </Anchor>
           <Badge size="xs" variant="light" color={it.data.direction === 'out' ? 'blue' : 'teal'}>
             {it.data.direction === 'out' ? 'sent' : 'received'}
           </Badge>

@@ -17,6 +17,7 @@ interface NormalizedMail {
   subject?: string;
   messageId?: string;
   text?: string;
+  html?: string;
   threadId?: string | null;
   date?: Date | null;
 }
@@ -131,6 +132,8 @@ export class InboundEmailService {
           toAddresses: mail.to as Prisma.InputJsonValue,
           subject: mail.subject ?? null,
           snippet: (mail.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 200),
+          bodyHtml: mail.html ?? null,
+          bodyText: mail.text ?? null,
           folder: direction === 'out' ? 'sent' : 'inbox',
           labels: direction === 'out' ? ['SENT'] : ['INBOX'],
           personId,
@@ -224,16 +227,17 @@ function normalizeInbound(body: unknown): NormalizedMail | null {
 
   const subject = (item.Subject ?? item.subject ?? undefined) || undefined;
   const messageId = (item.MessageId ?? item.messageId ?? item['message-id'] ?? item['Message-Id'] ?? undefined) || undefined;
+  const html = String(item.RawHtmlBody ?? item.html ?? item['body-html'] ?? '') || undefined;
   const rawText = String(
     item.RawTextBody ?? item.text ?? item['body-plain'] ?? item.ExtractedMarkdownMessage ?? '',
   );
-  const text = rawText || stripHtml(String(item.RawHtmlBody ?? item.html ?? ''));
+  const text = rawText || (html ? stripHtml(html) : '');
   const threadId = (item.threadId ?? null) as string | null;
   const dateRaw = item.Date ?? item.date ?? item.SentAtDate ?? null;
   const parsed = dateRaw ? new Date(dateRaw) : null;
   const date = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
 
-  return { from, to, cc, recipients, subject, messageId, text, threadId, date };
+  return { from, to, cc, recipients, subject, messageId, text, html, threadId, date };
 }
 
 function dedupe(xs: string[]): string[] {
