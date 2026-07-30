@@ -1,7 +1,6 @@
 /**
- * Create an activity — mirrors the web ActivityForm. Type (Task/Call/Meeting/
- * Email) + Subject; Meeting uses start/end (+ location, meeting link), the rest
- * use a Due date. Optionally linked to a deal.
+ * Create an activity. Type (Task/Call/Meeting) + Subject + Due date, optionally
+ * linked to a deal. Kept simple — email is a separate button, not a type here.
  */
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useEffect, useState } from 'react';
@@ -30,12 +29,7 @@ const TYPES: { value: ActivityType; label: string }[] = [
   { value: 'task', label: 'Task' },
   { value: 'call', label: 'Call' },
   { value: 'meeting', label: 'Meeting' },
-  { value: 'email', label: 'Email' },
 ];
-
-function fmtDateTime(d: Date) {
-  return `${formatDate(d.toISOString())}, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
-}
 
 export function ActivityFormModal({
   visible,
@@ -53,12 +47,8 @@ export function ActivityFormModal({
   const [subject, setSubject] = useState('');
   const [dealId, setDealId] = useState<string | null>(fixedDealId ?? null);
   const [dueDate, setDueDate] = useState<Date | null>(null);
-  const [startDate, setStartDate] = useState<Date | null>(null);
-  const [endDate, setEndDate] = useState<Date | null>(null);
-  const [location, setLocation] = useState('');
-  const [link, setLink] = useState('');
-  const [openPicker, setOpenPicker] = useState<null | 'deal'>(null);
-  const [openDate, setOpenDate] = useState<null | 'due' | 'start' | 'end'>(null);
+  const [dealPickerOpen, setDealPickerOpen] = useState(false);
+  const [showDate, setShowDate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -67,16 +57,11 @@ export function ActivityFormModal({
     setSubject('');
     setDealId(fixedDealId ?? null);
     setDueDate(null);
-    setStartDate(null);
-    setEndDate(null);
-    setLocation('');
-    setLink('');
-    setOpenPicker(null);
-    setOpenDate(null);
+    setDealPickerOpen(false);
+    setShowDate(false);
     setError(null);
   }, [visible, fixedDealId]);
 
-  const isMeeting = type === 'meeting';
   const dealOptions: PickerOption[] = (deals.data ?? []).map((d) => ({ id: d.id, label: d.title }));
   const dealLabel = deals.data?.find((d) => d.id === dealId)?.title ?? (dealId ? 'Linked deal' : 'None');
   const canCreate = subject.trim().length > 0 && !create.isPending;
@@ -84,14 +69,7 @@ export function ActivityFormModal({
   async function submit() {
     setError(null);
     const body: ActivityBody = { type, subject: subject.trim(), dealId: dealId ?? undefined };
-    if (isMeeting) {
-      if (startDate) body.startAt = startDate.toISOString();
-      if (endDate) body.endAt = endDate.toISOString();
-      if (location.trim()) body.location = location.trim();
-      if (link.trim()) body.conferenceUrl = link.trim();
-    } else if (dueDate) {
-      body.dueAt = dueDate.toISOString();
-    }
+    if (dueDate) body.dueAt = dueDate.toISOString();
     try {
       await create.mutateAsync(body);
       onClose();
@@ -99,16 +77,6 @@ export function ActivityFormModal({
       setError(e instanceof Error ? e.message : 'Could not create the activity.');
     }
   }
-
-  const onDateChange =
-    (which: 'due' | 'start' | 'end') =>
-    (_e: unknown, d?: Date) => {
-      if (Platform.OS !== 'ios') setOpenDate(null);
-      if (!d) return;
-      if (which === 'due') setDueDate(d);
-      else if (which === 'start') setStartDate(d);
-      else setEndDate(d);
-    };
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -155,7 +123,7 @@ export function ActivityFormModal({
             {!fixedDealId ? (
               <>
                 <Text style={styles.label}>Deal</Text>
-                <Pressable style={styles.field} onPress={() => setOpenPicker('deal')}>
+                <Pressable style={styles.field} onPress={() => setDealPickerOpen(true)}>
                   <Text style={styles.fieldValue} numberOfLines={1}>
                     {dealLabel}
                   </Text>
@@ -164,29 +132,28 @@ export function ActivityFormModal({
               </>
             ) : null}
 
-            {isMeeting ? (
-              <>
-                <DateField label="Start" value={startDate ? fmtDateTime(startDate) : 'Set…'} onPress={() => setOpenDate('start')} />
-                {openDate === 'start' ? (
-                  <DateTimePicker value={startDate ?? new Date()} mode="datetime" display={Platform.OS === 'ios' ? 'inline' : 'default'} onChange={onDateChange('start')} />
-                ) : null}
-                <DateField label="End" value={endDate ? fmtDateTime(endDate) : 'Set…'} onPress={() => setOpenDate('end')} />
-                {openDate === 'end' ? (
-                  <DateTimePicker value={endDate ?? startDate ?? new Date()} mode="datetime" display={Platform.OS === 'ios' ? 'inline' : 'default'} onChange={onDateChange('end')} />
-                ) : null}
-                <Text style={styles.label}>Location</Text>
-                <TextInput style={styles.input} value={location} onChangeText={setLocation} placeholder="Address or place" placeholderTextColor={colors.textSubtle} />
-                <Text style={styles.label}>Meeting link</Text>
-                <TextInput style={styles.input} value={link} onChangeText={setLink} placeholder="https://…" placeholderTextColor={colors.textSubtle} autoCapitalize="none" autoCorrect={false} />
-              </>
-            ) : (
-              <>
-                <DateField label="Due date" value={dueDate ? formatDate(dueDate.toISOString()) : 'Set…'} onPress={() => setOpenDate('due')} onClear={dueDate ? () => setDueDate(null) : undefined} />
-                {openDate === 'due' ? (
-                  <DateTimePicker value={dueDate ?? new Date()} mode="date" display={Platform.OS === 'ios' ? 'inline' : 'default'} onChange={onDateChange('due')} />
-                ) : null}
-              </>
-            )}
+            <Text style={styles.label}>Due date</Text>
+            <View style={styles.dateRow}>
+              <Pressable style={[styles.field, { flex: 1 }]} onPress={() => setShowDate((s) => !s)}>
+                <Text style={styles.fieldValue}>{dueDate ? formatDate(dueDate.toISOString()) : 'Set…'}</Text>
+              </Pressable>
+              {dueDate ? (
+                <Pressable style={styles.clear} onPress={() => setDueDate(null)}>
+                  <Text style={styles.clearText}>Clear</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {showDate ? (
+              <DateTimePicker
+                value={dueDate ?? new Date()}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                onChange={(_e, d) => {
+                  if (Platform.OS !== 'ios') setShowDate(false);
+                  if (d) setDueDate(d);
+                }}
+              />
+            ) : null}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </ScrollView>
@@ -194,33 +161,15 @@ export function ActivityFormModal({
       </KeyboardAvoidingView>
 
       <PickerModal
-        visible={openPicker === 'deal'}
+        visible={dealPickerOpen}
         title="Deal"
         options={dealOptions}
         selectedId={dealId}
         allowClear
         onSelect={setDealId}
-        onClose={() => setOpenPicker(null)}
+        onClose={() => setDealPickerOpen(false)}
       />
     </Modal>
-  );
-}
-
-function DateField({ label, value, onPress, onClear }: { label: string; value: string; onPress: () => void; onClear?: () => void }) {
-  return (
-    <>
-      <Text style={styles.label}>{label}</Text>
-      <View style={styles.dateRow}>
-        <Pressable style={[styles.field, { flex: 1 }]} onPress={onPress}>
-          <Text style={styles.fieldValue}>{value}</Text>
-        </Pressable>
-        {onClear ? (
-          <Pressable style={styles.clear} onPress={onClear}>
-            <Text style={styles.clearText}>Clear</Text>
-          </Pressable>
-        ) : null}
-      </View>
-    </>
   );
 }
 
@@ -242,8 +191,8 @@ const styles = StyleSheet.create({
   create: { fontFamily: fonts.bold, fontSize: fontSize.md, color: colors.primary },
   form: { padding: space.lg, gap: space.xs + 2 },
   label: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted, marginTop: space.sm + 2 },
-  typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  typeChip: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: colors.surface },
+  typeRow: { flexDirection: 'row', gap: space.sm },
+  typeChip: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingVertical: 9, alignItems: 'center', backgroundColor: colors.surface },
   typeChipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   typeText: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted },
   typeTextOn: { fontFamily: fonts.bold, color: colors.white },
