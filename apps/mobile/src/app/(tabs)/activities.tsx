@@ -3,7 +3,7 @@
  * off) and **All** (everything, searchable). Tap a card to edit; ＋ to create;
  * the check marks it done.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -50,6 +50,10 @@ export default function ActivitiesScreen() {
   // Items the user just completed — hidden immediately (with a layout animation)
   // until the refetch confirms them as done.
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
+  const [visibleCount, setVisibleCount] = useState(10); // "view more" window
+
+  // Start from the top again whenever the segment or search changes.
+  useEffect(() => setVisibleCount(10), [tab, search]);
 
   const data = useMemo(() => {
     let list = activities.data ?? [];
@@ -98,11 +102,18 @@ export default function ActivitiesScreen() {
       </View>
 
       <FlatList
-        data={data}
+        data={data.slice(0, visibleCount)}
         keyExtractor={(a) => a.id}
         contentContainerStyle={[styles.list, data.length === 0 && styles.grow]}
         refreshControl={
           <RefreshControl refreshing={activities.isRefetching} onRefresh={() => activities.refetch()} tintColor={colors.primary} />
+        }
+        ListFooterComponent={
+          data.length > visibleCount ? (
+            <Pressable style={styles.viewMore} onPress={() => setVisibleCount((n) => n + 10)}>
+              <Text style={styles.viewMoreText}>View more ({data.length - visibleCount})</Text>
+            </Pressable>
+          ) : null
         }
         ListEmptyComponent={
           activities.isLoading ? (
@@ -192,6 +203,8 @@ const styles = StyleSheet.create({
   },
   list: { padding: space.md, gap: 10 },
   grow: { flexGrow: 1 },
+  viewMore: { alignSelf: 'center', marginTop: space.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: space.lg, paddingVertical: space.sm, backgroundColor: colors.surface },
+  viewMoreText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.lg },
   muted: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.textSubtle },
   card: {
