@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 
 import { PickerModal, type PickerOption } from '@/components/PickerModal';
-import { useCompanies, usePersons } from '@/lib/api/contacts';
+import { useCompanies, useCreateCompany, useCreatePerson, usePersons } from '@/lib/api/contacts';
 import { useCreateDeal, usePipelines, useStages } from '@/lib/api/deals';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
 
@@ -30,6 +30,8 @@ export default function NewDealScreen() {
   const companies = useCompanies();
   const persons = usePersons();
   const create = useCreateDeal();
+  const createCompany = useCreateCompany();
+  const createPerson = useCreatePerson();
 
   const [title, setTitle] = useState('');
   const [valueText, setValueText] = useState('');
@@ -141,6 +143,10 @@ export default function NewDealScreen() {
         selectedId={companyId}
         allowClear
         onSelect={(id) => setCompanyId(id)}
+        onCreate={async (name) => {
+          const c = await createCompany.mutateAsync({ name });
+          return c.id;
+        }}
         onClose={() => setPicker(null)}
       />
       <PickerModal
@@ -150,6 +156,13 @@ export default function NewDealScreen() {
         selectedId={personId}
         allowClear
         onSelect={(id) => setPersonId(id)}
+        onCreate={async (name) => {
+          const p = await createPerson.mutateAsync({
+            name,
+            companyIds: companyId ? [companyId] : undefined,
+          });
+          return p.id;
+        }}
         onClose={() => setPicker(null)}
       />
     </KeyboardAvoidingView>
