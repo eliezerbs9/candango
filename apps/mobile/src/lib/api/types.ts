@@ -48,6 +48,7 @@ export interface ApiDeal {
   shipTo: Address | null;
   billTo: Address | null;
   customFields: Record<string, unknown>;
+  qbSubcustomerId: string | null;
 }
 
 export type CustomFieldType = 'text' | 'number' | 'date' | 'select';
@@ -214,6 +215,22 @@ export interface CreateDocInput {
 
 export interface QbStatus {
   connected: boolean;
+}
+
+export interface QbLinkStatus {
+  linked: boolean;
+  clientHasParent: boolean;
+  clientName: string | null;
+}
+
+export interface QbCustomer {
+  id: string;
+  name: string;
+}
+
+export interface LinkAccountInput {
+  parentCustomerId?: string;
+  createParent?: boolean;
 }
 
 export interface MessagesPage {

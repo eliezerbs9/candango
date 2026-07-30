@@ -5,8 +5,52 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiFetch } from '@/lib/api/client';
-import type { CreateDocInput, DealDoc } from '@/lib/api/types';
+import type { CreateDocInput, DealDoc, LinkAccountInput, QbCustomer, QbLinkStatus, QbStatus } from '@/lib/api/types';
 import { useAuthStore } from '@/lib/auth/store';
+
+export function useQuickbooksStatus() {
+  const token = useAuthStore((s) => s.token);
+  return useQuery({
+    queryKey: ['quickbooks-status'],
+    queryFn: () => apiFetch<QbStatus>('/integrations/quickbooks', { token: token! }),
+    enabled: !!token,
+    staleTime: 60_000,
+  });
+}
+
+export function useQbLinkStatus(dealId: string, enabled = true) {
+  const token = useAuthStore((s) => s.token);
+  return useQuery({
+    queryKey: ['qb-link-status', dealId],
+    queryFn: () => apiFetch<QbLinkStatus>(`/deals/${dealId}/quickbooks/link-status`, { token: token! }),
+    enabled: !!token && !!dealId && enabled,
+  });
+}
+
+export function useSearchQbParents(dealId: string) {
+  const token = useAuthStore((s) => s.token);
+  return useMutation({
+    mutationFn: (q: string) =>
+      apiFetch<QbCustomer[]>(`/deals/${dealId}/quickbooks/parent-search?q=${encodeURIComponent(q)}`, { token: token! }),
+  });
+}
+
+export function useLinkQuickbooks(dealId: string) {
+  const token = useAuthStore((s) => s.token);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: LinkAccountInput) =>
+      apiFetch<{ qbSubcustomerId: string }>(`/deals/${dealId}/quickbooks/link`, {
+        method: 'POST',
+        token: token!,
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['qb-link-status', dealId] });
+      qc.invalidateQueries({ queryKey: ['deal', dealId] });
+    },
+  });
+}
 
 export function useDealEstimates(dealId: string) {
   const token = useAuthStore((s) => s.token);

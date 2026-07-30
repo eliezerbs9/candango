@@ -280,7 +280,7 @@ export default function DealDetailScreen() {
         ))
       )}
 
-      <QuickbooksPanel dealId={d.id} currency={d.currency} />
+      <QuickbooksPanel dealId={d.id} dealTitle={d.title} currency={d.currency} qbSubcustomerId={d.qbSubcustomerId} />
 
       <View style={{ height: space.xl }} />
 

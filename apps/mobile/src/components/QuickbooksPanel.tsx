@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { DocEditorModal } from '@/components/DocEditorModal';
+import { LinkAccountModal } from '@/components/LinkAccountModal';
 import { PickerModal } from '@/components/PickerModal';
 import {
   useConvertToInvoice,
@@ -14,6 +15,7 @@ import {
   useDealEstimates,
   useDealInvoices,
   useIncludeEstimatesInValue,
+  useQuickbooksStatus,
   useSetEstimateStatus,
   useSetInvoiceStatus,
   useUpdateEstimate,
@@ -25,7 +27,23 @@ import { colors, fonts, fontSize, radius, space } from '@/theme';
 const ESTIMATE_STATUSES = ['draft', 'sent', 'accepted', 'rejected'];
 const INVOICE_STATUSES = ['draft', 'sent', 'paid', 'void'];
 
-export function QuickbooksPanel({ dealId, currency }: { dealId: string; currency: string }) {
+export function QuickbooksPanel({
+  dealId,
+  dealTitle,
+  currency,
+  qbSubcustomerId,
+}: {
+  dealId: string;
+  dealTitle: string;
+  currency: string;
+  qbSubcustomerId: string | null;
+}) {
+  const qb = useQuickbooksStatus();
+  const connected = !!qb.data?.connected;
+  const linked = !!qbSubcustomerId;
+  const mode: 'native' | 'link' | 'qbo' = !connected ? 'native' : linked ? 'qbo' : 'link';
+  const [linkOpen, setLinkOpen] = useState(false);
+
   const estimates = useDealEstimates(dealId);
   const invoices = useDealInvoices(dealId);
   const createEstimate = useCreateEstimate(dealId);
@@ -62,14 +80,25 @@ export function QuickbooksPanel({ dealId, currency }: { dealId: string; currency
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
-        <Text style={styles.header}>📄 Estimates{invoiceDocs.length > 0 ? ' & invoices' : ''}</Text>
+        <Text style={styles.header}>📄 Estimates{mode === 'qbo' ? ' & invoices' : ''}</Text>
+        {mode === 'link' ? (
+          <Pressable style={styles.linkBtn} onPress={() => setLinkOpen(true)}>
+            <Text style={styles.linkBtnText}>Set up QuickBooks billing</Text>
+          </Pressable>
+        ) : null}
       </View>
+
+      {mode === 'link' ? (
+        <Text style={styles.linkHint}>QuickBooks is connected. Link this deal to create estimates and invoices there.</Text>
+      ) : null}
 
       <View style={styles.sectionRow}>
         <Text style={styles.sectionTitle}>Estimates</Text>
-        <Pressable onPress={newEstimate} hitSlop={8}>
-          <Text style={styles.newBtn}>＋ New estimate</Text>
-        </Pressable>
+        {mode !== 'link' ? (
+          <Pressable onPress={newEstimate} hitSlop={8}>
+            <Text style={styles.newBtn}>＋ New estimate</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {estimates.isLoading ? (
@@ -85,7 +114,7 @@ export function QuickbooksPanel({ dealId, currency }: { dealId: string; currency
             onEdit={() => editEstimate(doc)}
             onStatus={() => setStatusFor({ doc, kind: 'estimate' })}
             onToggleValue={() => includeInValue.mutate({ estimateIds: [doc.id], include: !doc.includeInValue })}
-            onConvert={doc.status !== 'closed' ? () => doConvert(doc.id) : undefined}
+            onConvert={mode === 'qbo' && doc.status !== 'closed' ? () => doConvert(doc.id) : undefined}
             converting={convert.isPending}
           />
         ))
@@ -103,7 +132,9 @@ export function QuickbooksPanel({ dealId, currency }: { dealId: string; currency
         </>
       ) : null}
 
-      <Text style={styles.hint}>Connect QuickBooks in Settings → Integrations to create invoices.</Text>
+      {mode === 'native' ? (
+        <Text style={styles.hint}>Connect QuickBooks in Settings → Integrations to create invoices.</Text>
+      ) : null}
 
       <DocEditorModal
         visible={editorOpen}
@@ -128,6 +159,8 @@ export function QuickbooksPanel({ dealId, currency }: { dealId: string; currency
         }}
         onClose={() => setStatusFor(null)}
       />
+
+      <LinkAccountModal visible={linkOpen} dealId={dealId} dealTitle={dealTitle} onClose={() => setLinkOpen(false)} />
     </View>
   );
 }
@@ -179,7 +212,10 @@ function DocRow({
 
 const styles = StyleSheet.create({
   card: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.xl, padding: space.lg, gap: space.sm, marginTop: space.md },
-  headerRow: { flexDirection: 'row', alignItems: 'center' },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
+  linkBtn: { backgroundColor: colors.primaryTint, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 5 },
+  linkBtnText: { fontFamily: fonts.semibold, fontSize: fontSize.xs, color: colors.primary },
+  linkHint: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted },
   header: { fontFamily: fonts.display, fontSize: fontSize.xl, color: colors.ink },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.xs },
   sectionTitle: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.ink },
