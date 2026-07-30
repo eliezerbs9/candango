@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActivityFormModal } from '@/components/ActivityFormModal';
 import { ComposeEmailModal, type ComposeInitial } from '@/components/ComposeEmailModal';
 import { EditDealModal } from '@/components/EditDealModal';
+import { EmailViewModal } from '@/components/EmailViewModal';
 import { QuickbooksPanel } from '@/components/QuickbooksPanel';
 import { useActivities } from '@/lib/api/activities';
 import { useCompanies, usePersons } from '@/lib/api/contacts';
@@ -65,6 +66,7 @@ export default function DealDetailScreen() {
   const [loseReason, setLoseReason] = useState('');
   const [compose, setCompose] = useState<{ open: boolean; initial?: ComposeInitial }>({ open: false });
   const [activityOpen, setActivityOpen] = useState(false);
+  const [viewEmail, setViewEmail] = useState<Extract<TItem, { kind: 'email' }> | null>(null);
 
   const pipelineStages = useMemo(
     () =>
@@ -261,7 +263,7 @@ export default function DealDetailScreen() {
       {timeline.length === 0 ? (
         <Text style={styles.emptyTimeline}>No activity yet.</Text>
       ) : (
-        timeline.map((it) => <TimelineRow key={`${it.kind}-${it.id}`} item={it} onReply={openReply} />)
+        timeline.map((it) => <TimelineRow key={`${it.kind}-${it.id}`} item={it} onOpen={setViewEmail} />)
       )}
 
       <QuickbooksPanel dealId={d.id} currency={d.currency} />
@@ -278,6 +280,21 @@ export default function DealDetailScreen() {
       />
 
       <ActivityFormModal visible={activityOpen} dealId={d.id} onClose={() => setActivityOpen(false)} />
+
+      <EmailViewModal
+        visible={!!viewEmail}
+        email={
+          viewEmail
+            ? { id: viewEmail.id, subject: viewEmail.subject, from: viewEmail.from, direction: viewEmail.direction, at: viewEmail.at }
+            : null
+        }
+        onReply={() => {
+          const e = viewEmail;
+          setViewEmail(null);
+          if (e) openReply(e);
+        }}
+        onClose={() => setViewEmail(null)}
+      />
 
       <Modal visible={loseOpen} animationType="slide" transparent onRequestClose={() => setLoseOpen(false)}>
         <KeyboardAvoidingView style={styles.loseBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -315,10 +332,10 @@ export default function DealDetailScreen() {
 
 function TimelineRow({
   item,
-  onReply,
+  onOpen,
 }: {
   item: TItem;
-  onReply: (it: Extract<TItem, { kind: 'email' }>) => void;
+  onOpen: (it: Extract<TItem, { kind: 'email' }>) => void;
 }) {
   let icon = '•';
   let text: ReactNode = null;
@@ -368,7 +385,7 @@ function TimelineRow({
     </View>
   );
   if (item.kind === 'email') {
-    return <Pressable onPress={() => onReply(item)}>{inner}</Pressable>;
+    return <Pressable onPress={() => onOpen(item)}>{inner}</Pressable>;
   }
   return inner;
 }

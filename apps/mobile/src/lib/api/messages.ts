@@ -15,6 +15,15 @@ export function useDealMessages(dealId: string) {
   });
 }
 
+export function useMessageBody(id: string | null) {
+  const token = useAuthStore((s) => s.token);
+  return useQuery({
+    queryKey: ['message-body', id],
+    queryFn: () => apiFetch<{ html: string | null; text: string | null }>(`/messages/${id}/body`, { token: token! }),
+    enabled: !!token && !!id,
+  });
+}
+
 export function useSendMessage(dealId?: string) {
   const token = useAuthStore((s) => s.token);
   const qc = useQueryClient();
