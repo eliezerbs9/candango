@@ -285,7 +285,14 @@ export default function DealDetailScreen() {
         visible={!!viewEmail}
         email={
           viewEmail
-            ? { id: viewEmail.id, subject: viewEmail.subject, from: viewEmail.from, direction: viewEmail.direction, at: viewEmail.at }
+            ? {
+                id: viewEmail.id,
+                subject: viewEmail.subject,
+                from: viewEmail.from,
+                direction: viewEmail.direction,
+                at: viewEmail.at,
+                snippet: viewEmail.snippet,
+              }
             : null
         }
         onReply={() => {

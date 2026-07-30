@@ -1,6 +1,6 @@
-/** View a formatted email (body via WebView) with a Reply action. */
+/** View an email (formatted body via WebView, with a snippet fallback) + Reply. */
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 import { useMessageBody } from '@/lib/api/messages';
@@ -13,6 +13,7 @@ export type ViewEmail = {
   from: string;
   direction: 'in' | 'out';
   at: string;
+  snippet: string | null;
 };
 
 function htmlDoc(html: string | null, text: string | null): string {
@@ -37,44 +38,54 @@ export function EmailViewModal({
 }) {
   const body = useMessageBody(visible ? email?.id ?? null : null);
 
+  const fullBody = body.data && (body.data.html || body.data.text);
+  // Fall back to the stored snippet when the full body can't be fetched
+  // (e.g. BCC-captured emails have no Gmail message to load from).
+  const showingPreviewOnly = !body.isLoading && !fullBody;
+  const content = fullBody
+    ? htmlDoc(body.data!.html, body.data!.text)
+    : htmlDoc(null, email?.snippet ?? 'No preview available for this email.');
+
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
-        <View style={styles.header}>
-          <Pressable onPress={onClose} hitSlop={10}>
-            <Text style={styles.close}>Close</Text>
-          </Pressable>
-          <Pressable onPress={onReply} hitSlop={10}>
-            <Text style={styles.reply}>Reply</Text>
-          </Pressable>
-        </View>
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+          <View style={styles.header}>
+            <Pressable onPress={onClose} hitSlop={12} style={styles.headerBtn}>
+              <Text style={styles.close}>Close</Text>
+            </Pressable>
+            <Text style={styles.headerTitle}>Email</Text>
+            <Pressable onPress={onReply} hitSlop={12} style={styles.headerBtn}>
+              <Text style={styles.reply}>Reply</Text>
+            </Pressable>
+          </View>
 
-        {email ? (
-          <View style={styles.meta}>
-            <Text style={styles.subject}>{email.subject}</Text>
-            <Text style={styles.sub}>
-              {email.direction === 'in' ? 'From' : 'To'} {email.from} · {formatDate(email.at)}
-            </Text>
-          </View>
-        ) : null}
+          {email ? (
+            <View style={styles.meta}>
+              <Text style={styles.subject}>{email.subject}</Text>
+              <Text style={styles.sub}>
+                {email.direction === 'in' ? 'From' : 'To'} {email.from} · {formatDate(email.at)}
+              </Text>
+            </View>
+          ) : null}
 
-        {body.isLoading ? (
-          <View style={styles.center}>
-            <ActivityIndicator color={colors.primary} />
-          </View>
-        ) : body.isError ? (
-          <View style={styles.center}>
-            <Text style={styles.err}>Couldn’t load this email.</Text>
-          </View>
-        ) : (
-          <WebView
-            style={styles.web}
-            originWhitelist={['*']}
-            source={{ html: htmlDoc(body.data?.html ?? null, body.data?.text ?? null) }}
-            showsVerticalScrollIndicator
-          />
-        )}
-      </SafeAreaView>
+          {body.isLoading ? (
+            <View style={styles.center}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : (
+            <>
+              {showingPreviewOnly ? <Text style={styles.previewNote}>Preview only — full message not available.</Text> : null}
+              <WebView
+                style={styles.web}
+                originWhitelist={['*']}
+                source={{ html: content }}
+                showsVerticalScrollIndicator
+              />
+            </>
+          )}
+        </SafeAreaView>
+      </SafeAreaProvider>
     </Modal>
   );
 }
@@ -86,16 +97,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
+    paddingVertical: space.sm + 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
+  headerBtn: { paddingVertical: 4 },
+  headerTitle: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.ink },
   close: { fontFamily: fonts.medium, fontSize: fontSize.md, color: colors.textMuted },
   reply: { fontFamily: fonts.bold, fontSize: fontSize.md, color: colors.primary },
   meta: { paddingHorizontal: space.lg, paddingVertical: space.sm, gap: 2, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   subject: { fontFamily: fonts.display, fontSize: fontSize.xl, color: colors.ink },
   sub: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted },
+  previewNote: { fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textSubtle, paddingHorizontal: space.lg, paddingTop: space.sm },
   web: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  err: { fontFamily: fonts.medium, color: colors.danger, fontSize: fontSize.md },
 });
