@@ -23,8 +23,9 @@ import { ComposeEmailModal, type ComposeInitial } from '@/components/ComposeEmai
 import { EditDealModal } from '@/components/EditDealModal';
 import { EmailViewModal } from '@/components/EmailViewModal';
 import { QuickbooksPanel } from '@/components/QuickbooksPanel';
-import { useActivities } from '@/lib/api/activities';
+import { useActivities, useUpdateActivity } from '@/lib/api/activities';
 import { useCompanies, usePersons } from '@/lib/api/contacts';
+import type { ApiActivity } from '@/lib/api/types';
 import { useDeal, useDealLifecycle, useMoveDeal, useStageHistory, useStages } from '@/lib/api/deals';
 import { useDealMessages } from '@/lib/api/messages';
 import { useCreateNote, useNotes } from '@/lib/api/notes';
@@ -66,7 +67,9 @@ export default function DealDetailScreen() {
   const [loseReason, setLoseReason] = useState('');
   const [compose, setCompose] = useState<{ open: boolean; initial?: ComposeInitial }>({ open: false });
   const [activityOpen, setActivityOpen] = useState(false);
+  const [editActivity, setEditActivity] = useState<ApiActivity | null>(null);
   const [viewEmail, setViewEmail] = useState<Extract<TItem, { kind: 'email' }> | null>(null);
+  const updateActivity = useUpdateActivity();
 
   const pipelineStages = useMemo(
     () =>
@@ -263,7 +266,18 @@ export default function DealDetailScreen() {
       {timeline.length === 0 ? (
         <Text style={styles.emptyTimeline}>No activity yet.</Text>
       ) : (
-        timeline.map((it) => <TimelineRow key={`${it.kind}-${it.id}`} item={it} onOpen={setViewEmail} />)
+        timeline.map((it) => (
+          <TimelineRow
+            key={`${it.kind}-${it.id}`}
+            item={it}
+            onOpen={setViewEmail}
+            onToggleActivity={(aid, done) => updateActivity.mutate({ id: aid, done })}
+            onEditActivity={(aid) => {
+              const a = acts.data?.find((x) => x.id === aid);
+              if (a) setEditActivity(a);
+            }}
+          />
+        ))
       )}
 
       <QuickbooksPanel dealId={d.id} currency={d.currency} />
@@ -279,7 +293,15 @@ export default function DealDetailScreen() {
         onClose={() => setCompose({ open: false })}
       />
 
-      <ActivityFormModal visible={activityOpen} dealId={d.id} onClose={() => setActivityOpen(false)} />
+      <ActivityFormModal
+        visible={activityOpen || !!editActivity}
+        dealId={d.id}
+        activity={editActivity}
+        onClose={() => {
+          setActivityOpen(false);
+          setEditActivity(null);
+        }}
+      />
 
       <EmailViewModal
         visible={!!viewEmail}
@@ -340,9 +362,13 @@ export default function DealDetailScreen() {
 function TimelineRow({
   item,
   onOpen,
+  onToggleActivity,
+  onEditActivity,
 }: {
   item: TItem;
   onOpen: (it: Extract<TItem, { kind: 'email' }>) => void;
+  onToggleActivity: (id: string, done: boolean) => void;
+  onEditActivity: (id: string) => void;
 }) {
   let icon = '•';
   let text: ReactNode = null;
@@ -385,6 +411,23 @@ function TimelineRow({
       </>
     );
   }
+  if (item.kind === 'activity') {
+    return (
+      <View style={styles.tlRow}>
+        <Pressable
+          onPress={() => onToggleActivity(item.id, !item.done)}
+          style={[styles.tlCheck, item.done && styles.tlCheckDone]}
+          hitSlop={8}
+        >
+          <Text style={[styles.tlCheckMark, item.done && styles.tlCheckMarkDone]}>✓</Text>
+        </Pressable>
+        <Pressable style={styles.tlBody} onPress={() => onEditActivity(item.id)}>
+          {text}
+        </Pressable>
+      </View>
+    );
+  }
+
   const inner = (
     <View style={styles.tlRow}>
       <Text style={styles.tlIcon}>{icon}</Text>
@@ -516,6 +559,10 @@ const styles = StyleSheet.create({
   emptyTimeline: { fontFamily: fonts.regular, color: colors.textSubtle, fontSize: fontSize.sm, marginTop: space.sm },
   tlRow: { flexDirection: 'row', gap: 10, paddingVertical: space.sm + 2, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   tlIcon: { fontSize: 16, width: 22, textAlign: 'center' },
+  tlCheck: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  tlCheckDone: { backgroundColor: colors.success, borderColor: colors.success },
+  tlCheckMark: { color: colors.borderStrong, fontFamily: fonts.bold, fontSize: 12 },
+  tlCheckMarkDone: { color: colors.white },
   tlBody: { flex: 1, gap: 2 },
   tlText: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.ink },
   tlStrong: { fontFamily: fonts.semibold, color: colors.ink },

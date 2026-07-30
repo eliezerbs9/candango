@@ -51,3 +51,13 @@ export function useCompleteActivity() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
   });
 }
+
+export function useUpdateActivity() {
+  const token = useAuthStore((s) => s.token);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & Partial<ActivityBody> & { done?: boolean }) =>
+      apiFetch<ApiActivity>(`/activities/${id}`, { method: 'PATCH', token: token!, body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['activities'] }),
+  });
+}

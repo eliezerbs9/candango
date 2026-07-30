@@ -19,9 +19,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PickerModal, type PickerOption } from '@/components/PickerModal';
-import { useCreateActivity } from '@/lib/api/activities';
+import { useCreateActivity, useUpdateActivity } from '@/lib/api/activities';
 import { useDeals } from '@/lib/api/deals';
-import type { ActivityBody, ActivityType } from '@/lib/api/types';
+import type { ActivityBody, ActivityType, ApiActivity } from '@/lib/api/types';
 import { formatDate } from '@/lib/format';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
 
@@ -34,15 +34,19 @@ const TYPES: { value: ActivityType; label: string }[] = [
 export function ActivityFormModal({
   visible,
   dealId: fixedDealId,
+  activity,
   onClose,
 }: {
   visible: boolean;
   dealId?: string;
+  activity?: ApiActivity | null;
   onClose: () => void;
 }) {
   const create = useCreateActivity();
+  const update = useUpdateActivity();
   const deals = useDeals({ status: 'open' });
 
+  const editing = !!activity;
   const [type, setType] = useState<ActivityType>('task');
   const [subject, setSubject] = useState('');
   const [dealId, setDealId] = useState<string | null>(fixedDealId ?? null);
@@ -53,28 +57,31 @@ export function ActivityFormModal({
 
   useEffect(() => {
     if (!visible) return;
-    setType('task');
-    setSubject('');
-    setDealId(fixedDealId ?? null);
-    setDueDate(null);
+    setType((activity?.type as ActivityType) ?? 'task');
+    setSubject(activity?.subject ?? '');
+    setDealId(activity?.dealId ?? fixedDealId ?? null);
+    const due = activity?.dueAt ?? activity?.startAt ?? null;
+    setDueDate(due ? new Date(due) : null);
     setDealPickerOpen(false);
     setShowDate(false);
     setError(null);
-  }, [visible, fixedDealId]);
+  }, [visible, fixedDealId, activity]);
 
   const dealOptions: PickerOption[] = (deals.data ?? []).map((d) => ({ id: d.id, label: d.title }));
   const dealLabel = deals.data?.find((d) => d.id === dealId)?.title ?? (dealId ? 'Linked deal' : 'None');
-  const canCreate = subject.trim().length > 0 && !create.isPending;
+  const busy = create.isPending || update.isPending;
+  const canCreate = subject.trim().length > 0 && !busy;
 
   async function submit() {
     setError(null);
     const body: ActivityBody = { type, subject: subject.trim(), dealId: dealId ?? undefined };
     if (dueDate) body.dueAt = dueDate.toISOString();
     try {
-      await create.mutateAsync(body);
+      if (editing && activity) await update.mutateAsync({ id: activity.id, ...body });
+      else await create.mutateAsync(body);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not create the activity.');
+      setError(e instanceof Error ? e.message : 'Could not save the activity.');
     }
   }
 
@@ -86,12 +93,12 @@ export function ActivityFormModal({
             <Pressable onPress={onClose} hitSlop={10}>
               <Text style={styles.cancel}>Cancel</Text>
             </Pressable>
-            <Text style={styles.title}>New activity</Text>
+            <Text style={styles.title}>{editing ? 'Edit activity' : 'New activity'}</Text>
             <Pressable onPress={submit} hitSlop={10} disabled={!canCreate}>
-              {create.isPending ? (
+              {busy ? (
                 <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Text style={[styles.create, !canCreate && { opacity: 0.4 }]}>Create</Text>
+                <Text style={[styles.create, !canCreate && { opacity: 0.4 }]}>{editing ? 'Save' : 'Create'}</Text>
               )}
             </Pressable>
           </View>
