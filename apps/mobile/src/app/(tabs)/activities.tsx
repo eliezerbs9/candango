@@ -1,7 +1,9 @@
 /**
  * Activities tab. Two segments: **Open** (incomplete only — completed ones drop
- * off) and **All** (everything, searchable). Tap a card to edit; ＋ to create;
- * the check marks it done.
+ * off) and **All** (everything, searchable). The list is **server-paginated**:
+ * "View more" fetches the next page (ordered by due date, filtered/searched on
+ * the server) so we don't download everything at once. Tap a card to edit; ＋ to
+ * create; the check marks it done (with a remove animation).
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -19,7 +21,7 @@ import {
 } from 'react-native';
 
 import { ActivityFormModal } from '@/components/ActivityFormModal';
-import { useActivities, useCompleteActivity } from '@/lib/api/activities';
+import { useActivitiesInfinite, useCompleteActivity } from '@/lib/api/activities';
 import type { ActivityType, ApiActivity } from '@/lib/api/types';
 import { formatDate } from '@/lib/format';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
@@ -36,40 +38,34 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const dueOf = (a: { startAt: string | null; dueAt: string | null }) => a.startAt ?? a.dueAt;
-
 type Tab = 'open' | 'all';
 
 export default function ActivitiesScreen() {
-  const activities = useActivities();
-  const complete = useCompleteActivity();
   const [tab, setTab] = useState<Tab>('open');
   const [search, setSearch] = useState('');
+  const [debounced, setDebounced] = useState('');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<ApiActivity | null>(null);
   // Items the user just completed — hidden immediately (with a layout animation)
   // until the refetch confirms them as done.
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
-  const [visibleCount, setVisibleCount] = useState(10); // "view more" window
 
-  // Start from the top again whenever the segment or search changes.
-  useEffect(() => setVisibleCount(10), [tab, search]);
+  // Debounce the search so we don't hit the server on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const data = useMemo(() => {
-    let list = activities.data ?? [];
-    if (tab === 'open') list = list.filter((a) => !a.done && !completedIds.has(a.id));
-    const t = search.trim().toLowerCase();
-    if (t) list = list.filter((a) => a.subject.toLowerCase().includes(t) || a.type.toLowerCase().includes(t));
-    // Ascending by due date — soonest first; undated go last.
-    return [...list].sort((a, b) => {
-      const da = dueOf(a);
-      const db = dueOf(b);
-      if (!da && !db) return 0;
-      if (!da) return 1;
-      if (!db) return -1;
-      return da < db ? -1 : da > db ? 1 : 0;
-    });
-  }, [activities.data, tab, search, completedIds]);
+  const activities = useActivitiesInfinite({
+    done: tab === 'open' ? false : undefined,
+    q: debounced || undefined,
+  });
+  const complete = useCompleteActivity();
+
+  const items = useMemo(() => {
+    const all = activities.data?.pages.flat() ?? [];
+    return tab === 'open' ? all.filter((a) => !completedIds.has(a.id)) : all;
+  }, [activities.data, tab, completedIds]);
 
   const completeActivity = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -102,28 +98,37 @@ export default function ActivitiesScreen() {
       </View>
 
       <FlatList
-        data={data.slice(0, visibleCount)}
+        data={items}
         keyExtractor={(a) => a.id}
-        contentContainerStyle={[styles.list, data.length === 0 && styles.grow]}
+        contentContainerStyle={[styles.list, items.length === 0 && styles.grow]}
         refreshControl={
           <RefreshControl refreshing={activities.isRefetching} onRefresh={() => activities.refetch()} tintColor={colors.primary} />
         }
+        onEndReachedThreshold={0.5}
         ListFooterComponent={
-          data.length > visibleCount ? (
-            <Pressable style={styles.viewMore} onPress={() => setVisibleCount((n) => n + 10)}>
-              <Text style={styles.viewMoreText}>View more ({data.length - visibleCount})</Text>
+          activities.hasNextPage ? (
+            <Pressable
+              style={styles.viewMore}
+              onPress={() => activities.fetchNextPage()}
+              disabled={activities.isFetchingNextPage}
+            >
+              {activities.isFetchingNextPage ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={styles.viewMoreText}>View more</Text>
+              )}
             </Pressable>
           ) : null
         }
         ListEmptyComponent={
-          activities.isLoading ? (
+          activities.isPending ? (
             <View style={styles.center}>
               <ActivityIndicator color={colors.primary} />
             </View>
           ) : (
             <View style={styles.center}>
               <Text style={styles.muted}>
-                {search ? 'No matches.' : tab === 'open' ? 'No open activities.' : 'No activities yet.'}
+                {debounced ? 'No matches.' : tab === 'open' ? 'No open activities.' : 'No activities yet.'}
               </Text>
             </View>
           )
