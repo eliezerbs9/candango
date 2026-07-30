@@ -55,9 +55,15 @@ export function EmailViewModal({
               <Text style={styles.close}>Close</Text>
             </Pressable>
             <Text style={styles.headerTitle}>Email</Text>
-            <Pressable onPress={onReply} hitSlop={12} style={styles.headerBtn}>
-              <Text style={styles.reply}>Reply</Text>
-            </Pressable>
+            {email?.direction === 'in' ? (
+              <Pressable onPress={onReply} hitSlop={12} style={styles.headerBtn}>
+                <Text style={styles.reply}>Reply</Text>
+              </Pressable>
+            ) : (
+              <View style={styles.headerBtn}>
+                <Text style={styles.sentTag}>Sent</Text>
+              </View>
+            )}
           </View>
 
           {email ? (
@@ -105,6 +111,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.ink },
   close: { fontFamily: fonts.medium, fontSize: fontSize.md, color: colors.textMuted },
   reply: { fontFamily: fonts.bold, fontSize: fontSize.md, color: colors.primary },
+  sentTag: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textSubtle },
   meta: { paddingHorizontal: space.lg, paddingVertical: space.sm, gap: 2, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   subject: { fontFamily: fonts.display, fontSize: fontSize.xl, color: colors.ink },
   sub: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted },
