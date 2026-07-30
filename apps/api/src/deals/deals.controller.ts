@@ -58,6 +58,17 @@ export class DealsController {
     return this.svc.stageHistory(u.orgId, id);
   }
 
+  @Get(':id/timeline')
+  @Scopes('deals:read')
+  timeline(
+    @CurrentUser() u: AuthContext,
+    @Param('id') id: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.svc.timeline(u.orgId, id, cursor || undefined, limit ? Number(limit) : undefined);
+  }
+
   @Delete(':id')
   @Scopes('deals:delete')
   @HttpCode(204)

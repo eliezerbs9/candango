@@ -56,6 +56,12 @@ export class ActivitiesController {
     return this.svc.create(u.orgId, u.userId, dto);
   }
 
+  @Get(':id')
+  @Scopes('deals:read')
+  get(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.get(u.orgId, id);
+  }
+
   @Patch(':id')
   @Scopes('deals:write')
   update(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() dto: UpdateActivityDto) {

@@ -48,6 +48,85 @@ export class DealsService {
     }));
   }
 
+  /**
+   * Unified, cursor-paginated deal timeline — merges notes, activities, stage
+   * events and emails newest-first. Cursor is "<ISO at>|<id>"; we over-fetch
+   * `limit + 1` of the newest-after-cursor rows from each source, merge, sort by
+   * (at desc, id desc) and slice — so each page is a real DB fetch, not the
+   * whole history. `at` = a message's sentAt (else createdAt), createdAt for the
+   * rest.
+   */
+  async timeline(orgId: string, id: string, cursor?: string, limit = 15) {
+    await this.get(orgId, id);
+    const take = Math.min(Math.max(limit, 1), 50);
+
+    let cursorAt: Date | null = null;
+    let cursorId: string | null = null;
+    if (cursor) {
+      const sep = cursor.lastIndexOf('|');
+      cursorAt = new Date(cursor.slice(0, sep));
+      cursorId = cursor.slice(sep + 1);
+    }
+    // "strictly older than (cursorAt, cursorId)" for a given date column.
+    const olderCreated = cursor
+      ? { OR: [{ createdAt: { lt: cursorAt! } }, { createdAt: cursorAt!, id: { lt: cursorId! } }] }
+      : {};
+    const olderSent = cursor
+      ? { OR: [{ sentAt: { lt: cursorAt! } }, { sentAt: cursorAt!, id: { lt: cursorId! } }] }
+      : {};
+    const order = [{ createdAt: 'desc' as const }, { id: 'desc' as const }];
+
+    const [notes, activities, stageEvents, messages] = await Promise.all([
+      this.prisma.note.findMany({
+        where: { orgId, dealId: id, ...olderCreated },
+        orderBy: order,
+        take: take + 1,
+        include: { author: { select: { name: true, email: true } } },
+      }),
+      this.prisma.activity.findMany({
+        where: { orgId, dealId: id, ...olderCreated },
+        orderBy: order,
+        take: take + 1,
+      }),
+      this.prisma.dealStageEvent.findMany({
+        where: { orgId, dealId: id, ...olderCreated },
+        orderBy: order,
+        take: take + 1,
+      }),
+      this.prisma.message.findMany({
+        where: { orgId, dealId: id, ...olderSent },
+        orderBy: [{ sentAt: 'desc' as const }, { id: 'desc' as const }],
+        take: take + 1,
+      }),
+    ]);
+
+    const stageIds = [
+      ...new Set(stageEvents.flatMap((e) => [e.fromStageId, e.toStageId]).filter(Boolean)),
+    ] as string[];
+    const stages = stageIds.length
+      ? await this.prisma.stage.findMany({ where: { id: { in: stageIds } }, select: { id: true, name: true } })
+      : [];
+    const nameOf = (sid: string | null) => (sid ? stages.find((s) => s.id === sid)?.name ?? null : null);
+
+    type Item = { kind: string; at: Date; id: string; [k: string]: unknown };
+    const pool: Item[] = [
+      ...notes.map((n) => ({ kind: 'note', at: n.createdAt, id: n.id, body: n.body, author: n.author.name || n.author.email })),
+      ...activities.map((a) => ({ kind: 'activity', at: a.createdAt, id: a.id, atype: a.type, subject: a.subject, done: a.done })),
+      ...stageEvents.map((e) => ({ kind: 'stage', at: e.createdAt, id: e.id, from: nameOf(e.fromStageId), to: nameOf(e.toStageId) ?? 'Stage' })),
+      ...messages.map((m) => ({ kind: 'email', at: m.sentAt ?? m.createdAt, id: m.id, direction: m.direction, subject: m.subject, snippet: m.snippet, from: m.fromAddress, threadId: m.threadId })),
+    ];
+    pool.sort((x, y) => {
+      const d = y.at.getTime() - x.at.getTime();
+      return d !== 0 ? d : x.id < y.id ? 1 : -1;
+    });
+
+    const hasMore = pool.length > take;
+    const page = pool.slice(0, take);
+    const last = page[page.length - 1];
+    const nextCursor = hasMore && last ? `${last.at.toISOString()}|${last.id}` : null;
+    return { items: page.map((i) => ({ ...i, at: i.at.toISOString() })), nextCursor };
+  }
+
   list(orgId: string, filters: DealFilters = {}) {
     return this.prisma.deal.findMany({
       where: {
