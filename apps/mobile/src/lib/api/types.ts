@@ -2,6 +2,7 @@
 // contacts.ts — only the fields the mobile app needs).
 
 export interface Address {
+  name?: string;
   line1?: string;
   line2?: string;
   city?: string;
@@ -44,6 +45,21 @@ export interface ApiDeal {
   stageChangedAt: string;
   refNumber: number | null;
   archivedAt: string | null;
+  shipTo: Address | null;
+  billTo: Address | null;
+  customFields: Record<string, unknown>;
+}
+
+export type CustomFieldType = 'text' | 'number' | 'date' | 'select';
+
+export interface CustomFieldDef {
+  id: string;
+  entity: 'deal' | 'person' | 'company';
+  key: string;
+  label: string;
+  type: CustomFieldType;
+  options: string[];
+  position: number;
 }
 
 export interface ContactRef {

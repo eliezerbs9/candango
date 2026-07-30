@@ -4,7 +4,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiFetch } from '@/lib/api/client';
-import type { ApiDeal, ApiPipeline, ApiStage, CreateDealBody, StageEvent } from '@/lib/api/types';
+import type { Address, ApiDeal, ApiPipeline, ApiStage, CreateDealBody, StageEvent } from '@/lib/api/types';
 import { useAuthStore } from '@/lib/auth/store';
 
 export type DealFilters = { status?: string; archived?: boolean };
@@ -91,6 +91,9 @@ type UpdateDealBody = Partial<{
   companyId: string | null;
   primaryPersonId: string | null;
   expectedCloseDate: string | null;
+  shipTo: Address;
+  billTo: Address;
+  customFields: Record<string, unknown>;
 }>;
 
 export function useUpdateDeal() {

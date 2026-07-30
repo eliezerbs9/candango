@@ -1,6 +1,7 @@
 /** A simple bottom-sheet single-select picker with search. */
 import { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -25,6 +26,7 @@ export function PickerModal({
   onSelect,
   onClose,
   allowClear,
+  onCreate,
 }: {
   visible: boolean;
   title: string;
@@ -33,13 +35,34 @@ export function PickerModal({
   onSelect: (id: string | null) => void;
   onClose: () => void;
   allowClear?: boolean;
+  /** When set, shows a "+ Create '<query>'" row; must return the new id. */
+  onCreate?: (label: string) => Promise<string | null>;
 }) {
   const [q, setQ] = useState('');
+  const [creating, setCreating] = useState(false);
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     if (!t) return options;
     return options.filter((o) => o.label.toLowerCase().includes(t) || o.sub?.toLowerCase().includes(t));
   }, [q, options]);
+
+  const query = q.trim();
+  const exactMatch = options.some((o) => o.label.toLowerCase() === query.toLowerCase());
+  const canCreate = !!onCreate && query.length > 0 && !exactMatch;
+
+  async function create() {
+    if (!onCreate || !query) return;
+    setCreating(true);
+    try {
+      const id = await onCreate(query);
+      if (id) {
+        onSelect(id);
+        onClose();
+      }
+    } finally {
+      setCreating(false);
+    }
+  }
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -63,6 +86,16 @@ export function PickerModal({
             onChangeText={setQ}
             autoCorrect={false}
           />
+
+          {canCreate ? (
+            <Pressable style={styles.createRow} onPress={create} disabled={creating}>
+              {creating ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={styles.createText}>＋ Create “{query}”</Text>
+              )}
+            </Pressable>
+          ) : null}
 
           <FlatList
             data={filtered}
@@ -139,6 +172,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     marginBottom: space.sm,
   },
+  createRow: {
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  createText: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.primary },
   list: { marginBottom: space.md },
   row: {
     flexDirection: 'row',

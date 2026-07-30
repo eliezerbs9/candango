@@ -1,4 +1,6 @@
-/** Edit a deal's core fields (title, value, expected close, company, contact). */
+/** Edit a deal's fields — title, value, expected close, company/contact (create
+ * inline), custom fields, and Ship-to / Bill-to addresses. Mirrors the web
+ * deal Details sidebar. */
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useEffect, useState } from 'react';
 import {
@@ -15,10 +17,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AddressFields } from '@/components/AddressFields';
 import { PickerModal, type PickerOption } from '@/components/PickerModal';
-import { useCompanies, usePersons } from '@/lib/api/contacts';
+import { useCompanies, useCreateCompany, useCreatePerson, usePersons } from '@/lib/api/contacts';
+import { useCustomFields } from '@/lib/api/customFields';
 import { useUpdateDeal } from '@/lib/api/deals';
-import type { ApiDeal } from '@/lib/api/types';
+import type { Address, ApiDeal, CustomFieldDef } from '@/lib/api/types';
 import { formatDate } from '@/lib/format';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
 
@@ -27,6 +31,9 @@ type OpenPicker = null | 'company' | 'person';
 export function EditDealModal({ visible, deal, onClose }: { visible: boolean; deal: ApiDeal; onClose: () => void }) {
   const companies = useCompanies();
   const persons = usePersons();
+  const createCompany = useCreateCompany();
+  const createPerson = useCreatePerson();
+  const customFields = useCustomFields('deal');
   const update = useUpdateDeal();
 
   const [title, setTitle] = useState(deal.title);
@@ -35,10 +42,12 @@ export function EditDealModal({ visible, deal, onClose }: { visible: boolean; de
   const [personId, setPersonId] = useState<string | null>(deal.primaryPersonId);
   const [closeDate, setCloseDate] = useState<Date | null>(deal.expectedCloseDate ? new Date(deal.expectedCloseDate) : null);
   const [showDate, setShowDate] = useState(false);
+  const [shipTo, setShipTo] = useState<Address>(deal.shipTo ?? {});
+  const [billTo, setBillTo] = useState<Address>(deal.billTo ?? {});
+  const [cf, setCf] = useState<Record<string, string>>({});
   const [picker, setPicker] = useState<OpenPicker>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Reset the form to the deal's values whenever it (re)opens.
   useEffect(() => {
     if (!visible) return;
     setTitle(deal.title);
@@ -47,6 +56,11 @@ export function EditDealModal({ visible, deal, onClose }: { visible: boolean; de
     setPersonId(deal.primaryPersonId);
     setCloseDate(deal.expectedCloseDate ? new Date(deal.expectedCloseDate) : null);
     setShowDate(false);
+    setShipTo(deal.shipTo ?? {});
+    setBillTo(deal.billTo ?? {});
+    const cfInit: Record<string, string> = {};
+    for (const [k, v] of Object.entries(deal.customFields ?? {})) cfInit[k] = v == null ? '' : String(v);
+    setCf(cfInit);
     setError(null);
   }, [visible, deal]);
 
@@ -58,14 +72,23 @@ export function EditDealModal({ visible, deal, onClose }: { visible: boolean; de
   async function save() {
     setError(null);
     const dollars = parseFloat(valueText.replace(/,/g, '.'));
+    const customFieldsOut: Record<string, unknown> = {};
+    for (const def of customFields.data ?? []) {
+      const raw = cf[def.key];
+      if (raw == null || raw === '') continue;
+      customFieldsOut[def.key] = def.type === 'number' ? Number(raw) : raw;
+    }
     try {
       await update.mutateAsync({
         id: deal.id,
         title: title.trim(),
         value: Number.isFinite(dollars) ? Math.round(dollars * 100) : 0,
-        companyId: companyId,
+        companyId,
         primaryPersonId: personId,
         expectedCloseDate: closeDate ? closeDate.toISOString() : null,
+        shipTo,
+        billTo,
+        customFields: customFieldsOut,
       });
       onClose();
     } catch (e) {
@@ -86,7 +109,7 @@ export function EditDealModal({ visible, deal, onClose }: { visible: boolean; de
               {update.isPending ? (
                 <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Text style={[styles.save, !title.trim() && { opacity: 0.4 }]}>Save</Text>
+                <Text style={[styles.saveBtn, !title.trim() && { opacity: 0.4 }]}>Save</Text>
               )}
             </Pressable>
           </View>
@@ -104,8 +127,8 @@ export function EditDealModal({ visible, deal, onClose }: { visible: boolean; de
                 <Text style={styles.fieldValue}>{closeDate ? formatDate(closeDate.toISOString()) : 'None'}</Text>
               </Pressable>
               {closeDate ? (
-                <Pressable style={styles.clearDate} onPress={() => setCloseDate(null)}>
-                  <Text style={styles.clearDateText}>Clear</Text>
+                <Pressable style={styles.clear} onPress={() => setCloseDate(null)}>
+                  <Text style={styles.clearText}>Clear</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -124,7 +147,16 @@ export function EditDealModal({ visible, deal, onClose }: { visible: boolean; de
             <Field label="Company" value={companyLabel} onPress={() => setPicker('company')} />
             <Field label="Primary contact" value={personLabel} onPress={() => setPicker('person')} />
 
+            {(customFields.data ?? []).map((def) => (
+              <CustomField key={def.id} def={def} value={cf[def.key] ?? ''} onChange={(v) => setCf((p) => ({ ...p, [def.key]: v }))} />
+            ))}
+
+            <View style={styles.divider} />
+            <AddressFields label="Ship to (work site)" value={shipTo} onChange={setShipTo} />
+            <AddressFields label="Bill to (payer)" value={billTo} onChange={setBillTo} />
+
             {error ? <Text style={styles.error}>{error}</Text> : null}
+            <View style={{ height: space.md }} />
           </ScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
@@ -136,6 +168,7 @@ export function EditDealModal({ visible, deal, onClose }: { visible: boolean; de
         selectedId={companyId}
         allowClear
         onSelect={setCompanyId}
+        onCreate={async (name) => (await createCompany.mutateAsync({ name })).id}
         onClose={() => setPicker(null)}
       />
       <PickerModal
@@ -145,9 +178,38 @@ export function EditDealModal({ visible, deal, onClose }: { visible: boolean; de
         selectedId={personId}
         allowClear
         onSelect={setPersonId}
+        onCreate={async (name) =>
+          (await createPerson.mutateAsync({ name, companyIds: companyId ? [companyId] : undefined })).id
+        }
         onClose={() => setPicker(null)}
       />
     </Modal>
+  );
+}
+
+function CustomField({ def, value, onChange }: { def: CustomFieldDef; value: string; onChange: (v: string) => void }) {
+  return (
+    <>
+      <Text style={styles.label}>{def.label}</Text>
+      {def.type === 'select' ? (
+        <View style={styles.chips}>
+          {def.options.map((opt) => (
+            <Pressable key={opt} style={[styles.chip, value === opt && styles.chipOn]} onPress={() => onChange(value === opt ? '' : opt)}>
+              <Text style={[styles.chipText, value === opt && styles.chipTextOn]}>{opt}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : (
+        <TextInput
+          style={styles.input}
+          value={value}
+          onChangeText={onChange}
+          keyboardType={def.type === 'number' ? 'decimal-pad' : 'default'}
+          placeholder={def.type === 'date' ? 'YYYY-MM-DD' : ''}
+          placeholderTextColor={colors.textSubtle}
+        />
+      )}
+    </>
   );
 }
 
@@ -167,7 +229,7 @@ function Field({ label, value, onPress }: { label: string; value: string; onPres
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%' },
+  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '92%' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -180,7 +242,7 @@ const styles = StyleSheet.create({
   },
   title: { fontFamily: fonts.display, fontSize: fontSize.xl, color: colors.ink },
   cancel: { fontFamily: fonts.medium, fontSize: fontSize.md, color: colors.textMuted },
-  save: { fontFamily: fonts.bold, fontSize: fontSize.md, color: colors.primary },
+  saveBtn: { fontFamily: fonts.bold, fontSize: fontSize.md, color: colors.primary },
   form: { padding: space.lg, gap: space.xs + 2 },
   label: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted, marginTop: space.sm + 2 },
   input: {
@@ -208,7 +270,13 @@ const styles = StyleSheet.create({
   },
   fieldValue: { fontFamily: fonts.regular, fontSize: fontSize.lg, color: colors.ink, flexShrink: 1 },
   chevron: { fontFamily: fonts.regular, fontSize: 22, color: colors.textSubtle },
-  clearDate: { paddingHorizontal: 12, paddingVertical: 13 },
-  clearDateText: { fontFamily: fonts.medium, color: colors.textMuted },
+  clear: { paddingHorizontal: 12, paddingVertical: 13 },
+  clearText: { fontFamily: fonts.medium, color: colors.textMuted },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  chip: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: 14, paddingVertical: 7, backgroundColor: colors.surface },
+  chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  chipText: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted },
+  chipTextOn: { fontFamily: fonts.bold, color: colors.white },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginTop: space.md },
   error: { fontFamily: fonts.medium, color: colors.danger, fontSize: fontSize.sm, marginTop: space.sm },
 });
