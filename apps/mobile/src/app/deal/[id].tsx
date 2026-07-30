@@ -67,6 +67,7 @@ export default function DealDetailScreen() {
   const [loseReason, setLoseReason] = useState('');
   const [compose, setCompose] = useState<{ open: boolean; initial?: ComposeInitial }>({ open: false });
   const [activityOpen, setActivityOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(5); // timeline "load more" window
   const [editActivity, setEditActivity] = useState<ApiActivity | null>(null);
   const [viewEmail, setViewEmail] = useState<Extract<TItem, { kind: 'email' }> | null>(null);
   const updateActivity = useUpdateActivity();
@@ -229,7 +230,10 @@ export default function DealDetailScreen() {
         <Row label="Deal #" value={d.refNumber != null ? `#${d.refNumber}` : '—'} last />
       </View>
 
-      {/* Timeline */}
+      {/* Estimates & invoices — above the timeline */}
+      <QuickbooksPanel dealId={d.id} dealTitle={d.title} currency={d.currency} qbSubcustomerId={d.qbSubcustomerId} />
+
+      {/* Timeline — last; paginated so the screen stays short */}
       <View style={styles.timelineHead}>
         <Text style={styles.sectionLabel}>Timeline</Text>
         <View style={styles.timelineBtns}>
@@ -266,21 +270,26 @@ export default function DealDetailScreen() {
       {timeline.length === 0 ? (
         <Text style={styles.emptyTimeline}>No activity yet.</Text>
       ) : (
-        timeline.map((it) => (
-          <TimelineRow
-            key={`${it.kind}-${it.id}`}
-            item={it}
-            onOpen={setViewEmail}
-            onToggleActivity={(aid, done) => updateActivity.mutate({ id: aid, done })}
-            onEditActivity={(aid) => {
-              const a = acts.data?.find((x) => x.id === aid);
-              if (a) setEditActivity(a);
-            }}
-          />
-        ))
+        <>
+          {timeline.slice(0, visibleCount).map((it) => (
+            <TimelineRow
+              key={`${it.kind}-${it.id}`}
+              item={it}
+              onOpen={setViewEmail}
+              onToggleActivity={(aid, done) => updateActivity.mutate({ id: aid, done })}
+              onEditActivity={(aid) => {
+                const a = acts.data?.find((x) => x.id === aid);
+                if (a) setEditActivity(a);
+              }}
+            />
+          ))}
+          {timeline.length > visibleCount ? (
+            <Pressable style={styles.loadMore} onPress={() => setVisibleCount((n) => n + 10)}>
+              <Text style={styles.loadMoreText}>Load more ({timeline.length - visibleCount})</Text>
+            </Pressable>
+          ) : null}
+        </>
       )}
-
-      <QuickbooksPanel dealId={d.id} dealTitle={d.title} currency={d.currency} qbSubcustomerId={d.qbSubcustomerId} />
 
       <View style={{ height: space.xl }} />
 
@@ -557,6 +566,8 @@ const styles = StyleSheet.create({
   noteBtnOff: { opacity: 0.5 },
   noteBtnText: { fontFamily: fonts.bold, color: colors.white, fontSize: fontSize.md },
   emptyTimeline: { fontFamily: fonts.regular, color: colors.textSubtle, fontSize: fontSize.sm, marginTop: space.sm },
+  loadMore: { alignSelf: 'center', marginTop: space.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: space.lg, paddingVertical: space.sm, backgroundColor: colors.surface },
+  loadMoreText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
   tlRow: { flexDirection: 'row', gap: 10, paddingVertical: space.sm + 2, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   tlIcon: { fontSize: 16, width: 22, textAlign: 'center' },
   tlCheck: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
