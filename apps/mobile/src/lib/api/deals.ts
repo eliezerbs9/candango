@@ -113,8 +113,14 @@ export function useMoveDeal() {
     mutationFn: ({ id, stageId }: { id: string; stageId: string }) =>
       apiFetch<ApiDeal>(`/deals/${id}`, { method: 'PATCH', token: token!, body: JSON.stringify({ stageId }) }),
     onSuccess: (deal) => {
-      qc.invalidateQueries({ queryKey: ['deals'] });
-      qc.invalidateQueries({ queryKey: ['deal', deal.id] });
+      // Patch the moved deal straight into every cached deals list + the single
+      // deal, instead of invalidating (which fires a background refetch that can
+      // strand the list's loading spinner when we navigate back). Only the small
+      // stage-history query needs a refetch.
+      qc.setQueriesData<ApiDeal[]>({ queryKey: ['deals'] }, (old) =>
+        old ? old.map((x) => (x.id === deal.id ? deal : x)) : old,
+      );
+      qc.setQueryData(['deal', deal.id], deal);
       qc.invalidateQueries({ queryKey: ['deal', deal.id, 'stage-history'] });
     },
   });
