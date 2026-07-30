@@ -2,7 +2,7 @@
  * Create a deal. Title + value + stage (from the default pipeline) + optional
  * company/contact. Presented as a modal from the Deals tab.
  */
-import { Stack, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -90,17 +90,6 @@ export default function NewDealScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Stack.Screen
-        options={{
-          presentation: 'modal',
-          headerShown: true,
-          title: 'New deal',
-          headerStyle: { backgroundColor: colors.bg },
-          headerShadowVisible: false,
-          headerTitleStyle: { fontFamily: fonts.display, color: colors.ink },
-          headerTintColor: colors.ink,
-        }}
-      />
       <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.label}>Title</Text>
         <TextInput

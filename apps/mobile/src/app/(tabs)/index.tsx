@@ -138,7 +138,7 @@ export default function DealsScreen() {
         }}
       />
 
-      <Pressable style={styles.fab} onPress={() => router.push('/deal/new')}>
+      <Pressable style={styles.fab} onPress={() => router.push('/new-deal')}>
         <Text style={styles.fabText}>＋</Text>
       </Pressable>
     </View>

@@ -18,7 +18,7 @@ import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { colors } from '@/theme';
+import { colors, fonts } from '@/theme';
 import { queryClient } from '@/lib/query/queryClient';
 import { useAuthStore } from '@/lib/auth/store';
 
@@ -75,5 +75,22 @@ function AuthGate() {
     );
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      {/* Modal + header declared here (not from inside the screen) — toggling a
+          modal's header visibility from within remounts it in a loop. */}
+      <Stack.Screen
+        name="new-deal"
+        options={{
+          presentation: 'modal',
+          headerShown: true,
+          title: 'New deal',
+          headerStyle: { backgroundColor: colors.bg },
+          headerShadowVisible: false,
+          headerTitleStyle: { fontFamily: fonts.display, color: colors.ink },
+          headerTintColor: colors.ink,
+        }}
+      />
+    </Stack>
+  );
 }
