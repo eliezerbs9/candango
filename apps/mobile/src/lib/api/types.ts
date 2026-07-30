@@ -75,6 +75,7 @@ export interface ApiPerson {
   phone: string | null;
   address: Address | null;
   companies: ContactRef[];
+  customFields: Record<string, unknown>;
 }
 
 export interface ApiCompany {
@@ -84,6 +85,25 @@ export interface ApiCompany {
   address: Address | null;
   phone: string | null;
   contacts: ContactRef[];
+  customFields: Record<string, unknown>;
+}
+
+export interface PersonBody {
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: Address;
+  companyIds?: string[];
+  customFields?: Record<string, unknown>;
+}
+
+export interface CompanyBody {
+  name: string;
+  domain?: string;
+  phone?: string;
+  address?: Address;
+  contactIds?: string[];
+  customFields?: Record<string, unknown>;
 }
 
 export type ActivityType = 'call' | 'meeting' | 'task' | 'email';
