@@ -120,4 +120,10 @@ export interface ActivityFilters {
   from?: string;
   to?: string;
   type?: string;
+  done?: boolean;
+  q?: string;
+  // When `limit` is set the list is paginated (offset-based, ordered by due
+  // date) — used by the mobile app. Omitted → the full list (web calendar).
+  limit?: number;
+  offset?: number;
 }

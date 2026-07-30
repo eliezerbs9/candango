@@ -85,6 +85,8 @@ export class ActivitiesService {
     if (filters.dealId) where.dealId = filters.dealId;
     if (filters.assignedUserId) where.assignedUserId = filters.assignedUserId;
     if (filters.type) where.type = filters.type;
+    if (filters.done !== undefined) where.done = filters.done;
+    if (filters.q) where.subject = { contains: filters.q, mode: 'insensitive' };
     // Date range matches either a meeting's start or a task's due date.
     if (filters.from || filters.to) {
       const range: Prisma.DateTimeFilter = {};
@@ -92,6 +94,22 @@ export class ActivitiesService {
       if (filters.to) range.lte = new Date(filters.to);
       where.OR = [{ startAt: range }, { dueAt: range }];
     }
+
+    // Paginated (mobile): offset-based, ordered by due date ascending (soonest
+    // first; undated last). Mobile activities always carry `dueAt`.
+    if (filters.limit != null) {
+      const take = Math.min(filters.limit, 100);
+      const rows = await this.prisma.activity.findMany({
+        where,
+        orderBy: [{ dueAt: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }],
+        include: withParticipants,
+        take,
+        skip: filters.offset ?? 0,
+      });
+      return rows.map(shape);
+    }
+
+    // Full list (web calendar) — unchanged.
     const rows = await this.prisma.activity.findMany({
       where,
       orderBy: [{ done: 'asc' }, { startAt: 'asc' }, { dueAt: 'asc' }],

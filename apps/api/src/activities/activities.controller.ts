@@ -30,6 +30,10 @@ export class ActivitiesController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('type') type?: string,
+    @Query('done') done?: string,
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
   ) {
     return this.svc.list(u.orgId, {
       dealId,
@@ -38,6 +42,11 @@ export class ActivitiesController {
       from,
       to,
       type,
+      done: done === undefined ? undefined : done === 'true',
+      q: q || undefined,
+      // `limit` opts into pagination (mobile); omitted → full list (web).
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
     });
   }
 
