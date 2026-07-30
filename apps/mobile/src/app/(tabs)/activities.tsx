@@ -7,11 +7,14 @@ import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  LayoutAnimation,
+  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   TextInput,
+  UIManager,
   View,
 } from 'react-native';
 
@@ -28,6 +31,13 @@ const TYPE_EMOJI: Record<ActivityType, string> = {
   email: '✉️',
 };
 
+// Android needs this opt-in for LayoutAnimation (iOS is on by default).
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const dueOf = (a: { startAt: string | null; dueAt: string | null }) => a.startAt ?? a.dueAt;
+
 type Tab = 'open' | 'all';
 
 export default function ActivitiesScreen() {
@@ -37,14 +47,38 @@ export default function ActivitiesScreen() {
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<ApiActivity | null>(null);
+  // Items the user just completed — hidden immediately (with a layout animation)
+  // until the refetch confirms them as done.
+  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
 
   const data = useMemo(() => {
     let list = activities.data ?? [];
-    if (tab === 'open') list = list.filter((a) => !a.done);
+    if (tab === 'open') list = list.filter((a) => !a.done && !completedIds.has(a.id));
     const t = search.trim().toLowerCase();
     if (t) list = list.filter((a) => a.subject.toLowerCase().includes(t) || a.type.toLowerCase().includes(t));
-    return list;
-  }, [activities.data, tab, search]);
+    // Ascending by due date — soonest first; undated go last.
+    return [...list].sort((a, b) => {
+      const da = dueOf(a);
+      const db = dueOf(b);
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
+      return da < db ? -1 : da > db ? 1 : 0;
+    });
+  }, [activities.data, tab, search, completedIds]);
+
+  const completeActivity = (id: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setCompletedIds((prev) => new Set(prev).add(id));
+    complete.mutate(id, {
+      onError: () =>
+        setCompletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        }),
+    });
+  };
 
   return (
     <View style={styles.screen}>
@@ -96,8 +130,8 @@ export default function ActivitiesScreen() {
             </View>
             <Pressable
               style={[styles.check, item.done && styles.checkDone]}
-              disabled={item.done || complete.isPending}
-              onPress={() => complete.mutate(item.id)}
+              disabled={item.done}
+              onPress={() => completeActivity(item.id)}
             >
               <Text style={[styles.checkMark, item.done && styles.checkMarkDone]}>✓</Text>
             </Pressable>
