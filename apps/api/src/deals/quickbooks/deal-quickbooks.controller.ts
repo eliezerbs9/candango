@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiAuthGuard } from '../../auth/api-auth.guard';
 import { Scopes } from '../../auth/scopes.decorator';
@@ -77,6 +77,13 @@ export class DealQuickbooksController {
     @Body() dto: CreateDocDto,
   ) {
     return this.svc.updateEstimate(u.orgId, id, eid, dto);
+  }
+
+  @Delete('estimates/:eid')
+  @Scopes('deals:write')
+  @HttpCode(204)
+  deleteEstimate(@CurrentUser() u: AuthContext, @Param('id') id: string, @Param('eid') eid: string) {
+    return this.svc.deleteEstimate(u.orgId, id, eid);
   }
 
   @Post('estimates/include-in-value')

@@ -254,6 +254,28 @@ export class DealQuickbooksService {
     return shapeDoc(row);
   }
 
+  /**
+   * Delete an estimate. Native → soft-delete locally. QuickBooks-sourced → delete it in
+   * QuickBooks too (must be connected) then soft-delete. A converted (closed) estimate can't
+   * be deleted — its invoice depends on it, and invoices are never deletable. Deleting the
+   * last estimate leaves the deal with a manual, editable value again.
+   */
+  async deleteEstimate(orgId: string, dealId: string, estimateId: string) {
+    const est = await this.prisma.dealEstimate.findFirst({ where: { id: estimateId, orgId, dealId, deletedAt: null } });
+    if (!est) throw new NotFoundException('Estimate not found');
+    if (est.status === 'closed') {
+      throw new BadRequestException('This estimate was converted to an invoice and can no longer be deleted');
+    }
+    // QuickBooks-sourced estimates can only be deleted while connected (like edit/status/send).
+    await this.requireQboWritable(orgId, est.source);
+    if (est.source === 'quickbooks' && est.qbId) {
+      await this.qbo.deleteEstimate(orgId, est.qbId);
+    }
+    await this.prisma.dealEstimate.update({ where: { id: estimateId }, data: { deletedAt: new Date() } });
+    await this.recomputeDealValue(orgId, dealId);
+    return { ok: true };
+  }
+
   /** Mark/unmark estimates so they count toward the deal value, then recompute. */
   async includeEstimatesInValue(orgId: string, dealId: string, estimateIds: string[], include: boolean) {
     await this.requireDeal(orgId, dealId);

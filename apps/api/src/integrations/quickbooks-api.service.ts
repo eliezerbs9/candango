@@ -335,6 +335,18 @@ export class QuickbooksApiService {
     return this.updateDoc(orgId, 'invoice', qbId, input);
   }
 
+  /** Delete a doc in QuickBooks (re-reads SyncToken; no-op if it's already gone). */
+  private async deleteDoc(orgId: string, resource: 'estimate' | 'invoice', qbId: string): Promise<void> {
+    const Resource = resource === 'estimate' ? 'Estimate' : 'Invoice';
+    const syncToken = await this.currentSyncToken(orgId, Resource, qbId);
+    if (syncToken == null) return; // already deleted in QBO
+    await this.request(orgId, 'POST', `${resource}?operation=delete`, { Id: qbId, SyncToken: syncToken });
+  }
+
+  deleteEstimate(orgId: string, qbId: string) {
+    return this.deleteDoc(orgId, 'estimate', qbId);
+  }
+
   private async listDocs(orgId: string, resource: 'Estimate' | 'Invoice', customerId: string): Promise<NormalizedDoc[]> {
     const r = await this.query(orgId, `select * from ${resource} where CustomerRef = '${customerId}'`);
     return (r?.QueryResponse?.[resource] ?? []).map((d: any) => this.normalizeDoc(d));
