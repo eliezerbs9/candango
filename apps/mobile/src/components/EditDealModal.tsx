@@ -22,6 +22,7 @@ import { PickerModal, type PickerOption } from '@/components/PickerModal';
 import { useCompanies, useCreateCompany, useCreatePerson, usePersons } from '@/lib/api/contacts';
 import { useCustomFields } from '@/lib/api/customFields';
 import { useUpdateDeal } from '@/lib/api/deals';
+import { showToast } from '@/lib/toast';
 import type { Address, ApiDeal, CustomFieldDef } from '@/lib/api/types';
 import { formatDate } from '@/lib/format';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
@@ -90,6 +91,7 @@ export function EditDealModal({ visible, deal, onClose }: { visible: boolean; de
         billTo,
         customFields: customFieldsOut,
       });
+      showToast('Deal saved');
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save the deal.');

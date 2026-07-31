@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useSendMessage } from '@/lib/api/messages';
+import { showToast } from '@/lib/toast';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
 
 export type ComposeInitial = {
@@ -66,6 +67,7 @@ export function ComposeEmailModal({
         threadId: initial?.threadId,
         inReplyTo: initial?.inReplyTo,
       });
+      showToast('Email sent');
       onClose();
     } catch (e) {
       setError(

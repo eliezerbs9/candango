@@ -32,6 +32,7 @@ import {
   useUpdatePerson,
 } from '@/lib/api/contacts';
 import { useCustomFields } from '@/lib/api/customFields';
+import { showToast } from '@/lib/toast';
 import type { Address, ApiCompany, ApiPerson, CustomFieldDef } from '@/lib/api/types';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
 
@@ -137,6 +138,7 @@ export function ContactFormModal({
         if (editing) await updateCompany.mutateAsync({ id: editing.id, ...body });
         else await createCompany.mutateAsync(body);
       }
+      showToast(`${noun[0].toUpperCase()}${noun.slice(1)} ${editing ? 'saved' : 'created'}`);
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save.');
@@ -154,6 +156,7 @@ export function ContactFormModal({
           try {
             if (kind === 'person') await deletePerson.mutateAsync(editing.id);
             else await deleteCompany.mutateAsync(editing.id);
+            showToast(`${noun[0].toUpperCase()}${noun.slice(1)} deleted`);
             onClose();
           } catch (e) {
             setError(e instanceof Error ? e.message : 'Could not delete.');

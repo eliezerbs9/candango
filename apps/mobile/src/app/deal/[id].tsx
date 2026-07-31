@@ -30,6 +30,7 @@ import { useCompanies, usePersons } from '@/lib/api/contacts';
 import { useDeal, useDealLifecycle, useDealTimeline, useMoveDeal, useStages } from '@/lib/api/deals';
 import { useCreateNote } from '@/lib/api/notes';
 import { formatDate, formatMoney } from '@/lib/format';
+import { showToast } from '@/lib/toast';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
 
 const headerOptions = {
@@ -139,6 +140,7 @@ export default function DealDetailScreen() {
     await createNote.mutateAsync(noteText.trim());
     setNoteText('');
     refreshTimeline();
+    showToast('Note added');
   }
 
   return (

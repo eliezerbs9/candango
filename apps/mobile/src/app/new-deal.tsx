@@ -19,6 +19,7 @@ import {
 import { PickerModal, type PickerOption } from '@/components/PickerModal';
 import { useCompanies, useCreateCompany, useCreatePerson, usePersons } from '@/lib/api/contacts';
 import { useCreateDeal, usePipelines, useStages } from '@/lib/api/deals';
+import { showToast } from '@/lib/toast';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
 
 type OpenPicker = null | 'stage' | 'company' | 'person';
@@ -84,6 +85,7 @@ export default function NewDealScreen() {
         companyId: companyId ?? undefined,
         primaryPersonId: personId ?? undefined,
       });
+      showToast('Deal created');
       router.replace(`/deal/${deal.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not create the deal.');

@@ -23,6 +23,7 @@ import { useCreateActivity, useUpdateActivity } from '@/lib/api/activities';
 import { useDeals } from '@/lib/api/deals';
 import type { ActivityBody, ActivityType, ApiActivity } from '@/lib/api/types';
 import { formatDate } from '@/lib/format';
+import { showToast } from '@/lib/toast';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
 
 const TYPES: { value: ActivityType; label: string }[] = [
@@ -79,6 +80,7 @@ export function ActivityFormModal({
     try {
       if (editing && activity) await update.mutateAsync({ id: activity.id, ...body });
       else await create.mutateAsync(body);
+      showToast(editing ? 'Activity updated' : 'Activity created');
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save the activity.');

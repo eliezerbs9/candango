@@ -18,6 +18,7 @@ import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ToastHost } from '@/components/ToastHost';
 import { colors, fonts } from '@/theme';
 import { queryClient } from '@/lib/query/queryClient';
 import { useAuthStore } from '@/lib/auth/store';
@@ -46,6 +47,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <StatusBar style="dark" />
         <AuthGate />
+        <ToastHost />
       </SafeAreaProvider>
     </QueryClientProvider>
   );
