@@ -235,9 +235,14 @@ export class DealsService {
     const before = await this.get(orgId, id);
     const data: Prisma.DealUncheckedUpdateInput = {
       title: dto.title,
-      value: dto.value,
       currency: dto.currency,
     };
+    // The deal value is estimate-driven once the deal has any estimates — a
+    // manual value is only allowed while there are none (FR-13.11).
+    if (dto.value !== undefined) {
+      const estCount = await this.prisma.dealEstimate.count({ where: { orgId, dealId: id, deletedAt: null } });
+      if (estCount === 0) data.value = dto.value;
+    }
     if (dto.ownerUserId) data.ownerUserId = dto.ownerUserId;
     if (dto.primaryPersonId !== undefined) data.primaryPersonId = dto.primaryPersonId || null;
     if (dto.companyId !== undefined) data.companyId = dto.companyId || null;

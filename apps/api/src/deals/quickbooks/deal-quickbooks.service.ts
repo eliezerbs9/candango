@@ -257,6 +257,21 @@ export class DealQuickbooksService {
   /** Mark/unmark estimates so they count toward the deal value, then recompute. */
   async includeEstimatesInValue(orgId: string, dealId: string, estimateIds: string[], include: boolean) {
     await this.requireDeal(orgId, dealId);
+    // The deal value must always be backed by ≥1 estimate while estimates exist —
+    // block unmarking the last counted one (FR-13.11).
+    if (!include) {
+      const total = await this.prisma.dealEstimate.count({ where: { orgId, dealId, deletedAt: null } });
+      if (total > 0) {
+        const counted = await this.prisma.dealEstimate.findMany({
+          where: { orgId, dealId, deletedAt: null, includeInValue: true, status: { notIn: ['closed', 'rejected'] } },
+          select: { id: true },
+        });
+        const remaining = counted.filter((e) => !estimateIds.includes(e.id));
+        if (remaining.length === 0) {
+          throw new BadRequestException('At least one estimate must count toward the deal value');
+        }
+      }
+    }
     await this.prisma.dealEstimate.updateMany({
       where: { id: { in: estimateIds }, orgId, dealId },
       data: { includeInValue: include },
