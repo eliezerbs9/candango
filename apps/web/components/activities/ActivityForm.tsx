@@ -5,14 +5,21 @@ import { Button, Modal, Select, Stack, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
 import { ApiError } from '@/lib/api/client';
-import { useCreateActivity, useCreatePerson, useDeals, usePersons, useUpdateActivity } from '@/lib/api/hooks';
+import { useCreateActivity, useCreatePerson, useDeals, usePersons, useUpdateActivity, useUsers } from '@/lib/api/hooks';
+import { useAuthStore } from '@/lib/auth/store';
 import type { ActivityType, ApiActivity, LocationType } from '@/lib/api/activities';
+
+/** Local date `YYYY-MM-DD` for today. */
+const todayDate = () => {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
 
 const TYPES: { value: ActivityType; label: string }[] = [
   { value: 'task', label: 'Task' },
   { value: 'call', label: 'Call' },
   { value: 'meeting', label: 'Meeting' },
-  { value: 'email', label: 'Email' },
 ];
 
 const LOCATION_TYPES: { value: LocationType; label: string }[] = [
@@ -44,6 +51,8 @@ export function ActivityForm({
 }) {
   const { data: deals = [] } = useDeals();
   const { data: persons = [] } = usePersons();
+  const { data: users = [] } = useUsers();
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const create = useCreateActivity();
   const update = useUpdateActivity();
   const createPerson = useCreatePerson();
@@ -51,6 +60,7 @@ export function ActivityForm({
   const [type, setType] = useState<ActivityType>('task');
   const [subject, setSubject] = useState('');
   const [dealId, setDealId] = useState<string | null>(defaultDealId ?? null);
+  const [assignedUserId, setAssignedUserId] = useState<string | null>(null);
   const [participantIds, setParticipantIds] = useState<string[]>([]);
   const [dueAt, setDueAt] = useState('');
   const [startAt, setStartAt] = useState('');
@@ -65,9 +75,10 @@ export function ActivityForm({
       setType(activity.type);
       setSubject(activity.subject);
       setDealId(activity.dealId);
+      setAssignedUserId(activity.assignedUserId ?? currentUserId ?? null);
       setParticipantIds(activity.participants.map((p) => p.id));
-      setDueAt(activity.dueAt ? activity.dueAt.slice(0, 10) : '');
-      setStartAt(activity.startAt ? toLocalDateTime(activity.startAt) : '');
+      setDueAt(activity.dueAt ? activity.dueAt.slice(0, 10) : todayDate());
+      setStartAt(activity.startAt ? toLocalDateTime(activity.startAt) : toLocalDateTime(new Date().toISOString()));
       setEndAt(activity.endAt ? toLocalDateTime(activity.endAt) : '');
       setLocationType(activity.locationType && activity.locationType !== 'none' ? activity.locationType : 'in_person');
       setLocation(activity.location ?? '');
@@ -76,15 +87,17 @@ export function ActivityForm({
       setType('task');
       setSubject('');
       setDealId(defaultDealId ?? null);
+      setAssignedUserId(currentUserId ?? null);
       setParticipantIds([]);
-      setDueAt('');
-      setStartAt('');
+      // Dates default to today/now and are required — no dateless activities.
+      setDueAt(todayDate());
+      setStartAt(toLocalDateTime(new Date().toISOString()));
       setEndAt('');
       setLocationType('in_person');
       setLocation('');
       setConferenceUrl('');
     }
-  }, [opened, activity, defaultDealId]);
+  }, [opened, activity, defaultDealId, currentUserId]);
 
   // Only meetings are timed calendar events; calls/tasks/emails are to-dos with a due date
   // (calls sync to Google Tasks, not Calendar).
@@ -97,10 +110,15 @@ export function ActivityForm({
       notifications.show({ message: 'Subject is required', color: 'red' });
       return;
     }
+    if ((timed && !startAt) || (!timed && !dueAt)) {
+      notifications.show({ message: timed ? 'Start is required' : 'Due date is required', color: 'red' });
+      return;
+    }
     const body = {
       type,
       subject: subject.trim(),
       dealId: dealId ?? undefined,
+      assignedUserId: assignedUserId ?? undefined,
       // Empty → let the API default participants to the deal's people.
       participantIds: participantIds.length ? participantIds : undefined,
       dueAt: !timed ? toIso(dueAt) : undefined,
@@ -145,6 +163,14 @@ export function ActivityForm({
             clearable
           />
         )}
+        <Select
+          label="Assignee"
+          data={users.map((u) => ({ value: u.id, label: u.name || u.email }))}
+          value={assignedUserId}
+          onChange={setAssignedUserId}
+          searchable
+          allowDeselect={false}
+        />
         <CreatableMultiSelect
           label="Participants"
           placeholder={dealId ? "Defaults to the deal's people" : 'Search or create people'}

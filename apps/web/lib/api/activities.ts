@@ -41,6 +41,7 @@ export interface ActivityBody {
   conferenceUrl?: string;
   dealId?: string;
   participantIds?: string[];
+  assignedUserId?: string;
 }
 
 export function getActivities(token: string, filters: ActivityFilters = {}) {
