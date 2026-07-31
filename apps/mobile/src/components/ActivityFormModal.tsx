@@ -5,9 +5,10 @@
  * required Due date. Email is NOT a type here (it's a separate compose button).
  */
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -23,8 +24,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MultiPickerModal } from '@/components/MultiPickerModal';
 import { PickerModal, type PickerOption } from '@/components/PickerModal';
 import { useCreateActivity, useUpdateActivity } from '@/lib/api/activities';
-import { useCreatePerson, usePersons } from '@/lib/api/contacts';
-import { useDeals } from '@/lib/api/deals';
+import { useCompanies, useCreatePerson, usePersons } from '@/lib/api/contacts';
+import { useDeal, useDeals } from '@/lib/api/deals';
 import { useOrgMembers } from '@/lib/api/org';
 import type { ActivityBody, ActivityType, ApiActivity, LocationType } from '@/lib/api/types';
 import { useAuthStore } from '@/lib/auth/store';
@@ -47,6 +48,16 @@ const LOCATION_TYPES: { value: LocationType; label: string }[] = [
 const fmtDateTime = (d: Date) =>
   `${formatDate(d.toISOString())} · ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
+/** Ask whether a newly-created person should also be linked to the deal's company. */
+function confirmLinkToCompany(name: string, companyName: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    Alert.alert('Add to company?', `Also add ${name} as a contact of ${companyName}?`, [
+      { text: "Don't link", style: 'cancel', onPress: () => resolve(false) },
+      { text: 'Link', onPress: () => resolve(true) },
+    ]);
+  });
+}
+
 export function ActivityFormModal({
   visible,
   dealId: fixedDealId,
@@ -63,6 +74,7 @@ export function ActivityFormModal({
   const deals = useDeals({ status: 'open' });
   const members = useOrgMembers();
   const persons = usePersons();
+  const companies = useCompanies();
   const createPerson = useCreatePerson();
   const currentUserId = useAuthStore((s) => s.user?.id);
 
@@ -113,17 +125,27 @@ export function ActivityFormModal({
   const dealOptions: PickerOption[] = (deals.data ?? []).map((d) => ({ id: d.id, label: d.title }));
   const dealLabel = deals.data?.find((d) => d.id === dealId)?.title ?? (dealId ? 'Linked deal' : 'None');
 
-  // Any person can be a participant (defaults to the deal's people server-side);
-  // options show email/phone and a new person is creatable inline — like the web.
-  const personOptions: PickerOption[] = (persons.data ?? []).map((p) => ({
-    id: p.id,
-    label: p.name,
-    sub: [p.email, p.phone].filter(Boolean).join(' · ') || undefined,
-  }));
+  // Participants = the deal's people (its primary contact + everyone at the
+  // deal's company) plus anyone already selected. New people are creatable inline.
+  const selectedDeal = useDeal(dealId ?? '').data;
+  const dealCompany = companies.data?.find((c) => c.id === selectedDeal?.companyId);
+  const dealPersonIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (selectedDeal?.primaryPersonId) ids.add(selectedDeal.primaryPersonId);
+    dealCompany?.contacts.forEach((c) => ids.add(c.id));
+    return ids;
+  }, [selectedDeal?.primaryPersonId, dealCompany]);
+  const personOptions: PickerOption[] = useMemo(() => {
+    const ids = new Set<string>([...dealPersonIds, ...participantIds]);
+    return [...ids].map((id) => {
+      const p = persons.data?.find((x) => x.id === id);
+      return { id, label: p?.name ?? 'Unknown', sub: [p?.email, p?.phone].filter(Boolean).join(' · ') || undefined };
+    });
+  }, [dealPersonIds, participantIds, persons.data]);
   const participantsLabel = participantIds.length
     ? participantIds.map((id) => persons.data?.find((p) => p.id === id)?.name ?? '?').join(', ')
     : dealId
-      ? "Defaults to the deal's people"
+      ? "The deal's people"
       : 'None';
 
   const memberOptions: PickerOption[] = (members.data ?? []).map((m) => ({
@@ -376,7 +398,11 @@ export function ActivityFormModal({
         options={personOptions}
         selectedIds={participantIds}
         onChange={setParticipantIds}
-        onCreate={async (name) => (await createPerson.mutateAsync({ name })).id}
+        onCreate={async (name) => {
+          const link = dealCompany ? await confirmLinkToCompany(name, dealCompany.name) : false;
+          const p = await createPerson.mutateAsync({ name, companyIds: link ? [dealCompany!.id] : undefined });
+          return p.id;
+        }}
         onClose={() => setParticipantsPickerOpen(false)}
       />
     </Modal>
