@@ -22,6 +22,7 @@ import { PickerModal, type PickerOption } from '@/components/PickerModal';
 import { useCompanies, useCreateCompany, useCreatePerson, usePersons } from '@/lib/api/contacts';
 import { useCustomFields } from '@/lib/api/customFields';
 import { useUpdateDeal } from '@/lib/api/deals';
+import { useDealEstimates } from '@/lib/api/quickbooks';
 import { showToast } from '@/lib/toast';
 import type { Address, ApiDeal, CustomFieldDef } from '@/lib/api/types';
 import { formatDate } from '@/lib/format';
@@ -35,6 +36,8 @@ export function EditDealModal({ visible, deal, onClose }: { visible: boolean; de
   const createCompany = useCreateCompany();
   const createPerson = useCreatePerson();
   const customFields = useCustomFields('deal');
+  const estimates = useDealEstimates(deal.id);
+  const hasEstimates = (estimates.data ?? []).length > 0;
   const update = useUpdateDeal();
 
   const [title, setTitle] = useState(deal.title);
@@ -121,7 +124,16 @@ export function EditDealModal({ visible, deal, onClose }: { visible: boolean; de
             <TextInput style={styles.input} value={title} onChangeText={setTitle} />
 
             <Text style={styles.label}>Value (USD)</Text>
-            <TextInput style={styles.input} value={valueText} onChangeText={setValueText} keyboardType="decimal-pad" />
+            <TextInput
+              style={[styles.input, hasEstimates && styles.inputLocked]}
+              value={valueText}
+              onChangeText={setValueText}
+              keyboardType="decimal-pad"
+              editable={!hasEstimates}
+            />
+            {hasEstimates ? (
+              <Text style={styles.lockHint}>From the estimates below — edit those to change the value.</Text>
+            ) : null}
 
             <Text style={styles.label}>Expected close</Text>
             <View style={styles.dateRow}>
@@ -258,6 +270,8 @@ const styles = StyleSheet.create({
     color: colors.ink,
     backgroundColor: colors.surface,
   },
+  inputLocked: { backgroundColor: colors.border, color: colors.textMuted },
+  lockHint: { fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textSubtle, marginTop: 2 },
   dateRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
   field: {
     flexDirection: 'row',

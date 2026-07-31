@@ -113,7 +113,13 @@ export function QuickbooksPanel({
             currency={currency}
             onEdit={() => editEstimate(doc)}
             onStatus={() => setStatusFor({ doc, kind: 'estimate' })}
-            onToggleValue={() => includeInValue.mutate({ estimateIds: [doc.id], include: !doc.includeInValue })}
+            onToggleValue={
+              // The value must stay backed by ≥1 estimate: only offer "remove from
+              // value" when there's more than one estimate.
+              doc.includeInValue && estimateDocs.length <= 1
+                ? undefined
+                : () => includeInValue.mutate({ estimateIds: [doc.id], include: !doc.includeInValue })
+            }
             onConvert={mode === 'qbo' && doc.status !== 'closed' ? () => doConvert(doc.id) : undefined}
             converting={convert.isPending}
           />
