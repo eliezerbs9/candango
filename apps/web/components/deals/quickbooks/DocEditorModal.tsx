@@ -30,6 +30,13 @@ interface LineRow {
 
 const blankLine = (): LineRow => ({ description: '', quantity: 1, unitPrice: 0, itemId: null });
 
+/** Local date `YYYY-MM-DD` for today. */
+const todayDate = () => {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
 export function DocEditorModal({
   opened,
   onClose,
@@ -75,7 +82,7 @@ export function DocEditorModal({
           : [blankLine()],
       );
     } else {
-      setTxnDate('');
+      setTxnDate(todayDate());
       setNotes('');
       setLines([blankLine()]);
     }
@@ -207,14 +214,7 @@ export function DocEditorModal({
           </Text>
         </Group>
 
-        <Textarea
-          label="Memo"
-          description="Shown on the document in QuickBooks"
-          autosize
-          minRows={2}
-          value={notes}
-          onChange={(e) => setNotes(e.currentTarget.value)}
-        />
+        <Textarea label="Memo" autosize minRows={2} value={notes} onChange={(e) => setNotes(e.currentTarget.value)} />
 
         {!initial && (
           <Stack gap={4}>
