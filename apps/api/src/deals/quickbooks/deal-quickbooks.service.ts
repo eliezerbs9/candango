@@ -158,10 +158,13 @@ export class DealQuickbooksService {
    * Not connected → store a native estimate locally (used to price the deal).
    */
   async createEstimate(orgId: string, dealId: string, dto: CreateDocDto) {
+    // FR-13.11: `setAsValue` or `includeInValue` mark the new estimate for the value.
+    const includeInValue = !!dto.setAsValue || !!dto.includeInValue;
+    let row;
     if (await this.isConnected(orgId)) {
       const deal = await this.requireLinked(orgId, dealId);
       const doc = await this.qbo.createEstimate(orgId, this.qboDocInput(deal, dto));
-      const row = await this.prisma.dealEstimate.create({
+      row = await this.prisma.dealEstimate.create({
         data: {
           orgId,
           dealId,
@@ -172,6 +175,7 @@ export class DealQuickbooksService {
           totalAmount: doc.totalAmount,
           txnDate: dto.txnDate ? new Date(dto.txnDate) : null,
           notes: dto.notes ?? null,
+          includeInValue,
           qbId: doc.qbId,
           qbSyncToken: doc.syncToken,
           qbSyncedAt: new Date(),
@@ -180,25 +184,33 @@ export class DealQuickbooksService {
         include: { lines: lineSelect },
       });
       this.events.emit('webhook.event', { orgId, type: 'quickbooks.estimate_synced', data: { dealId, estimateId: row.id } });
-      return shapeDoc(row);
+    } else {
+      // Native (offline) estimate — amounts computed server-side.
+      const deal = await this.requireDeal(orgId, dealId);
+      row = await this.prisma.dealEstimate.create({
+        data: {
+          orgId,
+          dealId,
+          source: 'native',
+          status: 'draft',
+          currency: deal.currency,
+          totalAmount: nativeTotal(dto),
+          txnDate: dto.txnDate ? new Date(dto.txnDate) : null,
+          notes: dto.notes ?? null,
+          includeInValue,
+          lines: { create: nativeLines(dto) },
+        },
+        include: { lines: lineSelect },
+      });
     }
-
-    // Native (offline) estimate — amounts computed server-side.
-    const deal = await this.requireDeal(orgId, dealId);
-    const row = await this.prisma.dealEstimate.create({
-      data: {
-        orgId,
-        dealId,
-        source: 'native',
-        status: 'draft',
-        currency: deal.currency,
-        totalAmount: nativeTotal(dto),
-        txnDate: dto.txnDate ? new Date(dto.txnDate) : null,
-        notes: dto.notes ?? null,
-        lines: { create: nativeLines(dto) },
-      },
-      include: { lines: lineSelect },
-    });
+    // "Set as the deal value" → this estimate is the sole value estimate.
+    if (dto.setAsValue) {
+      await this.prisma.dealEstimate.updateMany({
+        where: { orgId, dealId, id: { not: row.id }, deletedAt: null },
+        data: { includeInValue: false },
+      });
+    }
+    if (includeInValue) await this.recomputeDealValue(orgId, dealId);
     return shapeDoc(row);
   }
 

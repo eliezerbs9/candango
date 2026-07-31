@@ -192,6 +192,35 @@ export class DealsService {
       });
     });
     await this.logStage(orgId, deal.id, null, deal.stageId, ownerUserId);
+    // Seed an initial native estimate so the deal's value is always backed by an
+    // estimate (FR-13.11). An empty/zero value seeds nothing (value 0).
+    if ((dto.value ?? 0) > 0) {
+      await this.prisma.dealEstimate.create({
+        data: {
+          orgId,
+          dealId: deal.id,
+          source: 'native',
+          status: 'draft',
+          currency: deal.currency,
+          totalAmount: dto.value!,
+          includeInValue: true,
+          lines: {
+            create: [
+              {
+                position: 0,
+                description: 'Deal value',
+                quantity: 1,
+                unitPrice: dto.value!,
+                amount: dto.value!,
+                qbLineId: null,
+                itemId: null,
+                itemName: null,
+              },
+            ],
+          },
+        },
+      });
+    }
     this.emit(orgId, 'deal.created', deal);
     return deal;
   }

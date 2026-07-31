@@ -61,6 +61,17 @@ export class CreateDocDto {
   @Type(() => LineItemDto)
   lines!: LineItemDto[];
 
+  // FR-13.11 — on estimate CREATE, how it affects the deal value:
+  // `setAsValue` = this becomes the sole value estimate (unmarks the others);
+  // `includeInValue` = add it to the value (sum). Both omitted = don't count.
+  @IsOptional()
+  @IsBoolean()
+  includeInValue?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  setAsValue?: boolean;
+
   /** For invoices: the local DealEstimate this was generated from. */
   @IsOptional()
   @IsString()
