@@ -15,9 +15,10 @@ import {
 } from 'react-native';
 
 import { ContactFormModal } from '@/components/ContactFormModal';
+import { Icon } from '@/components/Icon';
 import { useCompanies, usePersons } from '@/lib/api/contacts';
 import type { ApiCompany, ApiPerson } from '@/lib/api/types';
-import { colors, fonts, fontSize, radius, space } from '@/theme';
+import { colors, fonts, fontSize, radius, shadow, space } from '@/theme';
 
 type Tab = 'people' | 'companies';
 
@@ -72,14 +73,17 @@ export default function ContactsScreen() {
           <Segment label="People" active={tab === 'people'} onPress={() => setTab('people')} />
           <Segment label="Companies" active={tab === 'companies'} onPress={() => setTab('companies')} />
         </View>
-        <TextInput
-          style={styles.search}
-          placeholder={tab === 'people' ? 'Search people…' : 'Search companies…'}
-          placeholderTextColor={colors.textSubtle}
-          value={search}
-          onChangeText={setSearch}
-          autoCorrect={false}
-        />
+        <View style={styles.searchBox}>
+          <Icon name="search" size={18} color={colors.textSubtle} />
+          <TextInput
+            style={styles.search}
+            placeholder={tab === 'people' ? 'Search people…' : 'Search companies…'}
+            placeholderTextColor={colors.textSubtle}
+            value={search}
+            onChangeText={setSearch}
+            autoCorrect={false}
+          />
+        </View>
       </View>
 
       {active.isLoading ? (
@@ -96,13 +100,24 @@ export default function ContactsScreen() {
           }
           ListEmptyComponent={<Empty label={search ? 'No matches.' : 'No people yet.'} />}
           renderItem={({ item }) => (
-            <Pressable style={styles.card} onPress={() => openEdit(item)}>
-              <Text style={styles.name}>{item.name}</Text>
-              {item.email ? <Text style={styles.sub}>{item.email}</Text> : null}
-              {item.phone ? <Text style={styles.sub}>{item.phone}</Text> : null}
-              <Text style={styles.rel} numberOfLines={2}>
-                🏢 {item.companies.length ? item.companies.map((c) => c.name).join(', ') : 'No company'}
-              </Text>
+            <Pressable
+              style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+              onPress={() => openEdit(item)}
+            >
+              <View style={styles.avatar}>
+                <Icon name="person" size={20} color={colors.textMuted} />
+              </View>
+              <View style={styles.cardBody}>
+                <Text style={styles.name}>{item.name}</Text>
+                {item.email ? <Text style={styles.sub}>{item.email}</Text> : null}
+                {item.phone ? <Text style={styles.sub}>{item.phone}</Text> : null}
+                <View style={styles.relRow}>
+                  <Icon name="company" size={13} color={colors.textSubtle} />
+                  <Text style={styles.rel} numberOfLines={2}>
+                    {item.companies.length ? item.companies.map((c) => c.name).join(', ') : 'No company'}
+                  </Text>
+                </View>
+              </View>
             </Pressable>
           )}
         />
@@ -116,20 +131,36 @@ export default function ContactsScreen() {
           }
           ListEmptyComponent={<Empty label={search ? 'No matches.' : 'No companies yet.'} />}
           renderItem={({ item }) => (
-            <Pressable style={styles.card} onPress={() => openEdit(item)}>
-              <Text style={styles.name}>{item.name}</Text>
-              {item.domain ? <Text style={styles.sub}>{item.domain}</Text> : null}
-              {item.phone ? <Text style={styles.sub}>{item.phone}</Text> : null}
-              <Text style={styles.rel} numberOfLines={3}>
-                👥 {item.contacts.length ? item.contacts.map((p) => p.name).join(', ') : 'No contact people'}
-              </Text>
+            <Pressable
+              style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+              onPress={() => openEdit(item)}
+            >
+              <View style={styles.avatar}>
+                <Icon name="company" size={20} color={colors.textMuted} />
+              </View>
+              <View style={styles.cardBody}>
+                <Text style={styles.name}>{item.name}</Text>
+                {item.domain ? <Text style={styles.sub}>{item.domain}</Text> : null}
+                {item.phone ? <Text style={styles.sub}>{item.phone}</Text> : null}
+                <View style={styles.relRow}>
+                  <Icon name="person" size={13} color={colors.textSubtle} />
+                  <Text style={styles.rel} numberOfLines={3}>
+                    {item.contacts.length ? item.contacts.map((p) => p.name).join(', ') : 'No contact people'}
+                  </Text>
+                </View>
+              </View>
             </Pressable>
           )}
         />
       )}
 
-      <Pressable style={styles.fab} onPress={openCreate}>
-        <Text style={styles.fabText}>＋</Text>
+      <Pressable
+        style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+        onPress={openCreate}
+        accessibilityRole="button"
+        accessibilityLabel={tab === 'people' ? 'New person' : 'New company'}
+      >
+        <Icon name="add" size={28} color={colors.white} />
       </Pressable>
 
       <ContactFormModal
@@ -159,8 +190,15 @@ function Empty({ label }: { label: string }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  top: { padding: space.md, paddingBottom: space.sm, gap: space.sm },
+  screen: { flex: 1, backgroundColor: colors.surface },
+  top: {
+    padding: space.md,
+    paddingBottom: space.sm,
+    gap: space.sm,
+    backgroundColor: colors.bg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
   segment: { flexDirection: 'row', gap: space.sm },
   segBtn: {
     flex: 1,
@@ -171,35 +209,55 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surface,
   },
-  segBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  segBtnActive: { backgroundColor: colors.ink, borderColor: colors.ink },
   segText: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.textMuted },
   segTextActive: { color: colors.white },
-  search: {
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.lg,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
+    backgroundColor: colors.surface,
+  },
+  search: {
+    flex: 1,
     paddingVertical: 10,
     fontSize: fontSize.md,
     fontFamily: fonts.regular,
     color: colors.ink,
-    backgroundColor: colors.surface,
   },
-  list: { paddingHorizontal: space.md, paddingBottom: space.md, gap: 10 },
+  list: { padding: space.md, gap: space.sm },
   grow: { flexGrow: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: space.lg },
   card: {
+    flexDirection: 'row',
+    gap: 12,
     backgroundColor: colors.bg,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.xl,
     padding: space.md,
-    gap: 3,
+    ...shadow.card,
   },
+  cardPressed: { opacity: 0.6 },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardBody: { flex: 1, gap: 3 },
   name: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.ink },
   sub: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted },
-  tag: { fontFamily: fonts.medium, fontSize: fontSize.xs, color: colors.primary, marginTop: space.xs },
-  rel: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted, marginTop: space.xs + 1 },
+  relRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs + 1, marginTop: space.xs + 1 },
+  rel: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted, flexShrink: 1 },
   muted: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.textSubtle },
   fab: {
     position: 'absolute',
@@ -211,11 +269,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
+    ...shadow.raised,
   },
-  fabText: { color: colors.white, fontSize: 30, lineHeight: 34 },
+  fabPressed: { opacity: 0.85 },
 });

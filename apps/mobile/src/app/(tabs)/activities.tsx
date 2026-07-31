@@ -22,16 +22,18 @@ import {
 } from 'react-native';
 
 import { ActivityFormModal } from '@/components/ActivityFormModal';
+import { Icon, type IconName } from '@/components/Icon';
+import { Chip } from '@/components/ui';
 import { useActivitiesInfinite, useCompleteActivity } from '@/lib/api/activities';
 import type { ActivityType, ApiActivity } from '@/lib/api/types';
 import { formatDate } from '@/lib/format';
-import { colors, fonts, fontSize, radius, space } from '@/theme';
+import { colors, fonts, fontSize, radius, shadow, space } from '@/theme';
 
-const TYPE_EMOJI: Record<ActivityType, string> = {
-  call: '📞',
-  meeting: '🗓️',
-  task: '✅',
-  email: '✉️',
+const TYPE_ICON: Record<ActivityType, IconName> = {
+  call: 'phone',
+  meeting: 'meeting',
+  task: 'task',
+  email: 'email',
 };
 
 // Android needs this opt-in for LayoutAnimation (iOS is on by default).
@@ -166,34 +168,26 @@ export default function ActivitiesScreen() {
           <Segment label="Open" active={tab === 'open'} onPress={() => setTab('open')} />
           <Segment label="All" active={tab === 'all'} onPress={() => setTab('all')} />
         </View>
-        <TextInput
-          style={styles.search}
-          placeholder={tab === 'all' ? 'Search all activities…' : 'Search open activities…'}
-          placeholderTextColor={colors.textSubtle}
-          value={search}
-          onChangeText={setSearch}
-          autoCorrect={false}
-        />
+        <View style={styles.searchBox}>
+          <Icon name="search" size={18} color={colors.textSubtle} />
+          <TextInput
+            style={styles.search}
+            placeholder={tab === 'all' ? 'Search all activities…' : 'Search open activities…'}
+            placeholderTextColor={colors.textSubtle}
+            value={search}
+            onChangeText={setSearch}
+            autoCorrect={false}
+          />
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          <Pressable style={[styles.chip, view === 'list' && styles.chipOn]} onPress={() => setView('list')}>
-            <Text style={[styles.chipText, view === 'list' && styles.chipTextOn]}>☰ List</Text>
-          </Pressable>
-          <Pressable style={[styles.chip, view === 'agenda' && styles.chipOn]} onPress={() => setView('agenda')}>
-            <Text style={[styles.chipText, view === 'agenda' && styles.chipTextOn]}>🗓 Agenda</Text>
-          </Pressable>
+          <Chip label="List" on={view === 'list'} onPress={() => setView('list')} />
+          <Chip label="Agenda" on={view === 'agenda'} onPress={() => setView('agenda')} />
           <View style={styles.chipDivider} />
-          {PERIODS.map((p) => {
-            const on = period === p.key;
-            return (
-              <Pressable key={p.key} style={[styles.chip, on && styles.chipOn]} onPress={() => setPeriod(p.key)}>
-                <Text style={[styles.chipText, on && styles.chipTextOn]}>{p.label}</Text>
-              </Pressable>
-            );
-          })}
+          {PERIODS.map((p) => (
+            <Chip key={p.key} label={p.label} on={period === p.key} onPress={() => setPeriod(p.key)} />
+          ))}
           <View style={styles.chipDivider} />
-          <Pressable style={[styles.chip, mine && styles.chipOn]} onPress={() => setMine((m) => !m)}>
-            <Text style={[styles.chipText, mine && styles.chipTextOn]}>Mine</Text>
-          </Pressable>
+          <Chip label="Mine" on={mine} onPress={() => setMine((m) => !m)} />
         </ScrollView>
 
         {view === 'agenda' && sections.length > 1 ? (
@@ -276,8 +270,13 @@ export default function ActivitiesScreen() {
           )
         }
         renderItem={({ item }) => (
-          <Pressable style={styles.card} onPress={() => setEditing(item)}>
-            <Text style={styles.emoji}>{TYPE_EMOJI[item.type]}</Text>
+          <Pressable
+            style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+            onPress={() => setEditing(item)}
+          >
+            <View style={styles.typeBadge}>
+              <Icon name={TYPE_ICON[item.type]} size={18} color={colors.textMuted} />
+            </View>
             <View style={styles.cardBody}>
               <Text style={[styles.subject, item.done && styles.done]} numberOfLines={2}>
                 {item.subject}
@@ -290,15 +289,23 @@ export default function ActivitiesScreen() {
               style={[styles.check, item.done && styles.checkDone]}
               disabled={item.done}
               onPress={() => completeActivity(item.id)}
+              accessibilityRole="button"
+              accessibilityLabel={item.done ? 'Completed' : 'Mark done'}
+              hitSlop={8}
             >
-              <Text style={[styles.checkMark, item.done && styles.checkMarkDone]}>✓</Text>
+              <Icon name="check" size={16} color={item.done ? colors.white : colors.borderStrong} />
             </Pressable>
           </Pressable>
         )}
       />
 
-      <Pressable style={styles.fab} onPress={() => setCreating(true)}>
-        <Text style={styles.fabText}>＋</Text>
+      <Pressable
+        style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+        onPress={() => setCreating(true)}
+        accessibilityRole="button"
+        accessibilityLabel="New activity"
+      >
+        <Icon name="add" size={28} color={colors.white} />
       </Pressable>
 
       <ActivityFormModal
@@ -322,8 +329,15 @@ function Segment({ label, active, onPress }: { label: string; active: boolean; o
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  top: { padding: space.md, paddingBottom: space.sm, gap: space.sm },
+  screen: { flex: 1, backgroundColor: colors.surface },
+  top: {
+    padding: space.md,
+    paddingBottom: space.sm,
+    gap: space.sm,
+    backgroundColor: colors.bg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
   segment: { flexDirection: 'row', gap: space.sm },
   segBtn: {
     flex: 1,
@@ -334,37 +348,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surface,
   },
-  segBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  segBtnActive: { backgroundColor: colors.ink, borderColor: colors.ink },
   segText: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.textMuted },
   segTextActive: { color: colors.white },
   chips: { gap: space.sm, alignItems: 'center', paddingRight: space.sm },
-  chip: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: colors.surface },
-  chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted },
-  chipTextOn: { fontFamily: fonts.bold, color: colors.white },
-  chipDivider: { width: StyleSheet.hairlineWidth, height: 20, backgroundColor: colors.border, marginHorizontal: 2 },
-  search: {
+  chipDivider: { width: StyleSheet.hairlineWidth, height: 20, backgroundColor: colors.borderStrong, marginHorizontal: 2 },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.lg,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
+    backgroundColor: colors.surface,
+  },
+  search: {
+    flex: 1,
     paddingVertical: 10,
     fontSize: fontSize.md,
     fontFamily: fonts.regular,
     color: colors.ink,
-    backgroundColor: colors.surface,
   },
-  list: { padding: space.md, gap: 10 },
+  list: { padding: space.md, gap: space.sm },
   grow: { flexGrow: 1 },
-  sectionHeader: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.sm, marginBottom: 2 },
-  sectionHeaderSticky: { backgroundColor: colors.bg, paddingVertical: 4, marginTop: 0 },
+  sectionHeader: { fontFamily: fonts.semibold, fontSize: fontSize.xs, color: colors.textSubtle, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: space.sm, marginBottom: 2 },
+  sectionHeaderSticky: { backgroundColor: colors.surface, paddingVertical: 6, marginTop: 0 },
   jumpNav: { gap: space.sm, alignItems: 'center', paddingRight: space.sm, paddingTop: space.xs },
   jumpLabel: { fontFamily: fonts.medium, fontSize: fontSize.xs, color: colors.textSubtle, textTransform: 'uppercase', letterSpacing: 0.5 },
   jumpChip: { borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: colors.primaryTint },
   jumpChipText: { fontFamily: fonts.semibold, fontSize: fontSize.xs, color: colors.primary },
   showAll: { alignSelf: 'flex-start', paddingVertical: space.xs + 2, paddingHorizontal: 2 },
   showAllText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
-  viewMore: { alignSelf: 'center', marginTop: space.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: space.lg, paddingVertical: space.sm, backgroundColor: colors.surface },
+  viewMore: { alignSelf: 'center', marginTop: space.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: space.lg, paddingVertical: space.sm, backgroundColor: colors.bg },
   viewMoreText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.lg },
   muted: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.textSubtle },
@@ -377,8 +393,19 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.xl,
     padding: 14,
+    ...shadow.card,
   },
-  emoji: { fontSize: 22 },
+  cardPressed: { opacity: 0.6 },
+  typeBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   cardBody: { flex: 1, gap: 2 },
   subject: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.ink },
   done: { textDecorationLine: 'line-through', color: colors.textSubtle },
@@ -393,8 +420,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkDone: { backgroundColor: colors.success, borderColor: colors.success },
-  checkMark: { color: colors.borderStrong, fontFamily: fonts.bold },
-  checkMarkDone: { color: colors.white },
   fab: {
     position: 'absolute',
     right: 20,
@@ -405,11 +430,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
+    ...shadow.raised,
   },
-  fabText: { color: colors.white, fontSize: 30, lineHeight: 34 },
+  fabPressed: { opacity: 0.85 },
 });

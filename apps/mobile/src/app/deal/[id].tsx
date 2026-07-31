@@ -24,6 +24,7 @@ import { ActivityFormModal } from '@/components/ActivityFormModal';
 import { ComposeEmailModal, type ComposeInitial } from '@/components/ComposeEmailModal';
 import { EditDealModal } from '@/components/EditDealModal';
 import { EmailViewModal } from '@/components/EmailViewModal';
+import { Icon, type IconName } from '@/components/Icon';
 import { QuickbooksPanel } from '@/components/QuickbooksPanel';
 import { useActivity, useUpdateActivity } from '@/lib/api/activities';
 import { useCompanies, usePersons } from '@/lib/api/contacts';
@@ -47,7 +48,7 @@ type TItem =
   | { kind: 'stage'; at: string; id: string; from: string | null; to: string }
   | { kind: 'email'; at: string; id: string; direction: 'in' | 'out'; subject: string; snippet: string | null; from: string; threadId: string | null };
 
-const ACT_EMOJI: Record<string, string> = { call: '📞', meeting: '🗓️', task: '✅', email: '✉️' };
+const ACT_ICON: Record<string, IconName> = { call: 'phone', meeting: 'meeting', task: 'task', email: 'email' };
 
 export default function DealDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -225,10 +226,12 @@ export default function DealDetailScreen() {
         <Text style={styles.sectionLabel}>Timeline</Text>
         <View style={styles.timelineBtns}>
           <Pressable style={styles.emailBtn} onPress={() => setActivityOpen(true)}>
-            <Text style={styles.emailBtnText}>＋ Activity</Text>
+            <Icon name="add" size={14} color={colors.primary} />
+            <Text style={styles.emailBtnText}>Activity</Text>
           </Pressable>
           <Pressable style={styles.emailBtn} onPress={openNewEmail}>
-            <Text style={styles.emailBtnText}>✉️ Email</Text>
+            <Icon name="email" size={14} color={colors.primary} />
+            <Text style={styles.emailBtnText}>Email</Text>
           </Pressable>
         </View>
       </View>
@@ -375,10 +378,10 @@ function TimelineRow({
   onToggleActivity: (id: string, done: boolean) => void;
   onEditActivity: (id: string) => void;
 }) {
-  let icon = '•';
+  let icon: IconName = 'note';
   let text: ReactNode = null;
   if (item.kind === 'note') {
-    icon = '📝';
+    icon = 'note';
     text = (
       <>
         <Text style={styles.tlText}>{item.body}</Text>
@@ -386,7 +389,7 @@ function TimelineRow({
       </>
     );
   } else if (item.kind === 'activity') {
-    icon = ACT_EMOJI[item.atype] ?? '•';
+    icon = ACT_ICON[item.atype] ?? 'task';
     text = (
       <>
         <Text style={[styles.tlText, item.done && styles.tlDone]}>{item.subject}</Text>
@@ -394,7 +397,7 @@ function TimelineRow({
       </>
     );
   } else if (item.kind === 'stage') {
-    icon = '↗️';
+    icon = 'stage';
     text = (
       <>
         <Text style={styles.tlText}>
@@ -405,7 +408,7 @@ function TimelineRow({
       </>
     );
   } else {
-    icon = item.direction === 'in' ? '📥' : '📤';
+    icon = item.direction === 'in' ? 'inbound' : 'outbound';
     text = (
       <>
         <Text style={styles.tlText} numberOfLines={1}>{item.subject}</Text>
@@ -423,8 +426,10 @@ function TimelineRow({
           onPress={() => onToggleActivity(item.id, !item.done)}
           style={[styles.tlCheck, item.done && styles.tlCheckDone]}
           hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={item.done ? 'Mark not done' : 'Mark done'}
         >
-          <Text style={[styles.tlCheckMark, item.done && styles.tlCheckMarkDone]}>✓</Text>
+          <Icon name="check" size={12} color={item.done ? colors.white : colors.borderStrong} />
         </Pressable>
         <Pressable style={styles.tlBody} onPress={() => onEditActivity(item.id)}>
           {text}
@@ -435,7 +440,9 @@ function TimelineRow({
 
   const inner = (
     <View style={styles.tlRow}>
-      <Text style={styles.tlIcon}>{icon}</Text>
+      <View style={styles.tlIcon}>
+        <Icon name={icon} size={16} color={colors.textMuted} />
+      </View>
       <View style={styles.tlBody}>{text}</View>
     </View>
   );
@@ -489,12 +496,12 @@ function Row({ label, value, last }: { label: string; value: string; last?: bool
 function statusTint(status: string) {
   if (status === 'won') return { backgroundColor: colors.successTint };
   if (status === 'lost') return { backgroundColor: colors.dangerTint };
-  return { backgroundColor: colors.infoTint };
+  return { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border };
 }
 function statusInk(status: string) {
   if (status === 'won') return { color: colors.success };
   if (status === 'lost') return { color: colors.danger };
-  return { color: colors.info };
+  return { color: colors.textMuted };
 }
 
 const styles = StyleSheet.create({
@@ -502,14 +509,14 @@ const styles = StyleSheet.create({
   content: { padding: space.lg, gap: space.sm },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: colors.bg },
   title: { fontFamily: fonts.display, fontSize: fontSize.h2, color: colors.ink },
-  value: { fontFamily: fonts.bold, fontSize: fontSize.h3, color: colors.success },
+  value: { fontFamily: fonts.bold, fontSize: fontSize.h3, color: colors.ink },
   pillRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
   statusPill: { alignSelf: 'flex-start', borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 3 },
   statusText: { fontFamily: fonts.bold, fontSize: 11 },
   actions: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
   actionBtn: { flex: 1, borderRadius: radius.lg, paddingVertical: 11, alignItems: 'center' },
   actionText: { fontFamily: fonts.bold, fontSize: fontSize.md },
-  sectionLabel: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted, marginTop: space.md, marginBottom: space.xs },
+  sectionLabel: { fontFamily: fonts.semibold, fontSize: fontSize.xs, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.textSubtle, marginTop: space.md, marginBottom: space.xs },
   stageRow: { gap: space.sm, paddingVertical: 2 },
   stageChip: {
     borderWidth: 1,
@@ -565,11 +572,9 @@ const styles = StyleSheet.create({
   loadMore: { alignSelf: 'center', marginTop: space.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: space.lg, paddingVertical: space.sm, backgroundColor: colors.surface },
   loadMoreText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
   tlRow: { flexDirection: 'row', gap: 10, paddingVertical: space.sm + 2, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  tlIcon: { fontSize: 16, width: 22, textAlign: 'center' },
+  tlIcon: { width: 22, alignItems: 'center', paddingTop: 1 },
   tlCheck: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   tlCheckDone: { backgroundColor: colors.success, borderColor: colors.success },
-  tlCheckMark: { color: colors.borderStrong, fontFamily: fonts.bold, fontSize: 12 },
-  tlCheckMarkDone: { color: colors.white },
   tlBody: { flex: 1, gap: 2 },
   tlText: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.ink },
   tlStrong: { fontFamily: fonts.semibold, color: colors.ink },
@@ -581,7 +586,7 @@ const styles = StyleSheet.create({
   headerEdit: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.primary },
   timelineHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   timelineBtns: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
-  emailBtn: { backgroundColor: colors.primaryTint, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 5, marginTop: space.md, marginBottom: space.xs },
+  emailBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primaryTint, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 6, marginTop: space.md, marginBottom: space.xs },
   emailBtnText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
   loseBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
   loseSheet: { backgroundColor: colors.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: space.lg, gap: space.md },

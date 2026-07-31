@@ -46,6 +46,10 @@ const GLYPHS = {
   link: 'link-outline',
   warning: 'alert-circle-outline',
   info: 'information-circle-outline',
+  // timeline
+  stage: 'flag-outline',
+  inbound: 'arrow-down-outline',
+  outbound: 'arrow-up-outline',
 } as const;
 
 export type IconName = keyof typeof GLYPHS;
