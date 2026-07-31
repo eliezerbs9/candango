@@ -21,7 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PickerModal, type PickerOption } from '@/components/PickerModal';
 import { useCreateActivity, useUpdateActivity } from '@/lib/api/activities';
 import { useCompanies, useCreatePerson, usePersons } from '@/lib/api/contacts';
-import { useDeals } from '@/lib/api/deals';
+import { useDeal, useDeals } from '@/lib/api/deals';
 import { useOrgMembers } from '@/lib/api/org';
 import type { ActivityBody, ActivityType, ApiActivity } from '@/lib/api/types';
 import { useAuthStore } from '@/lib/auth/store';
@@ -61,7 +61,7 @@ export function ActivityFormModal({
   const [dealId, setDealId] = useState<string | null>(fixedDealId ?? null);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [personId, setPersonId] = useState<string | null>(null);
-  const [dueDate, setDueDate] = useState<Date | null>(null);
+  const [dueDate, setDueDate] = useState<Date>(new Date()); // required — defaults to today
   const [dealPickerOpen, setDealPickerOpen] = useState(false);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
   const [personPickerOpen, setPersonPickerOpen] = useState(false);
@@ -75,8 +75,8 @@ export function ActivityFormModal({
     setDealId(activity?.dealId ?? fixedDealId ?? null);
     setAssigneeId(activity?.assignedUserId ?? currentUserId ?? null);
     setPersonId(activity?.personId ?? null);
-    const due = activity?.dueAt ?? activity?.startAt ?? null;
-    setDueDate(due ? new Date(due) : null);
+    const due = activity?.dueAt ?? activity?.startAt;
+    setDueDate(due ? new Date(due) : new Date());
     setDealPickerOpen(false);
     setAssigneePickerOpen(false);
     setPersonPickerOpen(false);
@@ -87,20 +87,21 @@ export function ActivityFormModal({
   const dealOptions: PickerOption[] = (deals.data ?? []).map((d) => ({ id: d.id, label: d.title }));
   const dealLabel = deals.data?.find((d) => d.id === dealId)?.title ?? (dealId ? 'Linked deal' : 'None');
 
-  // People linkable to a Call/Meeting = only the deal's people (its primary
-  // contact + its company's contacts). Also creatable inline (attached to that company).
-  const selectedDeal = deals.data?.find((d) => d.id === dealId);
+  // People linkable to a Call/Meeting = the deal's people: its primary contact +
+  // everyone at the deal's company. Fetched by id so it works for any deal
+  // status. Options show email/phone; a new person can be created inline.
+  const selectedDeal = useDeal(dealId ?? '').data;
   const dealCompany = companies.data?.find((c) => c.id === selectedDeal?.companyId);
   const withContact = type === 'call' || type === 'meeting';
   const dealPeople = useMemo(() => {
-    const map = new Map<string, string>();
-    const primaryId = selectedDeal?.primaryPersonId;
-    if (primaryId) {
-      const p = persons.data?.find((x) => x.id === primaryId);
-      if (p) map.set(p.id, p.name);
-    }
-    dealCompany?.contacts.forEach((c) => map.set(c.id, c.name));
-    return [...map].map(([id, name]) => ({ id, label: name }) as PickerOption);
+    const ids = new Set<string>();
+    if (selectedDeal?.primaryPersonId) ids.add(selectedDeal.primaryPersonId);
+    dealCompany?.contacts.forEach((c) => ids.add(c.id));
+    return [...ids].map((id) => {
+      const p = persons.data?.find((x) => x.id === id);
+      const sub = [p?.email, p?.phone].filter(Boolean).join(' · ') || undefined;
+      return { id, label: p?.name ?? 'Unknown', sub } as PickerOption;
+    });
   }, [selectedDeal?.primaryPersonId, dealCompany, persons.data]);
   const personLabel =
     dealPeople.find((p) => p.id === personId)?.label ??
@@ -129,8 +130,8 @@ export function ActivityFormModal({
       assignedUserId: assigneeId ?? undefined,
       // A linked contact only applies to calls/meetings; clear it otherwise.
       personId: withContact ? personId : null,
+      dueAt: dueDate.toISOString(), // always set — no dateless activities
     };
-    if (dueDate) body.dueAt = dueDate.toISOString();
     try {
       if (editing && activity) await update.mutateAsync({ id: activity.id, ...body });
       else await create.mutateAsync(body);
@@ -205,7 +206,7 @@ export function ActivityFormModal({
 
             {withContact && dealId ? (
               <>
-                <Text style={styles.label}>Contact person (from the deal)</Text>
+                <Text style={styles.label}>Contact person</Text>
                 <Pressable style={styles.field} onPress={() => setPersonPickerOpen(true)}>
                   <Text style={styles.fieldValue} numberOfLines={1}>
                     {personLabel}
@@ -215,17 +216,10 @@ export function ActivityFormModal({
               </>
             ) : null}
 
-            <View style={styles.dateHeader}>
-              <Text style={styles.label}>Due date</Text>
-              {dueDate ? (
-                <Pressable onPress={() => setDueDate(null)} hitSlop={8}>
-                  <Text style={styles.clearText}>Clear</Text>
-                </Pressable>
-              ) : null}
-            </View>
+            <Text style={styles.label}>Due date</Text>
             {Platform.OS === 'ios' ? (
               <DateTimePicker
-                value={dueDate ?? new Date()}
+                value={dueDate}
                 mode="date"
                 display="inline"
                 style={styles.inlinePicker}
@@ -236,11 +230,11 @@ export function ActivityFormModal({
             ) : (
               <>
                 <Pressable style={styles.field} onPress={() => setShowDate((s) => !s)}>
-                  <Text style={styles.fieldValue}>{dueDate ? formatDate(dueDate.toISOString()) : 'Set…'}</Text>
+                  <Text style={styles.fieldValue}>{formatDate(dueDate.toISOString())}</Text>
                 </Pressable>
                 {showDate ? (
                   <DateTimePicker
-                    value={dueDate ?? new Date()}
+                    value={dueDate}
                     mode="date"
                     display="default"
                     onChange={(_e, d) => {
@@ -341,10 +335,6 @@ const styles = StyleSheet.create({
   },
   fieldValue: { fontFamily: fonts.regular, fontSize: fontSize.lg, color: colors.ink, flexShrink: 1 },
   chevron: { fontFamily: fonts.regular, fontSize: 22, color: colors.textSubtle },
-  dateRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
-  dateHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space.sm + 2 },
   inlinePicker: { alignSelf: 'flex-start', marginTop: space.xs },
-  clear: { paddingHorizontal: 12, paddingVertical: 13 },
-  clearText: { fontFamily: fonts.medium, color: colors.textMuted },
   error: { fontFamily: fonts.medium, color: colors.danger, fontSize: fontSize.sm, marginTop: space.sm },
 });
