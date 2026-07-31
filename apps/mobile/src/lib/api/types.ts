@@ -136,6 +136,7 @@ export interface ActivityBody {
   location?: string;
   conferenceUrl?: string;
   dealId?: string;
+  assignedUserId?: string;
 }
 
 export interface ApiNote {

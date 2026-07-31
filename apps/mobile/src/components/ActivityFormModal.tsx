@@ -21,7 +21,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PickerModal, type PickerOption } from '@/components/PickerModal';
 import { useCreateActivity, useUpdateActivity } from '@/lib/api/activities';
 import { useDeals } from '@/lib/api/deals';
+import { useOrgMembers } from '@/lib/api/org';
 import type { ActivityBody, ActivityType, ApiActivity } from '@/lib/api/types';
+import { useAuthStore } from '@/lib/auth/store';
 import { formatDate } from '@/lib/format';
 import { showToast } from '@/lib/toast';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
@@ -46,13 +48,17 @@ export function ActivityFormModal({
   const create = useCreateActivity();
   const update = useUpdateActivity();
   const deals = useDeals({ status: 'open' });
+  const members = useOrgMembers();
+  const currentUserId = useAuthStore((s) => s.user?.id);
 
   const editing = !!activity;
   const [type, setType] = useState<ActivityType>('task');
   const [subject, setSubject] = useState('');
   const [dealId, setDealId] = useState<string | null>(fixedDealId ?? null);
+  const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [dealPickerOpen, setDealPickerOpen] = useState(false);
+  const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
   const [showDate, setShowDate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,21 +67,39 @@ export function ActivityFormModal({
     setType((activity?.type as ActivityType) ?? 'task');
     setSubject(activity?.subject ?? '');
     setDealId(activity?.dealId ?? fixedDealId ?? null);
+    setAssigneeId(activity?.assignedUserId ?? currentUserId ?? null);
     const due = activity?.dueAt ?? activity?.startAt ?? null;
     setDueDate(due ? new Date(due) : null);
     setDealPickerOpen(false);
+    setAssigneePickerOpen(false);
     setShowDate(false);
     setError(null);
-  }, [visible, fixedDealId, activity]);
+  }, [visible, fixedDealId, activity, currentUserId]);
 
   const dealOptions: PickerOption[] = (deals.data ?? []).map((d) => ({ id: d.id, label: d.title }));
   const dealLabel = deals.data?.find((d) => d.id === dealId)?.title ?? (dealId ? 'Linked deal' : 'None');
+  const memberOptions: PickerOption[] = (members.data ?? []).map((m) => ({
+    id: m.id,
+    label: m.name || m.email,
+    sub: m.name ? m.email : undefined,
+  }));
+  const assigneeMember = members.data?.find((m) => m.id === assigneeId);
+  const assigneeLabel = assigneeMember
+    ? `${assigneeMember.name || assigneeMember.email}${assigneeId === currentUserId ? ' (me)' : ''}`
+    : assigneeId === currentUserId
+      ? 'Me'
+      : 'Unassigned';
   const busy = create.isPending || update.isPending;
   const canCreate = subject.trim().length > 0 && !busy;
 
   async function submit() {
     setError(null);
-    const body: ActivityBody = { type, subject: subject.trim(), dealId: dealId ?? undefined };
+    const body: ActivityBody = {
+      type,
+      subject: subject.trim(),
+      dealId: dealId ?? undefined,
+      assignedUserId: assigneeId ?? undefined,
+    };
     if (dueDate) body.dueAt = dueDate.toISOString();
     try {
       if (editing && activity) await update.mutateAsync({ id: activity.id, ...body });
@@ -141,6 +165,14 @@ export function ActivityFormModal({
               </>
             ) : null}
 
+            <Text style={styles.label}>Assignee</Text>
+            <Pressable style={styles.field} onPress={() => setAssigneePickerOpen(true)}>
+              <Text style={styles.fieldValue} numberOfLines={1}>
+                {assigneeLabel}
+              </Text>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+
             <Text style={styles.label}>Due date</Text>
             <View style={styles.dateRow}>
               <Pressable style={[styles.field, { flex: 1 }]} onPress={() => setShowDate((s) => !s)}>
@@ -177,6 +209,14 @@ export function ActivityFormModal({
         allowClear
         onSelect={setDealId}
         onClose={() => setDealPickerOpen(false)}
+      />
+      <PickerModal
+        visible={assigneePickerOpen}
+        title="Assignee"
+        options={memberOptions}
+        selectedId={assigneeId}
+        onSelect={setAssigneeId}
+        onClose={() => setAssigneePickerOpen(false)}
       />
     </Modal>
   );
