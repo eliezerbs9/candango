@@ -5,7 +5,7 @@
  * the server) so we don't download everything at once. Tap a card to edit; ＋ to
  * create; the check marks it done (with a remove animation).
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   LayoutAnimation,
@@ -52,6 +52,7 @@ const PERIODS: { key: Period; label: string }[] = [
 // Agenda buckets, in display order. Which one an activity falls in depends on
 // its effective date (a meeting's start, else the due date).
 const BUCKET_ORDER = ['Overdue', 'Today', 'Tomorrow', 'This week', 'Later', 'No date'] as const;
+const AGENDA_GROUP_CAP = 10; // items shown per agenda group before "Show all"
 type Ref = { today: number; tomorrow: number; dayAfter: number; weekEnd: number };
 function bucketOf(a: ApiActivity, ref: Ref): (typeof BUCKET_ORDER)[number] {
   const raw = a.startAt ?? a.dueAt;
@@ -76,6 +77,14 @@ export default function ActivitiesScreen() {
   // Items the user just completed — hidden immediately (with a layout animation)
   // until the refetch confirms them as done.
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
+  const [expandedBuckets, setExpandedBuckets] = useState<Set<string>>(new Set());
+  const listRef = useRef<SectionList<ApiActivity>>(null);
+  const pendingJump = useRef<number | null>(null);
+
+  const scrollToSection = (sectionIndex: number) => {
+    pendingJump.current = sectionIndex;
+    listRef.current?.scrollToLocation({ sectionIndex, itemIndex: 0, viewPosition: 0, animated: true });
+  };
 
   // Debounce the search so we don't hit the server on every keystroke.
   useEffect(() => {
@@ -116,7 +125,7 @@ export default function ActivitiesScreen() {
   // are already sorted by due date, so buckets come out in order.
   const sections = useMemo(() => {
     if (items.length === 0) return [];
-    if (view === 'list') return [{ title: '', data: items }];
+    if (view === 'list') return [{ title: '', data: items, total: items.length }];
     const now = new Date();
     const today = new Date(now);
     today.setHours(0, 0, 0, 0);
@@ -129,8 +138,13 @@ export default function ActivitiesScreen() {
     const ref: Ref = { today: today.getTime(), tomorrow: tomorrow.getTime(), dayAfter: dayAfter.getTime(), weekEnd: weekEnd.getTime() };
     const buckets: Record<string, ApiActivity[]> = {};
     for (const a of items) (buckets[bucketOf(a, ref)] ??= []).push(a);
-    return BUCKET_ORDER.filter((o) => buckets[o]?.length).map((o) => ({ title: o, data: buckets[o] }));
-  }, [items, view]);
+    // Cap each group at 10 (expandable) so a busy agenda stays navigable.
+    return BUCKET_ORDER.filter((o) => buckets[o]?.length).map((o) => {
+      const all = buckets[o];
+      const data = expandedBuckets.has(o) ? all : all.slice(0, AGENDA_GROUP_CAP);
+      return { title: o, data, total: all.length };
+    });
+  }, [items, view, expandedBuckets]);
 
   const completeActivity = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -181,19 +195,53 @@ export default function ActivitiesScreen() {
             <Text style={[styles.chipText, mine && styles.chipTextOn]}>Mine</Text>
           </Pressable>
         </ScrollView>
+
+        {view === 'agenda' && sections.length > 1 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.jumpNav}>
+            <Text style={styles.jumpLabel}>Jump to</Text>
+            {sections.map((s, i) => (
+              <Pressable key={s.title} style={styles.jumpChip} onPress={() => scrollToSection(i)}>
+                <Text style={styles.jumpChipText}>
+                  {s.title} ({s.total})
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
       </View>
 
       <SectionList
+        ref={listRef}
         sections={sections}
         keyExtractor={(a) => a.id}
-        stickySectionHeadersEnabled={false}
+        stickySectionHeadersEnabled={view === 'agenda'}
         contentContainerStyle={[styles.list, sections.length === 0 && styles.grow]}
         refreshControl={
           <RefreshControl refreshing={activities.isRefetching} onRefresh={() => activities.refetch()} tintColor={colors.primary} />
         }
         onEndReachedThreshold={0.5}
+        onScrollToIndexFailed={() => {
+          const i = pendingJump.current;
+          if (i == null) return;
+          setTimeout(() => {
+            listRef.current?.scrollToLocation({ sectionIndex: i, itemIndex: 0, viewPosition: 0, animated: true });
+            pendingJump.current = null;
+          }, 120);
+        }}
         renderSectionHeader={({ section }) =>
-          section.title ? <Text style={styles.sectionHeader}>{section.title}</Text> : null
+          section.title ? (
+            <Text style={[styles.sectionHeader, view === 'agenda' && styles.sectionHeaderSticky]}>{section.title}</Text>
+          ) : null
+        }
+        renderSectionFooter={({ section }) =>
+          view === 'agenda' && section.total > section.data.length ? (
+            <Pressable
+              style={styles.showAll}
+              onPress={() => setExpandedBuckets((prev) => new Set(prev).add(section.title))}
+            >
+              <Text style={styles.showAllText}>Show all {section.total}</Text>
+            </Pressable>
+          ) : null
         }
         ListFooterComponent={
           activities.hasNextPage ? (
@@ -309,6 +357,13 @@ const styles = StyleSheet.create({
   list: { padding: space.md, gap: 10 },
   grow: { flexGrow: 1 },
   sectionHeader: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.sm, marginBottom: 2 },
+  sectionHeaderSticky: { backgroundColor: colors.bg, paddingVertical: 4, marginTop: 0 },
+  jumpNav: { gap: space.sm, alignItems: 'center', paddingRight: space.sm, paddingTop: space.xs },
+  jumpLabel: { fontFamily: fonts.medium, fontSize: fontSize.xs, color: colors.textSubtle, textTransform: 'uppercase', letterSpacing: 0.5 },
+  jumpChip: { borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: colors.primaryTint },
+  jumpChipText: { fontFamily: fonts.semibold, fontSize: fontSize.xs, color: colors.primary },
+  showAll: { alignSelf: 'flex-start', paddingVertical: space.xs + 2, paddingHorizontal: 2 },
+  showAllText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
   viewMore: { alignSelf: 'center', marginTop: space.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: space.lg, paddingVertical: space.sm, backgroundColor: colors.surface },
   viewMoreText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.lg },
