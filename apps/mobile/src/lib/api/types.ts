@@ -136,6 +136,7 @@ export interface ActivityBody {
   location?: string;
   conferenceUrl?: string;
   dealId?: string;
+  personId?: string | null;
   assignedUserId?: string;
 }
 
