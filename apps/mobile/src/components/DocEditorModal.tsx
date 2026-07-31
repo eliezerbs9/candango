@@ -1,4 +1,5 @@
 /** Line-item editor for an estimate/invoice (mirrors the web DocEditorModal). */
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { CreateDocInput, DealDoc } from '@/lib/api/types';
-import { formatMoney } from '@/lib/format';
+import { formatDate, formatMoney } from '@/lib/format';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
 
 type Line = { description: string; qty: string; price: string };
@@ -43,6 +44,8 @@ export function DocEditorModal({
 }) {
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [notes, setNotes] = useState('');
+  const [txnDate, setTxnDate] = useState<Date>(new Date()); // defaults to today
+  const [showDate, setShowDate] = useState(false);
   const [valueChoice, setValueChoice] = useState<'set' | 'add' | 'none'>('set'); // create only
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +60,8 @@ export function DocEditorModal({
       setLines([emptyLine()]);
     }
     setNotes(initial?.notes ?? '');
+    setTxnDate(initial?.txnDate ? new Date(initial.txnDate) : new Date());
+    setShowDate(false);
     setError(null);
   }, [visible, initial]);
 
@@ -86,6 +91,7 @@ export function DocEditorModal({
           : {};
     try {
       await onSubmit({
+        txnDate: txnDate.toISOString(),
         notes: notes.trim() || undefined,
         lines: validLines.map((l) => ({ description: l.description, quantity: l.qty || 1, unitPrice: l.priceCents })),
         ...valueFlags,
@@ -115,6 +121,22 @@ export function DocEditorModal({
           </View>
 
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.form}>
+            <Text style={styles.smallLabel}>Date</Text>
+            <Pressable style={styles.dateField} onPress={() => setShowDate((s) => !s)}>
+              <Text style={styles.dateText}>{formatDate(txnDate.toISOString())}</Text>
+            </Pressable>
+            {showDate ? (
+              <DateTimePicker
+                value={txnDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                onChange={(_e, d) => {
+                  if (Platform.OS !== 'ios') setShowDate(false);
+                  if (d) setTxnDate(d);
+                }}
+              />
+            ) : null}
+
             {lines.map((l, i) => {
               const p = parsed[i];
               return (
@@ -153,10 +175,10 @@ export function DocEditorModal({
             })}
 
             <Pressable style={styles.addLine} onPress={() => setLines((prev) => [...prev, emptyLine()])}>
-              <Text style={styles.addLineText}>＋ Add item</Text>
+              <Text style={styles.addLineText}>＋ Add line</Text>
             </Pressable>
 
-            <Text style={styles.smallLabel}>Notes</Text>
+            <Text style={styles.smallLabel}>Memo</Text>
             <TextInput style={[styles.input, styles.notes]} value={notes} onChangeText={setNotes} placeholder="Optional memo" placeholderTextColor={colors.textSubtle} multiline />
 
             {!initial ? (
@@ -164,8 +186,8 @@ export function DocEditorModal({
                 <Text style={styles.smallLabel}>Deal value</Text>
                 <View style={styles.choiceRow}>
                   {([
-                    ['set', 'Set as value'],
-                    ['add', 'Add to value'],
+                    ['set', 'Set as deal value'],
+                    ['add', 'Add to deal value'],
                     ['none', "Don't count"],
                   ] as const).map(([key, label]) => (
                     <Pressable
@@ -240,8 +262,17 @@ const styles = StyleSheet.create({
   addLine: { paddingVertical: 10, alignItems: 'center' },
   addLineText: { fontFamily: fonts.semibold, color: colors.primary, fontSize: fontSize.md },
   notes: { minHeight: 60 },
-  choiceRow: { flexDirection: 'row', gap: space.sm },
-  choiceChip: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingVertical: 8, alignItems: 'center', backgroundColor: colors.surface },
+  dateField: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    backgroundColor: colors.bg,
+  },
+  dateText: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.ink },
+  choiceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  choiceChip: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingVertical: 8, paddingHorizontal: 14, backgroundColor: colors.surface },
   choiceChipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   choiceText: { fontFamily: fonts.medium, fontSize: fontSize.xs, color: colors.textMuted },
   choiceTextOn: { fontFamily: fonts.bold, color: colors.white },
