@@ -8,12 +8,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   LayoutAnimation,
   Platform,
   Pressable,
   RefreshControl,
   ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
@@ -40,6 +40,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 type Tab = 'open' | 'all';
+type ViewMode = 'list' | 'agenda';
 type Period = 'any' | 'overdue' | 'upcoming' | 'week';
 const PERIODS: { key: Period; label: string }[] = [
   { key: 'any', label: 'Any time' },
@@ -48,8 +49,24 @@ const PERIODS: { key: Period; label: string }[] = [
   { key: 'week', label: 'This week' },
 ];
 
+// Agenda buckets, in display order. Which one an activity falls in depends on
+// its effective date (a meeting's start, else the due date).
+const BUCKET_ORDER = ['Overdue', 'Today', 'Tomorrow', 'This week', 'Later', 'No date'] as const;
+type Ref = { today: number; tomorrow: number; dayAfter: number; weekEnd: number };
+function bucketOf(a: ApiActivity, ref: Ref): (typeof BUCKET_ORDER)[number] {
+  const raw = a.startAt ?? a.dueAt;
+  if (!raw) return 'No date';
+  const t = new Date(raw).getTime();
+  if (t < ref.today) return 'Overdue';
+  if (t < ref.tomorrow) return 'Today';
+  if (t < ref.dayAfter) return 'Tomorrow';
+  if (t < ref.weekEnd) return 'This week';
+  return 'Later';
+}
+
 export default function ActivitiesScreen() {
   const [tab, setTab] = useState<Tab>('open');
+  const [view, setView] = useState<ViewMode>('list');
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [period, setPeriod] = useState<Period>('any');
@@ -95,6 +112,26 @@ export default function ActivitiesScreen() {
     return tab === 'open' ? all.filter((a) => !completedIds.has(a.id)) : all;
   }, [activities.data, tab, completedIds]);
 
+  // List mode = one unlabelled section; Agenda = grouped by date bucket. Items
+  // are already sorted by due date, so buckets come out in order.
+  const sections = useMemo(() => {
+    if (items.length === 0) return [];
+    if (view === 'list') return [{ title: '', data: items }];
+    const now = new Date();
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const dayAfter = new Date(tomorrow);
+    dayAfter.setDate(tomorrow.getDate() + 1);
+    const weekEnd = new Date(today);
+    weekEnd.setDate(today.getDate() + (7 - now.getDay())); // upcoming Sunday 00:00
+    const ref: Ref = { today: today.getTime(), tomorrow: tomorrow.getTime(), dayAfter: dayAfter.getTime(), weekEnd: weekEnd.getTime() };
+    const buckets: Record<string, ApiActivity[]> = {};
+    for (const a of items) (buckets[bucketOf(a, ref)] ??= []).push(a);
+    return BUCKET_ORDER.filter((o) => buckets[o]?.length).map((o) => ({ title: o, data: buckets[o] }));
+  }, [items, view]);
+
   const completeActivity = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setCompletedIds((prev) => new Set(prev).add(id));
@@ -124,6 +161,13 @@ export default function ActivitiesScreen() {
           autoCorrect={false}
         />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          <Pressable style={[styles.chip, view === 'list' && styles.chipOn]} onPress={() => setView('list')}>
+            <Text style={[styles.chipText, view === 'list' && styles.chipTextOn]}>☰ List</Text>
+          </Pressable>
+          <Pressable style={[styles.chip, view === 'agenda' && styles.chipOn]} onPress={() => setView('agenda')}>
+            <Text style={[styles.chipText, view === 'agenda' && styles.chipTextOn]}>🗓 Agenda</Text>
+          </Pressable>
+          <View style={styles.chipDivider} />
           {PERIODS.map((p) => {
             const on = period === p.key;
             return (
@@ -139,14 +183,18 @@ export default function ActivitiesScreen() {
         </ScrollView>
       </View>
 
-      <FlatList
-        data={items}
+      <SectionList
+        sections={sections}
         keyExtractor={(a) => a.id}
-        contentContainerStyle={[styles.list, items.length === 0 && styles.grow]}
+        stickySectionHeadersEnabled={false}
+        contentContainerStyle={[styles.list, sections.length === 0 && styles.grow]}
         refreshControl={
           <RefreshControl refreshing={activities.isRefetching} onRefresh={() => activities.refetch()} tintColor={colors.primary} />
         }
         onEndReachedThreshold={0.5}
+        renderSectionHeader={({ section }) =>
+          section.title ? <Text style={styles.sectionHeader}>{section.title}</Text> : null
+        }
         ListFooterComponent={
           activities.hasNextPage ? (
             <Pressable
@@ -260,6 +308,7 @@ const styles = StyleSheet.create({
   },
   list: { padding: space.md, gap: 10 },
   grow: { flexGrow: 1 },
+  sectionHeader: { fontFamily: fonts.bold, fontSize: fontSize.sm, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.sm, marginBottom: 2 },
   viewMore: { alignSelf: 'center', marginTop: space.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: space.lg, paddingVertical: space.sm, backgroundColor: colors.surface },
   viewMoreText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.lg },
