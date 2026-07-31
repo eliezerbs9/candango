@@ -13,6 +13,7 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -39,11 +40,20 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 type Tab = 'open' | 'all';
+type Period = 'any' | 'overdue' | 'upcoming' | 'week';
+const PERIODS: { key: Period; label: string }[] = [
+  { key: 'any', label: 'Any time' },
+  { key: 'overdue', label: 'Overdue' },
+  { key: 'upcoming', label: 'Upcoming' },
+  { key: 'week', label: 'This week' },
+];
 
 export default function ActivitiesScreen() {
   const [tab, setTab] = useState<Tab>('open');
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
+  const [period, setPeriod] = useState<Period>('any');
+  const [mine, setMine] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<ApiActivity | null>(null);
   // Items the user just completed — hidden immediately (with a layout animation)
@@ -56,9 +66,27 @@ export default function ActivitiesScreen() {
     return () => clearTimeout(t);
   }, [search]);
 
+  const range = useMemo<{ from?: string; to?: string }>(() => {
+    const now = new Date();
+    if (period === 'overdue') return { to: now.toISOString() };
+    if (period === 'upcoming') return { from: now.toISOString() };
+    if (period === 'week') {
+      const start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+      start.setDate(now.getDate() - now.getDay()); // back to Sunday
+      const end = new Date(start);
+      end.setDate(start.getDate() + 7);
+      return { from: start.toISOString(), to: end.toISOString() };
+    }
+    return {};
+  }, [period]);
+
   const activities = useActivitiesInfinite({
     done: tab === 'open' ? false : undefined,
     q: debounced || undefined,
+    assignee: mine ? 'me' : undefined,
+    from: range.from,
+    to: range.to,
   });
   const complete = useCompleteActivity();
 
@@ -95,6 +123,20 @@ export default function ActivitiesScreen() {
           onChangeText={setSearch}
           autoCorrect={false}
         />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {PERIODS.map((p) => {
+            const on = period === p.key;
+            return (
+              <Pressable key={p.key} style={[styles.chip, on && styles.chipOn]} onPress={() => setPeriod(p.key)}>
+                <Text style={[styles.chipText, on && styles.chipTextOn]}>{p.label}</Text>
+              </Pressable>
+            );
+          })}
+          <View style={styles.chipDivider} />
+          <Pressable style={[styles.chip, mine && styles.chipOn]} onPress={() => setMine((m) => !m)}>
+            <Text style={[styles.chipText, mine && styles.chipTextOn]}>Mine</Text>
+          </Pressable>
+        </ScrollView>
       </View>
 
       <FlatList
@@ -128,7 +170,11 @@ export default function ActivitiesScreen() {
           ) : (
             <View style={styles.center}>
               <Text style={styles.muted}>
-                {debounced ? 'No matches.' : tab === 'open' ? 'No open activities.' : 'No activities yet.'}
+                {debounced || period !== 'any' || mine
+                  ? 'No activities match.'
+                  : tab === 'open'
+                    ? 'No open activities.'
+                    : 'No activities yet.'}
               </Text>
             </View>
           )
@@ -195,6 +241,12 @@ const styles = StyleSheet.create({
   segBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   segText: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.textMuted },
   segTextActive: { color: colors.white },
+  chips: { gap: space.sm, alignItems: 'center', paddingRight: space.sm },
+  chip: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: colors.surface },
+  chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  chipText: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted },
+  chipTextOn: { fontFamily: fonts.bold, color: colors.white },
+  chipDivider: { width: StyleSheet.hairlineWidth, height: 20, backgroundColor: colors.border, marginHorizontal: 2 },
   search: {
     borderWidth: 1,
     borderColor: colors.border,

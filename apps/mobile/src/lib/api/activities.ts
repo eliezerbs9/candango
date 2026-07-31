@@ -30,13 +30,32 @@ export function useActivities(filters: ActivityFilters = {}) {
 
 const ACTIVITIES_PAGE_SIZE = 20;
 
+export type InfiniteActivityFilters = {
+  done?: boolean;
+  q?: string;
+  assignee?: string; // 'me' scopes to the caller
+  from?: string; // ISO — activity start/due on/after
+  to?: string; // ISO — activity start/due on/before
+};
+
 /** Server-paginated activities for the tab: each "View more" fetches the next
  * page (saves bandwidth vs loading everything). `done` filters open-only; `q`
- * searches the subject; ordered by due date ascending on the server. */
-export function useActivitiesInfinite(filters: { done?: boolean; q?: string } = {}) {
+ * searches the subject; `assignee`/`from`/`to` scope by owner and period;
+ * ordered by due date ascending on the server. */
+export function useActivitiesInfinite(filters: InfiniteActivityFilters = {}) {
   const token = useAuthStore((s) => s.token);
   return useInfiniteQuery({
-    queryKey: ['activities', 'infinite', { done: filters.done ?? null, q: filters.q ?? '' }],
+    queryKey: [
+      'activities',
+      'infinite',
+      {
+        done: filters.done ?? null,
+        q: filters.q ?? '',
+        assignee: filters.assignee ?? '',
+        from: filters.from ?? '',
+        to: filters.to ?? '',
+      },
+    ],
     enabled: !!token,
     initialPageParam: 0,
     queryFn: ({ pageParam }) => {
@@ -45,6 +64,9 @@ export function useActivitiesInfinite(filters: { done?: boolean; q?: string } = 
       qs.set('offset', String(pageParam));
       if (filters.done !== undefined) qs.set('done', String(filters.done));
       if (filters.q) qs.set('q', filters.q);
+      if (filters.assignee) qs.set('assignee', filters.assignee);
+      if (filters.from) qs.set('from', filters.from);
+      if (filters.to) qs.set('to', filters.to);
       return apiFetch<ApiActivity[]>(`/activities?${qs.toString()}`, { token: token! });
     },
     getNextPageParam: (lastPage, allPages) =>
