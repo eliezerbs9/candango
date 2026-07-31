@@ -3,8 +3,9 @@
  * scope: list + create/edit estimates + status + use-as-value + convert).
  * Estimates work natively; convert needs QuickBooks connected (API enforces it).
  */
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { DocEditorModal } from '@/components/DocEditorModal';
 import { LinkAccountModal } from '@/components/LinkAccountModal';
@@ -14,6 +15,7 @@ import {
   useCreateEstimate,
   useDealEstimates,
   useDealInvoices,
+  useDeleteEstimate,
   useIncludeEstimatesInValue,
   useQuickbooksStatus,
   useSetEstimateStatus,
@@ -38,6 +40,7 @@ export function QuickbooksPanel({
   currency: string;
   qbSubcustomerId: string | null;
 }) {
+  const router = useRouter();
   const qb = useQuickbooksStatus();
   const connected = !!qb.data?.connected;
   const linked = !!qbSubcustomerId;
@@ -51,7 +54,22 @@ export function QuickbooksPanel({
   const setEstStatus = useSetEstimateStatus(dealId);
   const setInvStatus = useSetInvoiceStatus(dealId);
   const includeInValue = useIncludeEstimatesInValue(dealId);
+  const deleteEstimate = useDeleteEstimate(dealId);
   const convert = useConvertToInvoice(dealId);
+
+  // Estimates are deletable unless converted (closed), or QBO-sourced while disconnected.
+  const isDeletable = (doc: DealDoc) => doc.status !== 'closed' && !(doc.source === 'quickbooks' && !connected);
+  function removeEstimate(doc: DealDoc) {
+    Alert.alert(`Delete estimate ${doc.docNumber ? `#${doc.docNumber}` : ''}?`, "This can't be undone.", [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () =>
+          deleteEstimate.mutate(doc.id, { onError: (e) => setError(e instanceof Error ? e.message : 'Could not delete.') }),
+      },
+    ]);
+  }
 
   const [editing, setEditing] = useState<DealDoc | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -121,6 +139,7 @@ export function QuickbooksPanel({
                 : () => includeInValue.mutate({ estimateIds: [doc.id], include: !doc.includeInValue })
             }
             onConvert={mode === 'qbo' && doc.status !== 'closed' ? () => doConvert(doc.id) : undefined}
+            onDelete={isDeletable(doc) ? () => removeEstimate(doc) : undefined}
             converting={convert.isPending}
           />
         ))
@@ -139,7 +158,13 @@ export function QuickbooksPanel({
       ) : null}
 
       {mode === 'native' ? (
-        <Text style={styles.hint}>Connect QuickBooks in Settings → Integrations to create invoices.</Text>
+        <Text style={styles.hint}>
+          Connect QuickBooks in{' '}
+          <Text style={styles.hintLink} onPress={() => router.push('/settings/integrations')}>
+            Settings → Integrations
+          </Text>{' '}
+          to create invoices.
+        </Text>
       ) : null}
 
       <DocEditorModal
@@ -178,6 +203,7 @@ function DocRow({
   onStatus,
   onToggleValue,
   onConvert,
+  onDelete,
   converting,
 }: {
   doc: DealDoc;
@@ -186,6 +212,7 @@ function DocRow({
   onStatus?: () => void;
   onToggleValue?: () => void;
   onConvert?: () => void;
+  onDelete?: () => void;
   converting?: boolean;
 }) {
   return (
@@ -198,8 +225,11 @@ function DocRow({
         <Text style={styles.docTotal}>{formatMoney(doc.totalAmount, currency)}</Text>
       </Pressable>
       <View style={styles.rowActions}>
-        <Pressable style={styles.statusPill} onPress={onStatus} disabled={!onStatus}>
+        {/* Status is tappable to change it — the label + ▾ + "Status:" make that clear. */}
+        <Pressable style={[styles.statusBtn, !onStatus && styles.statusBtnLocked]} onPress={onStatus} disabled={!onStatus}>
+          <Text style={styles.statusCaption}>Status</Text>
           <Text style={styles.statusText}>{doc.status}</Text>
+          {onStatus ? <Text style={styles.statusCaret}>▾</Text> : null}
         </Pressable>
         {onToggleValue ? (
           <Pressable style={styles.miniBtn} onPress={onToggleValue}>
@@ -209,6 +239,11 @@ function DocRow({
         {onConvert ? (
           <Pressable style={styles.miniBtn} onPress={onConvert} disabled={converting}>
             {converting ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={styles.miniBtnText}>→ Invoice</Text>}
+          </Pressable>
+        ) : null}
+        {onDelete ? (
+          <Pressable style={[styles.miniBtn, styles.deleteBtn]} onPress={onDelete}>
+            <Text style={[styles.miniBtnText, styles.deleteBtnText]}>Delete</Text>
           </Pressable>
         ) : null}
       </View>
@@ -229,6 +264,7 @@ const styles = StyleSheet.create({
   empty: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSubtle, paddingVertical: space.sm },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: space.sm },
   hint: { fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textSubtle, marginTop: space.sm },
+  hintLink: { fontFamily: fonts.semibold, color: colors.primary, textDecorationLine: 'underline' },
   error: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.danger },
   row: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, padding: space.sm + 2, gap: space.sm, backgroundColor: colors.surface },
   rowMain: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
@@ -236,8 +272,13 @@ const styles = StyleSheet.create({
   inValue: { fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.success },
   docTotal: { fontFamily: fonts.bold, fontSize: fontSize.md, color: colors.ink },
   rowActions: { flexDirection: 'row', gap: space.sm, alignItems: 'center', flexWrap: 'wrap' },
-  statusPill: { backgroundColor: colors.primaryTint, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 3 },
-  statusText: { fontFamily: fonts.semibold, fontSize: fontSize.xs, color: colors.primary, textTransform: 'capitalize' },
+  statusBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: colors.primary, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: colors.primaryTint },
+  statusBtnLocked: { borderColor: colors.border, backgroundColor: colors.surface },
+  statusCaption: { fontFamily: fonts.medium, fontSize: 10, color: colors.textSubtle, textTransform: 'uppercase' },
+  statusText: { fontFamily: fonts.bold, fontSize: fontSize.xs, color: colors.primary, textTransform: 'capitalize' },
+  statusCaret: { fontFamily: fonts.bold, fontSize: fontSize.xs, color: colors.primary },
   miniBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: colors.bg },
   miniBtnText: { fontFamily: fonts.medium, fontSize: fontSize.xs, color: colors.textMuted },
+  deleteBtn: { borderColor: colors.danger },
+  deleteBtnText: { color: colors.danger },
 });

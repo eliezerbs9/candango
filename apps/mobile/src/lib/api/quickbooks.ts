@@ -101,6 +101,15 @@ export function useUpdateEstimate(dealId: string) {
   });
 }
 
+export function useDeleteEstimate(dealId: string) {
+  const token = useAuthStore((s) => s.token);
+  const invalidate = useBillingInvalidate(dealId);
+  return useMutation({
+    mutationFn: (id: string) => apiFetch<void>(`/deals/${dealId}/estimates/${id}`, { method: 'DELETE', token: token! }),
+    onSuccess: invalidate,
+  });
+}
+
 export function useSetEstimateStatus(dealId: string) {
   const token = useAuthStore((s) => s.token);
   const invalidate = useBillingInvalidate(dealId);
