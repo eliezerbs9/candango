@@ -100,9 +100,9 @@ export default function ContactsScreen() {
               <Text style={styles.name}>{item.name}</Text>
               {item.email ? <Text style={styles.sub}>{item.email}</Text> : null}
               {item.phone ? <Text style={styles.sub}>{item.phone}</Text> : null}
-              {item.companies.length > 0 ? (
-                <Text style={styles.tag}>{item.companies.map((c) => c.name).join(', ')}</Text>
-              ) : null}
+              <Text style={styles.rel} numberOfLines={2}>
+                🏢 {item.companies.length ? item.companies.map((c) => c.name).join(', ') : 'No company'}
+              </Text>
             </Pressable>
           )}
         />
@@ -120,9 +120,9 @@ export default function ContactsScreen() {
               <Text style={styles.name}>{item.name}</Text>
               {item.domain ? <Text style={styles.sub}>{item.domain}</Text> : null}
               {item.phone ? <Text style={styles.sub}>{item.phone}</Text> : null}
-              {item.contacts.length > 0 ? (
-                <Text style={styles.tag}>{item.contacts.map((p) => p.name).join(', ')}</Text>
-              ) : null}
+              <Text style={styles.rel} numberOfLines={3}>
+                👥 {item.contacts.length ? item.contacts.map((p) => p.name).join(', ') : 'No contact people'}
+              </Text>
             </Pressable>
           )}
         />
@@ -199,6 +199,7 @@ const styles = StyleSheet.create({
   name: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.ink },
   sub: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted },
   tag: { fontFamily: fonts.medium, fontSize: fontSize.xs, color: colors.primary, marginTop: space.xs },
+  rel: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted, marginTop: space.xs + 1 },
   muted: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.textSubtle },
   fab: {
     position: 'absolute',
