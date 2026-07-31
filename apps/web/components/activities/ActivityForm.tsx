@@ -5,7 +5,7 @@ import { Button, Modal, Select, Stack, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
 import { ApiError } from '@/lib/api/client';
-import { useCreateActivity, useCreatePerson, useDeals, usePersons, useUpdateActivity, useUsers } from '@/lib/api/hooks';
+import { useCompanies, useCreateActivity, useCreatePerson, useDeals, usePersons, useUpdateActivity, useUsers } from '@/lib/api/hooks';
 import { useAuthStore } from '@/lib/auth/store';
 import type { ActivityType, ApiActivity, LocationType } from '@/lib/api/activities';
 
@@ -51,6 +51,7 @@ export function ActivityForm({
 }) {
   const { data: deals = [] } = useDeals();
   const { data: persons = [] } = usePersons();
+  const { data: companies = [] } = useCompanies();
   const { data: users = [] } = useUsers();
   const currentUserId = useAuthStore((s) => s.user?.id);
   const create = useCreateActivity();
@@ -104,6 +105,18 @@ export function ActivityForm({
   const timed = type === 'meeting';
   // When opened from a deal (defaultDealId set), the deal is fixed — hide the picker.
   const lockedDeal = Boolean(defaultDealId);
+
+  // Participants = the deal's people (its primary contact + everyone at the
+  // deal's company) plus anyone already selected. New people are creatable inline.
+  const selectedDeal = deals.find((d) => d.id === dealId);
+  const dealCompany = companies.find((c) => c.id === selectedDeal?.companyId);
+  const dealPersonIds = new Set<string>();
+  if (selectedDeal?.primaryPersonId) dealPersonIds.add(selectedDeal.primaryPersonId);
+  dealCompany?.contacts.forEach((c) => dealPersonIds.add(c.id));
+  const participantOptions = [...new Set([...dealPersonIds, ...participantIds])].map((id) => ({
+    value: id,
+    label: persons.find((p) => p.id === id)?.name ?? 'Unknown',
+  }));
 
   const submit = () => {
     if (!subject.trim()) {
@@ -173,12 +186,15 @@ export function ActivityForm({
         />
         <CreatableMultiSelect
           label="Participants"
-          placeholder={dealId ? "Defaults to the deal's people" : 'Search or create people'}
-          options={persons.map((p) => ({ value: p.id, label: p.name }))}
+          placeholder={dealId ? "The deal's people" : 'Search or create people'}
+          options={participantOptions}
           value={participantIds}
           onChange={setParticipantIds}
           onCreate={async (name) => {
-            const p = await createPerson.mutateAsync({ name });
+            const link = dealCompany
+              ? window.confirm(`Also add ${name} as a contact of ${dealCompany.name}?`)
+              : false;
+            const p = await createPerson.mutateAsync(link ? { name, companyIds: [dealCompany!.id] } : { name });
             return { value: p.id, label: p.name };
           }}
         />
