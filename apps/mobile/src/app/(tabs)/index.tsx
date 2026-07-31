@@ -15,12 +15,14 @@ import {
   View,
 } from 'react-native';
 
+import { Icon } from '@/components/Icon';
+import { Button, Card, Chip } from '@/components/ui';
 import { useCompanies, usePersons } from '@/lib/api/contacts';
 import { useDeals, useStages } from '@/lib/api/deals';
 import type { ApiDeal } from '@/lib/api/types';
 import { useAuthStore } from '@/lib/auth/store';
 import { formatMoney } from '@/lib/format';
-import { colors, fonts, fontSize, radius, space } from '@/theme';
+import { colors, fonts, fontSize, radius, shadow, space } from '@/theme';
 
 type Filter = 'open' | 'won' | 'lost' | 'archived';
 const FILTERS: { key: Filter; label: string }[] = [
@@ -63,28 +65,26 @@ export default function DealsScreen() {
   return (
     <View style={styles.wrap}>
       <View style={styles.filters}>
-        <TextInput
-          style={styles.search}
-          placeholder="Search deals…"
-          placeholderTextColor={colors.textSubtle}
-          value={search}
-          onChangeText={setSearch}
-          autoCorrect={false}
-        />
+        <View style={styles.searchBox}>
+          <Icon name="search" size={18} color={colors.textSubtle} />
+          <TextInput
+            style={styles.search}
+            placeholder="Search deals…"
+            placeholderTextColor={colors.textSubtle}
+            value={search}
+            onChangeText={setSearch}
+            autoCorrect={false}
+          />
+        </View>
         <FlatList
           horizontal
           data={FILTERS}
           keyExtractor={(f) => f.key}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.chips}
-          renderItem={({ item }) => {
-            const on = filter === item.key;
-            return (
-              <Pressable style={[styles.chip, on && styles.chipOn]} onPress={() => setFilter(item.key)}>
-                <Text style={[styles.chipText, on && styles.chipTextOn]}>{item.label}</Text>
-              </Pressable>
-            );
-          }}
+          renderItem={({ item }) => (
+            <Chip label={item.label} on={filter === item.key} onPress={() => setFilter(item.key)} />
+          )}
         />
       </View>
 
@@ -104,9 +104,7 @@ export default function DealsScreen() {
           ) : deals.isError ? (
             <View style={styles.center}>
               <Text style={styles.emptyTitle}>Couldn’t load deals</Text>
-              <Pressable style={styles.retry} onPress={() => deals.refetch()}>
-                <Text style={styles.retryText}>Retry</Text>
-              </Pressable>
+              <Button label="Retry" variant="secondary" icon="warning" onPress={() => deals.refetch()} />
             </View>
           ) : (
             <View style={styles.center}>
@@ -118,74 +116,99 @@ export default function DealsScreen() {
         renderItem={({ item }) => {
           const sub = subtitle(item);
           return (
-            <Pressable style={styles.card} onPress={() => router.push(`/deal/${item.id}`)}>
-              <View style={styles.cardTop}>
-                <Text style={styles.title} numberOfLines={1}>
-                  {item.title}
-                </Text>
-                <Text style={styles.value}>{formatMoney(item.value, item.currency)}</Text>
-              </View>
-              {sub ? (
-                <Text style={styles.sub} numberOfLines={1}>
-                  {sub}
-                </Text>
-              ) : null}
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{stageName.get(item.stageId) ?? 'Stage'}</Text>
-              </View>
+            <Pressable
+              onPress={() => router.push(`/deal/${item.id}`)}
+              style={({ pressed }) => pressed && styles.cardPressed}
+            >
+              <Card style={styles.card}>
+                <View style={styles.cardTop}>
+                  <Text style={styles.title} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.value}>{formatMoney(item.value, item.currency)}</Text>
+                </View>
+                {sub ? (
+                  <View style={styles.subRow}>
+                    <Icon name="company" size={13} color={colors.textSubtle} />
+                    <Text style={styles.sub} numberOfLines={1}>
+                      {sub}
+                    </Text>
+                  </View>
+                ) : null}
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{stageName.get(item.stageId) ?? 'Stage'}</Text>
+                </View>
+              </Card>
             </Pressable>
           );
         }}
       />
 
-      <Pressable style={styles.fab} onPress={() => router.push('/new-deal')}>
-        <Text style={styles.fabText}>＋</Text>
+      <Pressable
+        style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+        onPress={() => router.push('/new-deal')}
+        accessibilityRole="button"
+        accessibilityLabel="New deal"
+      >
+        <Icon name="add" size={28} color={colors.white} />
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.bg },
-  filters: { paddingHorizontal: space.md, paddingTop: space.sm, gap: space.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, paddingBottom: space.sm },
-  search: {
+  wrap: { flex: 1, backgroundColor: colors.surface },
+  filters: {
+    paddingHorizontal: space.md,
+    paddingTop: space.sm,
+    gap: space.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    paddingBottom: space.sm,
+    backgroundColor: colors.bg,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.lg,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
+    backgroundColor: colors.surface,
+  },
+  search: {
+    flex: 1,
     paddingVertical: 10,
     fontSize: fontSize.md,
     fontFamily: fonts.regular,
     color: colors.ink,
-    backgroundColor: colors.surface,
   },
   chips: { gap: space.sm, paddingRight: space.md },
-  chip: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: 14, paddingVertical: 6, backgroundColor: colors.surface },
-  chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted },
-  chipTextOn: { fontFamily: fonts.bold, color: colors.white },
-  screen: { backgroundColor: colors.bg },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.lg, gap: space.sm },
-  list: { padding: space.md, gap: 10, backgroundColor: colors.bg },
+  screen: { backgroundColor: colors.surface },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.lg, gap: space.md },
+  list: { padding: space.md, gap: space.sm, backgroundColor: colors.surface },
   listEmpty: { flexGrow: 1 },
-  card: {
-    backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.xl,
-    padding: space.md,
-    gap: space.xs + 2,
-  },
+  card: { gap: space.xs + 2 },
+  cardPressed: { opacity: 0.6 },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
   title: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.ink, flexShrink: 1 },
-  value: { fontFamily: fonts.bold, fontSize: fontSize.md + 1, color: colors.success },
-  sub: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted },
-  badge: { alignSelf: 'flex-start', backgroundColor: colors.primaryTint, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 3, marginTop: 2 },
-  badgeText: { fontFamily: fonts.semibold, fontSize: fontSize.xs, color: colors.primary },
+  value: { fontFamily: fonts.bold, fontSize: fontSize.md + 1, color: colors.ink },
+  subRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs + 1 },
+  sub: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted, flexShrink: 1 },
+  badge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    marginTop: 2,
+  },
+  badgeText: { fontFamily: fonts.medium, fontSize: fontSize.xs, color: colors.textMuted },
   muted: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.textMuted },
   emptyTitle: { fontFamily: fonts.display, fontSize: fontSize.xl, color: colors.ink },
-  retry: { marginTop: space.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, paddingHorizontal: space.md, paddingVertical: space.sm },
-  retryText: { fontFamily: fonts.semibold, color: colors.primary },
   fab: {
     position: 'absolute',
     right: 20,
@@ -196,11 +219,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
+    ...shadow.raised,
   },
-  fabText: { color: colors.white, fontSize: 30, lineHeight: 34 },
+  fabPressed: { opacity: 0.85 },
 });

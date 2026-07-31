@@ -49,6 +49,27 @@ export const space = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 } as const;
 
 export const radius = { sm: 6, md: 8, lg: 12, xl: 16, pill: 999 } as const;
 
+/**
+ * Soft, low-contrast elevation — clean look means shadows are barely there.
+ * `card` for resting surfaces, `raised` for the FAB / floating controls.
+ */
+export const shadow = {
+  card: {
+    shadowColor: '#1c1a17',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  raised: {
+    shadowColor: '#1c1a17',
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+} as const;
+
 export const fontSize = {
   xs: 12,
   sm: 13,

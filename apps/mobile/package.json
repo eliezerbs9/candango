@@ -7,6 +7,7 @@
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo-google-fonts/space-mono": "^0.4.2",
     "@expo/ui": "~0.2.0-beta.9",
+    "@expo/vector-icons": "^15.0.3",
     "@react-native-community/datetimepicker": "8.4.4",
     "@tanstack/react-query": "^5.62.0",
     "expo": "^54",
