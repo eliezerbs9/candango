@@ -246,9 +246,12 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
                 <Button size="xs" variant="light" leftSection={<IconCurrencyDollar size={14} />} onClick={() => markEstimates(openEstimates.map((e) => e.id), true)}>
                   Use as deal value
                 </Button>
-                <Button size="xs" variant="light" color="gray" leftSection={<IconX size={14} />} onClick={() => markEstimates(openEstimates.map((e) => e.id), false)}>
-                  Remove from value
-                </Button>
+                {/* The value must stay backed by ≥1 estimate — only offer "remove" when there's more than one. */}
+                {(estimates.data?.length ?? 0) > 1 && (
+                  <Button size="xs" variant="light" color="gray" leftSection={<IconX size={14} />} onClick={() => markEstimates(openEstimates.map((e) => e.id), false)}>
+                    Remove from value
+                  </Button>
+                )}
                 {mode === 'qbo' && (
                   <Button size="xs" variant="light" color="teal" leftSection={<IconReceipt size={14} />} onClick={convertCtl.open}>
                     Convert to invoice

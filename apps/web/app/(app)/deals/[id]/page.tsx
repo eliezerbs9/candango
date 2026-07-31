@@ -223,6 +223,12 @@ export default function DealDetailPage() {
                 min={0}
                 value={form.value}
                 onChange={(v) => setForm({ ...form, value: v })}
+                disabled={dealEstimates.length > 0}
+                description={
+                  dealEstimates.length > 0
+                    ? 'From the estimates counted below — edit those to change the value.'
+                    : undefined
+                }
               />
               <CreatableSelect
                 label="Company"
