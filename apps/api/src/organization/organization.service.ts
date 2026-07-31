@@ -26,6 +26,15 @@ export class OrganizationService {
     return org;
   }
 
+  /** Active members of the tenant — for assignee pickers, etc. */
+  async members(orgId: string) {
+    return this.prisma.user.findMany({
+      where: { orgId, deletedAt: null },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async update(orgId: string, dto: UpdateOrganizationDto) {
     await this.get(orgId);
     return this.prisma.organization.update({

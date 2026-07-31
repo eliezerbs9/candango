@@ -15,6 +15,11 @@ export class OrganizationController {
     return this.svc.get(u.orgId);
   }
 
+  @Get('members')
+  members(@CurrentUser() u: AuthContext) {
+    return this.svc.members(u.orgId);
+  }
+
   @Patch()
   @UseGuards(AdminGuard)
   update(@CurrentUser() u: AuthContext, @Body() dto: UpdateOrganizationDto) {
