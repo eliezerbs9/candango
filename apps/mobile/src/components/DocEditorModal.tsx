@@ -43,10 +43,12 @@ export function DocEditorModal({
 }) {
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [notes, setNotes] = useState('');
+  const [valueChoice, setValueChoice] = useState<'set' | 'add' | 'none'>('set'); // create only
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible) return;
+    setValueChoice('set');
     if (initial && initial.lines.length > 0) {
       setLines(
         initial.lines.map((l) => ({ description: l.description, qty: String(l.quantity), price: String(l.unitPrice / 100) })),
@@ -74,10 +76,19 @@ export function DocEditorModal({
     setError(null);
     const validLines = parsed.filter((l) => l.description && l.priceCents > 0);
     if (validLines.length === 0) return;
+    // New estimate: how it counts toward the deal value (not on edit).
+    const valueFlags = initial
+      ? {}
+      : valueChoice === 'set'
+        ? { setAsValue: true }
+        : valueChoice === 'add'
+          ? { includeInValue: true }
+          : {};
     try {
       await onSubmit({
         notes: notes.trim() || undefined,
         lines: validLines.map((l) => ({ description: l.description, quantity: l.qty || 1, unitPrice: l.priceCents })),
+        ...valueFlags,
       });
       onClose();
     } catch (e) {
@@ -148,6 +159,34 @@ export function DocEditorModal({
             <Text style={styles.smallLabel}>Notes</Text>
             <TextInput style={[styles.input, styles.notes]} value={notes} onChangeText={setNotes} placeholder="Optional memo" placeholderTextColor={colors.textSubtle} multiline />
 
+            {!initial ? (
+              <>
+                <Text style={styles.smallLabel}>Deal value</Text>
+                <View style={styles.choiceRow}>
+                  {([
+                    ['set', 'Set as value'],
+                    ['add', 'Add to value'],
+                    ['none', "Don't count"],
+                  ] as const).map(([key, label]) => (
+                    <Pressable
+                      key={key}
+                      style={[styles.choiceChip, valueChoice === key && styles.choiceChipOn]}
+                      onPress={() => setValueChoice(key)}
+                    >
+                      <Text style={[styles.choiceText, valueChoice === key && styles.choiceTextOn]}>{label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Text style={styles.choiceHint}>
+                  {valueChoice === 'set'
+                    ? "This estimate becomes the deal's value (unmarks the others)."
+                    : valueChoice === 'add'
+                      ? 'Added to the deal value (summed with the estimates already counted).'
+                      : "Won't affect the deal value."}
+                </Text>
+              </>
+            ) : null}
+
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total</Text>
               <Text style={styles.totalValue}>{formatMoney(total, currency)}</Text>
@@ -201,6 +240,12 @@ const styles = StyleSheet.create({
   addLine: { paddingVertical: 10, alignItems: 'center' },
   addLineText: { fontFamily: fonts.semibold, color: colors.primary, fontSize: fontSize.md },
   notes: { minHeight: 60 },
+  choiceRow: { flexDirection: 'row', gap: space.sm },
+  choiceChip: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingVertical: 8, alignItems: 'center', backgroundColor: colors.surface },
+  choiceChipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  choiceText: { fontFamily: fonts.medium, fontSize: fontSize.xs, color: colors.textMuted },
+  choiceTextOn: { fontFamily: fonts.bold, color: colors.white },
+  choiceHint: { fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textSubtle },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.sm, paddingTop: space.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   totalLabel: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.ink },
   totalValue: { fontFamily: fonts.bold, fontSize: fontSize.lg, color: colors.success },
