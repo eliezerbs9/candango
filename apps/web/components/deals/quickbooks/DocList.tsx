@@ -1,7 +1,7 @@
 'use client';
 
-import { Badge, Checkbox, Group, Menu, Table, Text, UnstyledButton } from '@mantine/core';
-import { IconChevronDown } from '@tabler/icons-react';
+import { ActionIcon, Badge, Checkbox, Group, Menu, Table, Text, UnstyledButton } from '@mantine/core';
+import { IconChevronDown, IconDots, IconTrash } from '@tabler/icons-react';
 import { Money } from '@/components/primitives/Money';
 import type { DealDoc } from '@/lib/api/types';
 
@@ -24,6 +24,9 @@ export function DocList({
   onToggleSelect,
   isStatusLocked,
   emptyText,
+  connected,
+  onDelete,
+  isDeletable,
 }: {
   docs: DealDoc[];
   statuses: string[];
@@ -33,6 +36,9 @@ export function DocList({
   onToggleSelect?: (id: string) => void;
   isStatusLocked?: (doc: DealDoc) => boolean;
   emptyText: string;
+  connected?: boolean; // show the source ("local") badge only when QuickBooks is connected
+  onDelete?: (doc: DealDoc) => void; // estimates only; invoices are never deletable
+  isDeletable?: (doc: DealDoc) => boolean;
 }) {
   if (!docs.length) {
     return (
@@ -63,7 +69,7 @@ export function DocList({
                   <Text size="sm" fw={500}>
                     {d.docNumber ? `#${d.docNumber}` : 'Draft'}
                   </Text>
-                  {d.source === 'native' && (
+                  {connected && d.source === 'native' && (
                     <Badge size="xs" variant="light" color="grape">
                       local
                     </Badge>
@@ -113,6 +119,24 @@ export function DocList({
                 </Menu>
               )}
             </Table.Td>
+            {onDelete && (
+              <Table.Td w={36}>
+                {(isDeletable?.(d) ?? true) && (
+                  <Menu position="bottom-end" withinPortal shadow="sm">
+                    <Menu.Target>
+                      <ActionIcon variant="subtle" color="gray" aria-label="Actions">
+                        <IconDots size={16} />
+                      </ActionIcon>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                      <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => onDelete(d)}>
+                        Delete
+                      </Menu.Item>
+                    </Menu.Dropdown>
+                  </Menu>
+                )}
+              </Table.Td>
+            )}
           </Table.Tr>
         ))}
       </Table.Tbody>

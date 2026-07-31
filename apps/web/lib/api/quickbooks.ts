@@ -47,6 +47,10 @@ export function updateDealEstimate(token: string, dealId: string, estimateId: st
   });
 }
 
+export function deleteDealEstimate(token: string, dealId: string, estimateId: string) {
+  return apiFetch<void>(`/deals/${dealId}/estimates/${estimateId}`, { method: 'DELETE', token });
+}
+
 export function setEstimateStatus(token: string, dealId: string, estimateId: string, status: string) {
   return apiFetch<DealDoc>(`/deals/${dealId}/estimates/${estimateId}/status`, {
     method: 'PATCH',

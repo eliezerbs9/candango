@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Alert, Badge, Button, Card, Divider, Group, Stack, Text } from '@mantine/core';
+import { Alert, Anchor, Badge, Button, Card, Divider, Group, Stack, Text } from '@mantine/core';
+import Link from 'next/link';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import {
@@ -18,6 +19,7 @@ import {
   useCreateEstimate,
   useDealEstimates,
   useDealInvoices,
+  useDeleteEstimate,
   useIncludeEstimatesInValue,
   useQbItems,
   useQuickbooksStatus,
@@ -187,6 +189,15 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const markEstimates = (ids: string[], include: boolean) =>
     includeEstimates.mutate({ estimateIds: ids, include }, valueToast(include));
 
+  const deleteEstimate = useDeleteEstimate(deal.id);
+  const removeEstimate = (doc: DealDoc) => {
+    if (!window.confirm(`Delete estimate ${doc.docNumber ? `#${doc.docNumber}` : ''}? This can't be undone.`)) return;
+    deleteEstimate.mutate(doc.id, {
+      onSuccess: () => notifications.show({ message: 'Estimate deleted', color: 'green' }),
+      onError: fail,
+    });
+  };
+
   const submitEstimate = (input: CreateDocInput) =>
     estEditing ? updateEstimate.mutateAsync({ id: estEditing.id, body: input }) : createEstimate.mutateAsync(input);
 
@@ -281,6 +292,10 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
           onToggleSelect={canSelect ? toggle(setEstSel) : undefined}
           isStatusLocked={(d) => d.status === 'closed' || isReadOnlyDoc(d)}
           emptyText={mode === 'link' ? 'Link the deal to add estimates.' : 'No estimates yet.'}
+          connected={connected}
+          onDelete={removeEstimate}
+          // Can't delete a converted (closed) estimate, or a QBO estimate while disconnected.
+          isDeletable={(d) => d.status !== 'closed' && !isReadOnlyDoc(d)}
         />
 
         {/* Invoices — created only by converting estimates; shown read-only if kept after a disconnect */}
@@ -311,6 +326,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
               onToggleSelect={mode === 'qbo' ? toggle(setInvSel) : undefined}
               isStatusLocked={(d) => isReadOnlyDoc(d)}
               emptyText="No invoices yet — select estimate(s) above and convert them."
+              connected={connected}
             />
           </>
         )}
@@ -318,12 +334,20 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         {hasKeptQboDocs ? (
           <Alert variant="light" color="gray" icon={<IconInfoCircle size={16} />}>
             QuickBooks is disconnected. Estimates and invoices synced with it are kept here but read-only —
-            reconnect in Settings → Integrations to edit or send them.
+            reconnect in{' '}
+            <Anchor component={Link} href="/settings/integrations">
+              Settings → Integrations
+            </Anchor>{' '}
+            to edit or send them.
           </Alert>
         ) : (
           mode === 'native' && (
             <Text size="xs" c="dimmed">
-              Connect QuickBooks in Settings → Integrations to create invoices.
+              Connect QuickBooks in{' '}
+              <Anchor component={Link} href="/settings/integrations" size="xs">
+                Settings → Integrations
+              </Anchor>{' '}
+              to create invoices.
             </Text>
           )
         )}

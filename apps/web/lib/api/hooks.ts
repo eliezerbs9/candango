@@ -96,6 +96,7 @@ import {
 import {
   convertEstimatesToInvoice,
   createDealEstimate,
+  deleteDealEstimate,
   getDealEstimates,
   getDealInvoices,
   getQbItems,
@@ -967,6 +968,18 @@ export function useCreateEstimate(dealId: string) {
   return useMutation({
     mutationFn: (body: CreateDocInput) => createDealEstimate(token!, dealId, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['estimates', dealId] }),
+  });
+}
+
+export function useDeleteEstimate(dealId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (estimateId: string) => deleteDealEstimate(token!, dealId, estimateId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['estimates', dealId] });
+      qc.invalidateQueries({ queryKey: ['deal'] }); // value may change / unlock
+    },
   });
 }
 
