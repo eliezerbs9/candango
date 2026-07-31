@@ -90,6 +90,10 @@ export interface CreateDocInput {
   notes?: string;
   lines: DocLineInput[];
   sourceEstimateId?: string;
+  // On estimate create: `setAsValue` makes it the sole deal-value estimate;
+  // `includeInValue` adds it to the value (sum). Omitted = don't count (FR-13.11).
+  includeInValue?: boolean;
+  setAsValue?: boolean;
 }
 
 export interface QbCustomer {
