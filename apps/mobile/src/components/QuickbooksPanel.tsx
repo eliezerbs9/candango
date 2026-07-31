@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { DocEditorModal } from '@/components/DocEditorModal';
+import { Icon } from '@/components/Icon';
 import { LinkAccountModal } from '@/components/LinkAccountModal';
 import { PickerModal } from '@/components/PickerModal';
 import {
@@ -98,7 +99,10 @@ export function QuickbooksPanel({
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
-        <Text style={styles.header}>📄 Estimates{mode === 'qbo' ? ' & invoices' : ''}</Text>
+        <View style={styles.headerLeft}>
+          <Icon name="note" size={18} color={colors.ink} />
+          <Text style={styles.header}>Estimates{mode === 'qbo' ? ' & invoices' : ''}</Text>
+        </View>
         {mode === 'link' ? (
           <Pressable style={styles.linkBtn} onPress={() => setLinkOpen(true)}>
             <Text style={styles.linkBtnText}>Set up QuickBooks billing</Text>
@@ -113,8 +117,9 @@ export function QuickbooksPanel({
       <View style={styles.sectionRow}>
         <Text style={styles.sectionTitle}>Estimates</Text>
         {mode !== 'link' ? (
-          <Pressable onPress={newEstimate} hitSlop={8}>
-            <Text style={styles.newBtn}>＋ New estimate</Text>
+          <Pressable style={styles.newBtn} onPress={newEstimate} hitSlop={8}>
+            <Icon name="add" size={15} color={colors.primary} />
+            <Text style={styles.newBtnText}>New estimate</Text>
           </Pressable>
         ) : null}
       </View>
@@ -229,16 +234,24 @@ function DocRow({
         <Pressable style={[styles.statusBtn, !onStatus && styles.statusBtnLocked]} onPress={onStatus} disabled={!onStatus}>
           <Text style={styles.statusCaption}>Status</Text>
           <Text style={styles.statusText}>{doc.status}</Text>
-          {onStatus ? <Text style={styles.statusCaret}>▾</Text> : null}
+          {onStatus ? <Icon name="chevronDown" size={12} color={colors.primary} /> : null}
         </Pressable>
         {onToggleValue ? (
           <Pressable style={styles.miniBtn} onPress={onToggleValue}>
-            <Text style={styles.miniBtnText}>{doc.includeInValue ? '− Value' : '＋ Value'}</Text>
+            <Icon name={doc.includeInValue ? 'remove' : 'add'} size={13} color={colors.textMuted} />
+            <Text style={styles.miniBtnText}>Value</Text>
           </Pressable>
         ) : null}
         {onConvert ? (
           <Pressable style={styles.miniBtn} onPress={onConvert} disabled={converting}>
-            {converting ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={styles.miniBtnText}>→ Invoice</Text>}
+            {converting ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <>
+                <Icon name="invoice" size={13} color={colors.textMuted} />
+                <Text style={styles.miniBtnText}>Invoice</Text>
+              </>
+            )}
           </Pressable>
         ) : null}
         {onDelete ? (
@@ -254,13 +267,15 @@ function DocRow({
 const styles = StyleSheet.create({
   card: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.xl, padding: space.lg, gap: space.sm, marginTop: space.md },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   linkBtn: { backgroundColor: colors.primaryTint, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 5 },
   linkBtnText: { fontFamily: fonts.semibold, fontSize: fontSize.xs, color: colors.primary },
   linkHint: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted },
   header: { fontFamily: fonts.display, fontSize: fontSize.xl, color: colors.ink },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: space.xs },
   sectionTitle: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.ink },
-  newBtn: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
+  newBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  newBtnText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
   empty: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textSubtle, paddingVertical: space.sm },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: space.sm },
   hint: { fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textSubtle, marginTop: space.sm },
@@ -276,8 +291,7 @@ const styles = StyleSheet.create({
   statusBtnLocked: { borderColor: colors.border, backgroundColor: colors.surface },
   statusCaption: { fontFamily: fonts.medium, fontSize: 10, color: colors.textSubtle, textTransform: 'uppercase' },
   statusText: { fontFamily: fonts.bold, fontSize: fontSize.xs, color: colors.primary, textTransform: 'capitalize' },
-  statusCaret: { fontFamily: fonts.bold, fontSize: fontSize.xs, color: colors.primary },
-  miniBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: colors.bg },
+  miniBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: colors.bg },
   miniBtnText: { fontFamily: fonts.medium, fontSize: fontSize.xs, color: colors.textMuted },
   deleteBtn: { borderColor: colors.danger },
   deleteBtnText: { color: colors.danger },

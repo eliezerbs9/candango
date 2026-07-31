@@ -21,6 +21,7 @@ const GLYPHS = {
   profile: ['person-circle-outline', 'person-circle'],
   // actions
   add: 'add',
+  remove: 'remove',
   close: 'close',
   back: 'chevron-back',
   chevronRight: 'chevron-forward',
@@ -41,6 +42,7 @@ const GLYPHS = {
   task: 'checkbox-outline',
   email: 'mail-outline',
   note: 'document-text-outline',
+  invoice: 'receipt-outline',
   money: 'cash-outline',
   location: 'location-outline',
   link: 'link-outline',
