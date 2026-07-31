@@ -4,6 +4,7 @@
  * adapted for React Native: the base URL comes from src/config.ts.
  */
 import { API_URL } from '@/config';
+import { useAuthStore } from '@/lib/auth/store';
 
 export class ApiError extends Error {
   constructor(
@@ -31,6 +32,11 @@ export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<
   });
 
   if (!res.ok) {
+    // An expired/invalid token → drop the session so the app returns to login.
+    // (No-op when already signed out, e.g. a 401 from the login request itself.)
+    if (res.status === 401 && token) {
+      useAuthStore.getState().signOut();
+    }
     const body = await res.json().catch(() => ({}) as Record<string, unknown>);
     // Supports both our envelope ({ error: { code, message } }) and Nest's
     // default ({ message, error, statusCode }, where message may be an array).
