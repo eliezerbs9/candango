@@ -290,6 +290,20 @@ export class MessagesService {
   }
 }
 
+/** RFC 2047 encoded-word for a header value: ASCII passes through; anything
+ *  else is UTF-8 base64-encoded so clients don't mojibake it (e.g. an em-dash
+ *  or accented name in the Subject). */
+function encodeHeader(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  if (/^[\x00-\x7F]*$/.test(value)) return value;
+  return `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
+}
+
+/** base64 body with CRLF-folded lines — safe for any UTF-8 content. */
+function base64Body(body: string): string {
+  return Buffer.from(body, 'utf8').toString('base64').replace(/(.{76})/g, '$1\r\n');
+}
+
 /** Build a base64url-encoded RFC822 message; multipart/mixed when there are attachments. */
 function buildMime(opts: {
   to: string[];
@@ -304,7 +318,7 @@ function buildMime(opts: {
   attachments?: { filename: string; mimeType: string; contentBase64: string }[];
 }): string {
   const contentType = opts.html ? 'text/html' : 'text/plain';
-  const top = [`To: ${opts.to.join(', ')}`, `From: ${opts.from}`, `Subject: ${opts.subject}`, 'MIME-Version: 1.0'];
+  const top = [`To: ${opts.to.join(', ')}`, `From: ${opts.from}`, `Subject: ${encodeHeader(opts.subject)}`, 'MIME-Version: 1.0'];
   if (opts.bcc?.length) top.push(`Bcc: ${opts.bcc.join(', ')}`);
   if (opts.replyTo?.length) top.push(`Reply-To: ${opts.replyTo.join(', ')}`);
   if (opts.messageId) top.push(`Message-ID: <${opts.messageId}>`);
@@ -312,7 +326,7 @@ function buildMime(opts: {
 
   const attachments = opts.attachments ?? [];
   if (attachments.length === 0) {
-    top.push(`Content-Type: ${contentType}; charset="UTF-8"`, '', opts.body);
+    top.push(`Content-Type: ${contentType}; charset="UTF-8"`, 'Content-Transfer-Encoding: base64', '', base64Body(opts.body));
     return Buffer.from(top.join('\r\n')).toString('base64url');
   }
 
@@ -321,9 +335,9 @@ function buildMime(opts: {
   const parts: string[] = [
     `--${boundary}`,
     `Content-Type: ${contentType}; charset="UTF-8"`,
-    'Content-Transfer-Encoding: 7bit',
+    'Content-Transfer-Encoding: base64',
     '',
-    opts.body,
+    base64Body(opts.body),
     '',
   ];
   for (const att of attachments) {

@@ -55,20 +55,23 @@ export function ComposeEmail({
   const [body, setBody] = useState('');
   const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
 
-  // The emails of a deal's people (primary person + the deal company's contacts).
-  const dealEmails = (id: string | null): string[] => {
+  // The deal's people: its primary contact + everyone at the deal's company.
+  const dealPeopleOf = (id: string | null) => {
     if (!id) return [];
     const deal = deals.find((d) => d.id === id);
     if (!deal) return [];
-    return persons
-      .filter(
-        (p) =>
-          p.id === deal.primaryPersonId ||
-          (deal.companyId ? p.companies.some((c) => c.id === deal.companyId) : false),
-      )
+    return persons.filter(
+      (p) =>
+        p.id === deal.primaryPersonId ||
+        (deal.companyId ? p.companies.some((c) => c.id === deal.companyId) : false),
+    );
+  };
+  const dealEmails = (id: string | null): string[] =>
+    dealPeopleOf(id)
       .map((p) => p.email)
       .filter((e): e is string => !!e);
-  };
+
+  const dealPeople = useMemo(() => dealPeopleOf(dealId), [dealId, deals, persons]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!opened) return;
@@ -155,7 +158,41 @@ export function ComposeEmail({
           searchable
           clearable
         />
-        <TagsInput label="To" placeholder="Type an email and press Enter" value={to} onChange={setTo} />
+        <div>
+          <TagsInput
+            label="To"
+            placeholder="Type an email and press Enter"
+            value={to}
+            onChange={setTo}
+            data={dealPeople.map((p) => p.email).filter((e): e is string => !!e)}
+          />
+          {dealPeople.length > 0 && (
+            <Group gap={6} mt={6}>
+              <Text size="xs" c="dimmed">
+                Deal contacts:
+              </Text>
+              {dealPeople.map((p) => {
+                const on = !!p.email && to.includes(p.email);
+                return (
+                  <Button
+                    key={p.id}
+                    size="compact-xs"
+                    variant={on ? 'filled' : 'light'}
+                    color={p.email ? undefined : 'gray'}
+                    disabled={!p.email}
+                    onClick={() =>
+                      p.email && setTo(on ? to.filter((e) => e !== p.email) : [...new Set([...to, p.email])])
+                    }
+                    title={p.email ?? 'No email on file'}
+                  >
+                    {p.name || p.email}
+                    {!p.email ? ' (no email)' : ''}
+                  </Button>
+                );
+              })}
+            </Group>
+          )}
+        </div>
         {suggestion ? (
           <Alert variant="light" color="teal" icon={<IconBulb size={16} />} py="xs">
             <Group justify="space-between" wrap="nowrap" gap="sm">
