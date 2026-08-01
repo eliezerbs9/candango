@@ -52,6 +52,16 @@ const GLYPHS = {
   stage: 'flag-outline',
   inbound: 'arrow-down-outline',
   outbound: 'arrow-up-outline',
+  // settings
+  members: 'people-outline',
+  role: 'shield-checkmark-outline',
+  customField: 'list-outline',
+  billing: 'card-outline',
+  apiKey: 'key-outline',
+  webhook: 'git-network-outline',
+  integrations: 'apps-outline',
+  image: 'image-outline',
+  lock: 'lock-closed-outline',
 } as const;
 
 export type IconName = keyof typeof GLYPHS;

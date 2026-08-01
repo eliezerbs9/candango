@@ -264,6 +264,10 @@ export interface CreateDocInput {
 
 export interface QbStatus {
   connected: boolean;
+  /** e.g. 'connected' | 'reauth_required' | 'disconnected' (mirrors web). */
+  status?: string;
+  realmId?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface QbLinkStatus {

@@ -1,5 +1,6 @@
-/** Profile tab — signed-in user + workspace, API health, and sign out. */
-import { StyleSheet, Text, View } from 'react-native';
+/** Profile tab — signed-in user + workspace, Settings entry, API health, sign out. */
+import { useRouter } from 'expo-router';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '@/components/Icon';
 import { Button, Card, SectionHeader } from '@/components/ui';
@@ -8,6 +9,7 @@ import { useAuthStore } from '@/lib/auth/store';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
   const { data, isLoading, isError } = useHealth();
@@ -29,6 +31,22 @@ export default function ProfileScreen() {
         <Row label="Workspace" value={user?.orgName ?? '—'} />
         <Row label="Role" value={user?.role ?? '—'} />
         <Row label="API" value={apiStatus} tone={isError ? 'danger' : 'ok'} last />
+      </Card>
+
+      <SectionHeader title="Manage" />
+      <Card style={styles.card}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Settings"
+          onPress={() => router.push('/settings')}
+          style={({ pressed }) => [styles.navRow, pressed && styles.navRowPressed]}
+        >
+          <View style={styles.navIcon}>
+            <Icon name="settings" size={20} color={colors.primary} />
+          </View>
+          <Text style={styles.navLabel}>Settings</Text>
+          <Icon name="chevronRight" size={18} color={colors.textSubtle} />
+        </Pressable>
       </Card>
 
       <View style={styles.flex} />
@@ -83,4 +101,15 @@ const styles = StyleSheet.create({
   rowLast: { borderBottomWidth: 0 },
   rowLabel: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.textMuted },
   rowValue: { fontFamily: fonts.medium, fontSize: fontSize.md, color: colors.ink, flexShrink: 1 },
+  navRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: 14, paddingVertical: 12, minHeight: 56 },
+  navRowPressed: { backgroundColor: colors.surface },
+  navIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: colors.primaryTint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navLabel: { flex: 1, fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.ink },
 });
