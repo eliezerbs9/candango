@@ -32,6 +32,7 @@ model Organization {
   onboardingState Json     @default("{}")     // { pipelineCreated, teammatesInvited, ... }
   dealSeq         Int      @default(0)         // per-tenant counter for human-readable Deal.refNumber
   logoUrl         String?   // workspace logo (data URL for now; object storage in production)
+  qboNameFormat   String   @default("first_last") // how to build a QuickBooks customer name from a person: first_last | last_first
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   deletedAt       DateTime?
@@ -237,7 +238,9 @@ model Deal {
 model Person {
   id           String   @id @default(cuid())
   orgId        String
-  name         String
+  firstName    String   @default("")
+  lastName     String   @default("")
+  name         String   // derived display name = "firstName lastName" (kept for display + QBO)
   emails       Json     @default("[]") // [{ value, label }]
   phones       Json     @default("[]")
   address      Json?    // structured { line1, line2, city, state, postalCode, country }; used for QBO Bill To

@@ -1,9 +1,23 @@
-import { IsArray, IsEmail, IsObject, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsArray, IsEmail, IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class CreatePersonDto {
+  // Preferred: firstName (+ optional lastName). `name` is still accepted for
+  // backward-compatible inline "type a full name" creation — the service splits
+  // it and always recomputes the derived `name`.
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  firstName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  lastName?: string;
+
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  name!: string;
+  name?: string;
 
   @IsOptional()
   @IsEmail()
@@ -28,6 +42,16 @@ export class CreatePersonDto {
 }
 
 export class UpdatePersonDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  firstName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  lastName?: string;
+
   @IsOptional()
   @IsString()
   @MinLength(1)

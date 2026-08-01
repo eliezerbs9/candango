@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -10,6 +10,8 @@ const withCompanies = {
 
 type PersonRow = {
   id: string;
+  firstName: string;
+  lastName: string;
   name: string;
   emails: Prisma.JsonValue;
   phones: Prisma.JsonValue;
@@ -23,6 +25,8 @@ function shape(p: PersonRow) {
   const phones = (p.phones as string[]) ?? [];
   return {
     id: p.id,
+    firstName: p.firstName,
+    lastName: p.lastName,
     name: p.name,
     email: emails[0] ?? null,
     phone: phones[0] ?? null,
@@ -30,6 +34,37 @@ function shape(p: PersonRow) {
     customFields: (p.customFields as Record<string, unknown>) ?? {},
     companies: p.companyLinks.map((l) => l.company),
   };
+}
+
+/** Split a typed full name: first whitespace token → first, the rest → last. */
+function splitFullName(full: string): { firstName: string; lastName: string } {
+  const t = full.trim().replace(/\s+/g, ' ');
+  const i = t.indexOf(' ');
+  return i === -1 ? { firstName: t, lastName: '' } : { firstName: t.slice(0, i), lastName: t.slice(i + 1) };
+}
+
+/**
+ * Resolve firstName/lastName/derived-name from a DTO, falling back to existing
+ * values on update. Prefers explicit first/last; otherwise splits `name`.
+ */
+function resolveName(
+  dto: { firstName?: string; lastName?: string; name?: string },
+  existing?: { firstName: string; lastName: string },
+): { firstName: string; lastName: string; name: string } | null {
+  let firstName: string | undefined;
+  let lastName: string | undefined;
+  if (dto.firstName !== undefined || dto.lastName !== undefined) {
+    firstName = (dto.firstName ?? existing?.firstName ?? '').trim();
+    lastName = (dto.lastName ?? existing?.lastName ?? '').trim();
+  } else if (dto.name !== undefined) {
+    const s = splitFullName(dto.name);
+    firstName = s.firstName;
+    lastName = s.lastName;
+  } else {
+    return null; // nothing name-related provided (update of other fields only)
+  }
+  const name = [firstName, lastName].filter(Boolean).join(' ').trim();
+  return { firstName, lastName, name };
 }
 
 @Injectable()
@@ -59,11 +94,15 @@ export class PersonsService {
   }
 
   async create(orgId: string, dto: CreatePersonDto) {
+    const parts = resolveName(dto);
+    if (!parts || !parts.name) throw new BadRequestException('A first name is required');
     const companyIds = await this.validCompanyIds(orgId, dto.companyIds);
     const row = await this.prisma.person.create({
       data: {
         orgId,
-        name: dto.name,
+        firstName: parts.firstName,
+        lastName: parts.lastName,
+        name: parts.name,
         emails: dto.email ? [dto.email] : [],
         phones: dto.phone ? [dto.phone] : [],
         address: (dto.address ?? undefined) as Prisma.InputJsonValue | undefined,
@@ -87,9 +126,16 @@ export class PersonsService {
   }
 
   async update(orgId: string, id: string, dto: UpdatePersonDto) {
-    await this.get(orgId, id);
+    const existing = await this.get(orgId, id);
 
-    const data: Prisma.PersonUncheckedUpdateInput = { name: dto.name };
+    const data: Prisma.PersonUncheckedUpdateInput = {};
+    const parts = resolveName(dto, existing);
+    if (parts) {
+      if (!parts.name) throw new BadRequestException('A first name is required');
+      data.firstName = parts.firstName;
+      data.lastName = parts.lastName;
+      data.name = parts.name;
+    }
     if (dto.email !== undefined) data.emails = dto.email ? [dto.email] : [];
     if (dto.phone !== undefined) data.phones = dto.phone ? [dto.phone] : [];
     if (dto.address !== undefined) data.address = dto.address as Prisma.InputJsonValue;

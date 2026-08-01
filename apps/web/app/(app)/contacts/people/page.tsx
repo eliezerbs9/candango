@@ -43,7 +43,8 @@ export default function PeoplePage() {
 
   const [opened, ctl] = useDisclosure(false);
   const [editing, setEditing] = useState<ApiPerson | null>(null);
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState<Address>({});
@@ -52,7 +53,8 @@ export default function PeoplePage() {
 
   const openCreate = () => {
     setEditing(null);
-    setName('');
+    setFirstName('');
+    setLastName('');
     setEmail('');
     setPhone('');
     setAddress({});
@@ -63,7 +65,8 @@ export default function PeoplePage() {
 
   const openEdit = (p: ApiPerson) => {
     setEditing(p);
-    setName(p.name);
+    setFirstName(p.firstName);
+    setLastName(p.lastName ?? '');
     setEmail(p.email ?? '');
     setPhone(p.phone ?? '');
     setAddress(p.address ?? {});
@@ -109,12 +112,13 @@ export default function PeoplePage() {
   ];
 
   const submit = () => {
-    if (!name.trim()) {
-      notifications.show({ message: 'Name is required', color: 'red' });
+    if (!firstName.trim()) {
+      notifications.show({ message: 'First name is required', color: 'red' });
       return;
     }
     const body = {
-      name: name.trim(),
+      firstName: firstName.trim(),
+      lastName: lastName.trim() || undefined,
       email: email || undefined,
       phone: phone || undefined,
       address: Object.values(address).some(Boolean) ? address : undefined,
@@ -170,7 +174,13 @@ export default function PeoplePage() {
 
       <Modal opened={opened} onClose={ctl.close} title={editing ? 'Edit person' : 'New person'}>
         <Stack>
-          <TextInput label="Name" required value={name} onChange={(e) => setName(e.currentTarget.value)} />
+          <TextInput
+            label="First name"
+            required
+            value={firstName}
+            onChange={(e) => setFirstName(e.currentTarget.value)}
+          />
+          <TextInput label="Last name" value={lastName} onChange={(e) => setLastName(e.currentTarget.value)} />
           <TextInput label="Email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
           <TextInput label="Phone" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} />
           <AddressFields label="Address" value={address} onChange={setAddress} withName={false} />

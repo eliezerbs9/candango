@@ -9,6 +9,8 @@ export interface ContactRef {
 export interface ApiPerson {
   id: string;
   name: string;
+  firstName: string;
+  lastName: string | null;
   email: string | null;
   phone: string | null;
   address: Address | null;
@@ -27,7 +29,9 @@ export interface ApiCompany {
 }
 
 export interface PersonBody {
-  name: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
   email?: string;
   phone?: string;
   address?: Address;

@@ -71,6 +71,8 @@ export interface ContactRef {
 export interface ApiPerson {
   id: string;
   name: string;
+  firstName: string;
+  lastName: string | null;
   email: string | null;
   phone: string | null;
   address: Address | null;
@@ -89,7 +91,12 @@ export interface ApiCompany {
 }
 
 export interface PersonBody {
-  name: string;
+  // Person create/update accepts firstName (+ optional lastName). Legacy `name`
+  // is still accepted by the API (server splits it) and is used by the inline
+  // quick-create flows that only have a single typed string.
+  name?: string;
+  firstName?: string;
+  lastName?: string;
   email?: string;
   phone?: string;
   address?: Address;

@@ -59,7 +59,9 @@ export function ContactFormModal({
   const deleteCompany = useDeleteCompany();
   const customFields = useCustomFields(kind);
 
-  const [name, setName] = useState('');
+  const [name, setName] = useState(''); // company
+  const [firstName, setFirstName] = useState(''); // person
+  const [lastName, setLastName] = useState(''); // person
   const [email, setEmail] = useState(''); // person
   const [domain, setDomain] = useState(''); // company
   const [phone, setPhone] = useState('');
@@ -74,6 +76,8 @@ export function ContactFormModal({
     const p = kind === 'person' ? (editing as ApiPerson | null) : null;
     const c = kind === 'company' ? (editing as ApiCompany | null) : null;
     setName(editing?.name ?? '');
+    setFirstName(p?.firstName ?? '');
+    setLastName(p?.lastName ?? '');
     setEmail(p?.email ?? '');
     setDomain(c?.domain ?? '');
     setPhone((p?.phone ?? c?.phone) ?? '');
@@ -104,8 +108,11 @@ export function ContactFormModal({
     createCompany.isPending ||
     updateCompany.isPending;
 
+  // Person requires a first name; company requires a name.
+  const canSave = kind === 'person' ? !!firstName.trim() : !!name.trim();
+
   async function save() {
-    if (!name.trim()) return;
+    if (!canSave) return;
     setError(null);
     const customFieldsOut: Record<string, unknown> = {};
     for (const def of customFields.data ?? []) {
@@ -117,7 +124,8 @@ export function ContactFormModal({
     try {
       if (kind === 'person') {
         const body = {
-          name: name.trim(),
+          firstName: firstName.trim(),
+          lastName: lastName.trim() || undefined,
           email: email || undefined,
           phone: phone || undefined,
           address: addr,
@@ -177,18 +185,34 @@ export function ContactFormModal({
               <Text style={styles.cancel}>Cancel</Text>
             </Pressable>
             <Text style={styles.title}>{editing ? `Edit ${noun}` : `New ${noun}`}</Text>
-            <Pressable onPress={save} hitSlop={10} disabled={saving || !name.trim()}>
+            <Pressable onPress={save} hitSlop={10} disabled={saving || !canSave}>
               {saving ? (
                 <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Text style={[styles.saveBtn, !name.trim() && { opacity: 0.4 }]}>Save</Text>
+                <Text style={[styles.saveBtn, !canSave && { opacity: 0.4 }]}>Save</Text>
               )}
             </Pressable>
           </View>
 
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.form}>
-            <Text style={styles.label}>Name</Text>
-            <TextInput style={styles.input} value={name} onChangeText={setName} autoFocus={!editing} />
+            {kind === 'person' ? (
+              <>
+                <Text style={styles.label}>First name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  autoFocus={!editing}
+                />
+                <Text style={styles.label}>Last name</Text>
+                <TextInput style={styles.input} value={lastName} onChangeText={setLastName} />
+              </>
+            ) : (
+              <>
+                <Text style={styles.label}>Name</Text>
+                <TextInput style={styles.input} value={name} onChangeText={setName} autoFocus={!editing} />
+              </>
+            )}
 
             {kind === 'person' ? (
               <>
