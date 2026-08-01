@@ -1,6 +1,8 @@
 /**
  * Deal detail — core fields, move-stage, lifecycle actions (win/lose/reopen/
  * archive), and a timeline (notes + activities + stage history) with add-note.
+ * Sections are grouped into white cards on a light surface; terracotta is the
+ * accent (deal #, value, current stage, primary actions).
  */
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState, type ReactNode } from 'react';
@@ -32,7 +34,7 @@ import { useDeal, useDealLifecycle, useDealTimeline, useMoveDeal, useStages } fr
 import { useCreateNote } from '@/lib/api/notes';
 import { formatDate, formatMoney } from '@/lib/format';
 import { showToast } from '@/lib/toast';
-import { colors, fonts, fontSize, radius, space } from '@/theme';
+import { colors, fonts, fontSize, radius, shadow, space } from '@/theme';
 
 const headerOptions = {
   headerShown: true,
@@ -119,6 +121,7 @@ export default function DealDetailScreen() {
 
   const d = deal.data;
   const busy = life.win.isPending || life.lose.isPending || life.reopen.isPending || life.archive.isPending;
+  const currentStage = pipelineStages.find((s) => s.id === d.stageId)?.name;
   const primaryPersonEmail = d.primaryPersonId
     ? persons.data?.find((p) => p.id === d.primaryPersonId)?.email ?? null
     : null;
@@ -156,135 +159,153 @@ export default function DealDetailScreen() {
           ...headerOptions,
           title: d.title,
           headerRight: () => (
-            <Pressable onPress={() => setEditOpen(true)} hitSlop={10}>
+            <Pressable onPress={() => setEditOpen(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Edit deal">
               <Text style={styles.headerEdit}>Edit</Text>
             </Pressable>
           ),
         }}
       />
 
-      <Text style={styles.title}>{d.title}</Text>
-      <Text style={styles.value}>{formatMoney(d.value, d.currency)}</Text>
-      <View style={styles.pillRow}>
-        <View style={[styles.statusPill, statusTint(d.status)]}>
-          <Text style={[styles.statusText, statusInk(d.status)]}>{d.status.toUpperCase()}</Text>
-        </View>
-        {d.archivedAt ? (
-          <View style={[styles.statusPill, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.statusText, { color: colors.textMuted }]}>ARCHIVED</Text>
+      {/* Header — deal identity + value + status + lifecycle actions */}
+      <View style={styles.headerCard}>
+        {d.refNumber != null ? <Text style={styles.refNum}>DEAL #{d.refNumber}</Text> : null}
+        <Text style={styles.title}>{d.title}</Text>
+        <Text style={styles.value}>{formatMoney(d.value, d.currency)}</Text>
+        <View style={styles.pillRow}>
+          {currentStage ? (
+            <View style={styles.stagePill}>
+              <Text style={styles.stagePillText}>{currentStage}</Text>
+            </View>
+          ) : null}
+          <View style={[styles.statusPill, statusTint(d.status)]}>
+            <Text style={[styles.statusText, statusInk(d.status)]}>{d.status.toUpperCase()}</Text>
           </View>
-        ) : null}
+          {d.archivedAt ? (
+            <View style={[styles.statusPill, styles.archivedPill]}>
+              <Text style={[styles.statusText, { color: colors.textMuted }]}>ARCHIVED</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.actions}>
+          {d.status === 'open' && !d.archivedAt ? (
+            <>
+              <ActionBtn label="Won" tone="success" busy={busy} onPress={() => life.win.mutate(d.id)} />
+              <ActionBtn label="Lost" tone="danger" busy={busy} onPress={() => { setLoseReason(''); setLoseOpen(true); }} />
+              <ActionBtn label="Archive" tone="neutral" busy={busy} onPress={() => life.archive.mutate(d.id)} />
+            </>
+          ) : (
+            <ActionBtn label="Reopen" tone="primary" busy={busy} onPress={() => life.reopen.mutate(d.id)} />
+          )}
+        </View>
       </View>
 
-      {/* Lifecycle actions */}
-      <View style={styles.actions}>
-        {d.status === 'open' && !d.archivedAt ? (
-          <>
-            <ActionBtn label="Won" tone="success" busy={busy} onPress={() => life.win.mutate(d.id)} />
-            <ActionBtn label="Lost" tone="danger" busy={busy} onPress={() => { setLoseReason(''); setLoseOpen(true); }} />
-            <ActionBtn label="Archive" tone="neutral" busy={busy} onPress={() => life.archive.mutate(d.id)} />
-          </>
-        ) : (
-          <ActionBtn label="Reopen" tone="primary" busy={busy} onPress={() => life.reopen.mutate(d.id)} />
-        )}
+      {/* Stage */}
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionLabel}>Stage</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stageRow}>
+          {pipelineStages.map((s) => {
+            const active = s.id === d.stageId;
+            const pending = move.isPending && move.variables?.stageId === s.id;
+            return (
+              <Pressable
+                key={s.id}
+                style={[styles.stageChip, active && styles.stageChipActive]}
+                disabled={active || move.isPending}
+                onPress={() => move.mutate({ id: d.id, stageId: s.id }, { onSuccess: refreshTimeline })}
+              >
+                {pending ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text style={[styles.stageChipText, active && styles.stageChipTextActive]}>{s.name}</Text>
+                )}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </View>
 
-      <Text style={styles.sectionLabel}>Stage</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stageRow}>
-        {pipelineStages.map((s) => {
-          const active = s.id === d.stageId;
-          const pending = move.isPending && move.variables?.stageId === s.id;
-          return (
-            <Pressable
-              key={s.id}
-              style={[styles.stageChip, active && styles.stageChipActive]}
-              disabled={active || move.isPending}
-              onPress={() => move.mutate({ id: d.id, stageId: s.id }, { onSuccess: refreshTimeline })}
-            >
-              {pending ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Text style={[styles.stageChipText, active && styles.stageChipTextActive]}>{s.name}</Text>
-              )}
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      <View style={styles.card}>
-        <Row label="Company" value={companyName ?? '—'} />
-        <Row label="Primary contact" value={personName ?? '—'} />
-        <Row label="Expected close" value={formatDate(d.expectedCloseDate)} />
-        <Row label="Deal #" value={d.refNumber != null ? `#${d.refNumber}` : '—'} last />
+      {/* Details */}
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionLabel}>Details</Text>
+        <View style={styles.rows}>
+          <Row icon="company" label="Company" value={companyName ?? '—'} />
+          <Row icon="person" label="Primary contact" value={personName ?? '—'} />
+          <Row icon="activities" label="Expected close" value={formatDate(d.expectedCloseDate)} />
+          <Row icon="info" label="Deal #" value={d.refNumber != null ? `#${d.refNumber}` : '—'} last />
+        </View>
       </View>
 
-      {/* Estimates & invoices — above the timeline */}
+      {/* Estimates & invoices */}
       <QuickbooksPanel dealId={d.id} dealTitle={d.title} currency={d.currency} qbSubcustomerId={d.qbSubcustomerId} />
 
-      {/* Timeline — last; paginated so the screen stays short */}
-      <View style={styles.timelineHead}>
-        <Text style={styles.sectionLabel}>Timeline</Text>
-        <View style={styles.timelineBtns}>
-          <Pressable style={styles.emailBtn} onPress={() => setActivityOpen(true)}>
-            <Icon name="add" size={14} color={colors.primary} />
-            <Text style={styles.emailBtnText}>Activity</Text>
-          </Pressable>
-          <Pressable style={styles.emailBtn} onPress={openNewEmail}>
-            <Icon name="email" size={14} color={colors.primary} />
-            <Text style={styles.emailBtnText}>Email</Text>
+      {/* Timeline */}
+      <View style={styles.sectionCard}>
+        <View style={styles.timelineHead}>
+          <Text style={styles.sectionLabel}>Timeline</Text>
+          <View style={styles.timelineBtns}>
+            <Pressable style={styles.chipBtn} onPress={() => setActivityOpen(true)}>
+              <Icon name="add" size={14} color={colors.primary} />
+              <Text style={styles.chipBtnText}>Activity</Text>
+            </Pressable>
+            <Pressable style={styles.chipBtn} onPress={openNewEmail}>
+              <Icon name="email" size={14} color={colors.primary} />
+              <Text style={styles.chipBtnText}>Email</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.noteBox}>
+          <TextInput
+            style={styles.noteInput}
+            placeholder="Add a note…"
+            placeholderTextColor={colors.textSubtle}
+            value={noteText}
+            onChangeText={setNoteText}
+            multiline
+          />
+          <Pressable
+            style={[styles.noteBtn, (!noteText.trim() || createNote.isPending) && styles.noteBtnOff]}
+            disabled={!noteText.trim() || createNote.isPending}
+            onPress={addNote}
+          >
+            {createNote.isPending ? (
+              <ActivityIndicator size="small" color={colors.white} />
+            ) : (
+              <Text style={styles.noteBtnText}>Add</Text>
+            )}
           </Pressable>
         </View>
-      </View>
-      <View style={styles.noteBox}>
-        <TextInput
-          style={styles.noteInput}
-          placeholder="Add a note…"
-          placeholderTextColor={colors.textSubtle}
-          value={noteText}
-          onChangeText={setNoteText}
-          multiline
-        />
-        <Pressable
-          style={[styles.noteBtn, (!noteText.trim() || createNote.isPending) && styles.noteBtnOff]}
-          disabled={!noteText.trim() || createNote.isPending}
-          onPress={addNote}
-        >
-          {createNote.isPending ? (
-            <ActivityIndicator size="small" color={colors.white} />
-          ) : (
-            <Text style={styles.noteBtnText}>Add</Text>
-          )}
-        </Pressable>
-      </View>
 
-      {tl.isPending ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: space.md }} />
-      ) : timeline.length === 0 ? (
-        <Text style={styles.emptyTimeline}>No activity yet.</Text>
-      ) : (
-        <>
-          {timeline.map((it) => (
-            <TimelineRow
-              key={`${it.kind}-${it.id}`}
-              item={it}
-              onOpen={setViewEmail}
-              onToggleActivity={(aid, done) =>
-                updateActivity.mutate({ id: aid, done }, { onSuccess: refreshTimeline })
-              }
-              onEditActivity={(aid) => setEditActivityId(aid)}
-            />
-          ))}
-          {tl.hasNextPage ? (
-            <Pressable style={styles.loadMore} onPress={() => tl.fetchNextPage()} disabled={tl.isFetchingNextPage}>
-              {tl.isFetchingNextPage ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Text style={styles.loadMoreText}>Load more</Text>
-              )}
-            </Pressable>
-          ) : null}
-        </>
-      )}
+        {tl.isPending ? (
+          <ActivityIndicator color={colors.primary} style={{ marginTop: space.md }} />
+        ) : timeline.length === 0 ? (
+          <Text style={styles.emptyTimeline}>No activity yet.</Text>
+        ) : (
+          <>
+            {timeline.map((it) => (
+              <TimelineRow
+                key={`${it.kind}-${it.id}`}
+                item={it}
+                onOpen={setViewEmail}
+                onToggleActivity={(aid, done) =>
+                  updateActivity.mutate({ id: aid, done }, { onSuccess: refreshTimeline })
+                }
+                onEditActivity={(aid) => setEditActivityId(aid)}
+              />
+            ))}
+            {tl.hasNextPage ? (
+              <Pressable style={styles.loadMore} onPress={() => tl.fetchNextPage()} disabled={tl.isFetchingNextPage}>
+                {tl.isFetchingNextPage ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text style={styles.loadMoreText}>Load more</Text>
+                )}
+              </Pressable>
+            ) : null}
+          </>
+        )}
+      </View>
 
       <View style={{ height: space.xl }} />
 
@@ -441,7 +462,7 @@ function TimelineRow({
   const inner = (
     <View style={styles.tlRow}>
       <View style={styles.tlIcon}>
-        <Icon name={icon} size={16} color={colors.textMuted} />
+        <Icon name={icon} size={16} color={colors.primary} />
       </View>
       <View style={styles.tlBody}>{text}</View>
     </View>
@@ -463,29 +484,39 @@ function ActionBtn({
   busy: boolean;
   onPress: () => void;
 }) {
-  const toneStyle =
+  const t =
     tone === 'success'
-      ? { bg: colors.success, fg: colors.white }
+      ? { bg: colors.success, fg: colors.white, bd: colors.success }
       : tone === 'danger'
-        ? { bg: colors.danger, fg: colors.white }
+        ? { bg: colors.dangerTint, fg: colors.danger, bd: colors.dangerTint }
         : tone === 'primary'
-          ? { bg: colors.primary, fg: colors.white }
-          : { bg: colors.surface, fg: colors.textMuted };
+          ? { bg: colors.primary, fg: colors.white, bd: colors.primary }
+          : { bg: colors.bg, fg: colors.textMuted, bd: colors.borderStrong };
   return (
     <Pressable
-      style={[styles.actionBtn, { backgroundColor: toneStyle.bg }, busy && { opacity: 0.5 }]}
+      style={({ pressed }) => [
+        styles.actionBtn,
+        { backgroundColor: t.bg, borderColor: t.bd },
+        busy && { opacity: 0.5 },
+        pressed && !busy && { opacity: 0.8 },
+      ]}
       disabled={busy}
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
     >
-      <Text style={[styles.actionText, { color: toneStyle.fg }]}>{label}</Text>
+      <Text style={[styles.actionText, { color: t.fg }]}>{label}</Text>
     </Pressable>
   );
 }
 
-function Row({ label, value, last }: { label: string; value: string; last?: boolean }) {
+function Row({ icon, label, value, last }: { icon: IconName; label: string; value: string; last?: boolean }) {
   return (
     <View style={[styles.row, last && styles.rowLast]}>
-      <Text style={styles.rowLabel}>{label}</Text>
+      <View style={styles.rowLabelWrap}>
+        <Icon name={icon} size={15} color={colors.textSubtle} />
+        <Text style={styles.rowLabel}>{label}</Text>
+      </View>
       <Text style={styles.rowValue} numberOfLines={1}>
         {value}
       </Text>
@@ -496,28 +527,56 @@ function Row({ label, value, last }: { label: string; value: string; last?: bool
 function statusTint(status: string) {
   if (status === 'won') return { backgroundColor: colors.successTint };
   if (status === 'lost') return { backgroundColor: colors.dangerTint };
-  return { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border };
+  return { backgroundColor: colors.infoTint };
 }
 function statusInk(status: string) {
   if (status === 'won') return { color: colors.success };
   if (status === 'lost') return { color: colors.danger };
-  return { color: colors.textMuted };
+  return { color: colors.info };
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: space.lg, gap: space.sm },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: colors.surface },
+  content: { padding: space.md, gap: space.md },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: colors.surface },
+
+  // Header card
+  headerCard: {
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.xl,
+    padding: space.lg,
+    gap: 6,
+    ...shadow.card,
+  },
+  refNum: { fontFamily: fonts.bold, fontSize: fontSize.xs, letterSpacing: 1, color: colors.primary },
   title: { fontFamily: fonts.display, fontSize: fontSize.h2, color: colors.ink },
-  value: { fontFamily: fonts.bold, fontSize: fontSize.h3, color: colors.ink },
-  pillRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
-  statusPill: { alignSelf: 'flex-start', borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 3 },
+  value: { fontFamily: fonts.bold, fontSize: fontSize.h1, color: colors.primary, marginTop: 2 },
+  pillRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center', flexWrap: 'wrap', marginTop: space.xs },
+  stagePill: { backgroundColor: colors.primaryTint, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 4 },
+  stagePillText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
+  statusPill: { borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
+  archivedPill: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   statusText: { fontFamily: fonts.bold, fontSize: 11 },
-  actions: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
-  actionBtn: { flex: 1, borderRadius: radius.lg, paddingVertical: 11, alignItems: 'center' },
+  actions: { flexDirection: 'row', gap: space.sm, marginTop: space.md, flexWrap: 'wrap' },
+  actionBtn: { flex: 1, minWidth: 88, borderRadius: radius.lg, paddingVertical: 12, alignItems: 'center', borderWidth: 1 },
   actionText: { fontFamily: fonts.bold, fontSize: fontSize.md },
-  sectionLabel: { fontFamily: fonts.semibold, fontSize: fontSize.xs, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.textSubtle, marginTop: space.md, marginBottom: space.xs },
-  stageRow: { gap: space.sm, paddingVertical: 2 },
+
+  // Generic section card
+  sectionCard: {
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.xl,
+    padding: space.md,
+    gap: space.sm,
+    ...shadow.card,
+  },
+  sectionLabel: { fontFamily: fonts.semibold, fontSize: fontSize.xs, letterSpacing: 0.8, textTransform: 'uppercase', color: colors.textSubtle },
+
+  // Stage chips
+  stageRow: { gap: space.sm, paddingVertical: 2, paddingRight: space.sm },
   stageChip: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -531,27 +590,29 @@ const styles = StyleSheet.create({
   stageChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   stageChipText: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted },
   stageChipTextActive: { fontFamily: fonts.bold, color: colors.white },
-  card: {
-    marginTop: space.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.xl,
-  },
+
+  // Detail rows
+  rows: { marginTop: 2 },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
     gap: 12,
   },
   rowLast: { borderBottomWidth: 0 },
+  rowLabelWrap: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   rowLabel: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.textMuted },
-  rowValue: { fontFamily: fonts.medium, fontSize: fontSize.md, color: colors.ink, flexShrink: 1 },
-  noteBox: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-end' },
+  rowValue: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.ink, flexShrink: 1 },
+
+  // Timeline
+  timelineHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  timelineBtns: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
+  chipBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primaryTint, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 6 },
+  chipBtnText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
+  noteBox: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-end', marginTop: space.xs },
   noteInput: {
     flex: 1,
     borderWidth: 1,
@@ -565,7 +626,7 @@ const styles = StyleSheet.create({
     color: colors.ink,
     backgroundColor: colors.surface,
   },
-  noteBtn: { backgroundColor: colors.primary, borderRadius: radius.lg, paddingHorizontal: 18, paddingVertical: 12, alignItems: 'center' },
+  noteBtn: { backgroundColor: colors.primary, borderRadius: radius.lg, paddingHorizontal: 18, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', minHeight: 44 },
   noteBtnOff: { opacity: 0.5 },
   noteBtnText: { fontFamily: fonts.bold, color: colors.white, fontSize: fontSize.md },
   emptyTimeline: { fontFamily: fonts.regular, color: colors.textSubtle, fontSize: fontSize.sm, marginTop: space.sm },
@@ -580,14 +641,14 @@ const styles = StyleSheet.create({
   tlStrong: { fontFamily: fonts.semibold, color: colors.ink },
   tlDone: { textDecorationLine: 'line-through', color: colors.textMuted },
   tlMeta: { fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textMuted, textTransform: 'capitalize' },
+
+  // Error + header
   errorTitle: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.danger },
   retry: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, paddingHorizontal: space.md, paddingVertical: space.sm },
   retryText: { fontFamily: fonts.semibold, color: colors.primary },
   headerEdit: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.primary },
-  timelineHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  timelineBtns: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
-  emailBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primaryTint, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 6, marginTop: space.md, marginBottom: space.xs },
-  emailBtnText: { fontFamily: fonts.semibold, fontSize: fontSize.sm, color: colors.primary },
+
+  // Lose sheet
   loseBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
   loseSheet: { backgroundColor: colors.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: space.lg, gap: space.md },
   loseTitle: { fontFamily: fonts.display, fontSize: fontSize.xl, color: colors.ink },

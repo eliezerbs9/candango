@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surface,
   },
-  segBtnActive: { backgroundColor: colors.ink, borderColor: colors.ink },
+  segBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   segText: { fontFamily: fonts.semibold, fontSize: fontSize.md, color: colors.textMuted },
   segTextActive: { color: colors.white },
   chips: { gap: space.sm, alignItems: 'center', paddingRight: space.sm },

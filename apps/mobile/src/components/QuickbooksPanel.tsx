@@ -25,7 +25,7 @@ import {
 } from '@/lib/api/quickbooks';
 import type { CreateDocInput, DealDoc } from '@/lib/api/types';
 import { formatMoney } from '@/lib/format';
-import { colors, fonts, fontSize, radius, space } from '@/theme';
+import { colors, fonts, fontSize, radius, shadow, space } from '@/theme';
 
 const ESTIMATE_STATUSES = ['draft', 'sent', 'accepted', 'rejected'];
 const INVOICE_STATUSES = ['draft', 'sent', 'paid', 'void'];
@@ -265,7 +265,7 @@ function DocRow({
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.xl, padding: space.lg, gap: space.sm, marginTop: space.md },
+  card: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.xl, padding: space.md, gap: space.sm, ...shadow.card },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   linkBtn: { backgroundColor: colors.primaryTint, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 5 },

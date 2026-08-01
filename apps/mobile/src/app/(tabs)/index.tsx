@@ -198,15 +198,13 @@ const styles = StyleSheet.create({
   sub: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted, flexShrink: 1 },
   badge: {
     alignSelf: 'flex-start',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.primaryTint,
     borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 3,
     marginTop: 2,
   },
-  badgeText: { fontFamily: fonts.medium, fontSize: fontSize.xs, color: colors.textMuted },
+  badgeText: { fontFamily: fonts.semibold, fontSize: fontSize.xs, color: colors.primary },
   muted: { fontFamily: fonts.regular, fontSize: fontSize.md, color: colors.textMuted },
   emptyTitle: { fontFamily: fonts.display, fontSize: fontSize.xl, color: colors.ink },
   fab: {

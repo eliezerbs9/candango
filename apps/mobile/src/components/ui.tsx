@@ -212,7 +212,7 @@ const ui = StyleSheet.create({
     paddingVertical: 7,
     backgroundColor: colors.bg,
   },
-  chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
+  chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipText: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.textMuted },
   chipTextOn: { fontFamily: fonts.semibold, color: colors.white },
 });
