@@ -30,6 +30,29 @@ export class BillingService {
     return this.config.get<string>('STRIPE_PRICE_ID') ?? '';
   }
 
+  /**
+   * Comped workspaces never enter the read-only lock (FR-10.5) regardless of
+   * trial/subscription state. Allowlisted by **owner/member email** via the
+   * `BILLING_COMP_EMAILS` env var (comma-separated) — used for the founder's own
+   * workspace and internal/demo orgs. Empty by default → no one is comped.
+   */
+  private compEmails(): string[] {
+    return (this.config.get<string>('BILLING_COMP_EMAILS') ?? '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  /** True when the org has a non-deleted member whose email is on the comp allowlist. */
+  private async isCompedOrg(orgId: string): Promise<boolean> {
+    const emails = this.compEmails();
+    if (emails.length === 0) return false;
+    const n = await this.prisma.user.count({
+      where: { orgId, deletedAt: null, email: { in: emails } },
+    });
+    return n > 0;
+  }
+
   private resolvedPrice: string | null = null;
   /** Accept either a price id (`price_…`) or a product id (`prod_…`, resolved to its active price). */
   private async resolvePriceId(): Promise<string> {
@@ -84,11 +107,12 @@ export class BillingService {
       orderBy: { createdAt: 'desc' },
       take: 12,
     });
+    const comped = await this.isCompedOrg(orgId);
     const trialDaysLeft = sub.trialEndsAt
       ? Math.max(0, Math.ceil((sub.trialEndsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
       : 0;
     return {
-      status: sub.status,
+      status: comped ? 'active' : sub.status,
       seats,
       pricePerSeat: sub.pricePerSeat,
       currency: sub.currency,
@@ -98,7 +122,8 @@ export class BillingService {
       currentPeriodEnd: sub.currentPeriodEnd,
       canceledAt: sub.canceledAt,
       hasSubscription: !!sub.stripeSubscriptionId,
-      locked: this.isLocked(sub),
+      comped,
+      locked: comped ? false : this.isLocked(sub),
       invoices: invoices.map((i) => ({
         id: i.id,
         amountDue: i.amountDue,
@@ -133,10 +158,17 @@ export class BillingService {
       where: { orgId },
       select: { status: true, trialEndsAt: true },
     });
-    if (sub) return this.isLockedStatus(sub.status, sub.trialEndsAt);
-    const org = await this.prisma.organization.findUnique({ where: { id: orgId }, select: { createdAt: true } });
-    if (!org) return false;
-    return org.createdAt.getTime() + TRIAL_MS < Date.now();
+    let locked: boolean;
+    if (sub) {
+      locked = this.isLockedStatus(sub.status, sub.trialEndsAt);
+    } else {
+      const org = await this.prisma.organization.findUnique({ where: { id: orgId }, select: { createdAt: true } });
+      if (!org) return false;
+      locked = org.createdAt.getTime() + TRIAL_MS < Date.now();
+    }
+    // Comped workspaces are never locked (checked only when otherwise locked → no cost on the happy path).
+    if (locked && (await this.isCompedOrg(orgId))) return false;
+    return locked;
   }
 
   /**
