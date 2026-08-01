@@ -25,7 +25,10 @@ export class ReportsService {
     });
     const grouped = await this.prisma.deal.groupBy({
       by: ['stageId'],
-      where: { ...where, status: 'open', deletedAt: null },
+      // Match the active board/list view: open, not soft-deleted, and NOT archived.
+      // Archived deals stay status='open'/deletedAt=null, so omitting archivedAt
+      // would inflate both openValue and weightedValue past what the user sees.
+      where: { ...where, status: 'open', deletedAt: null, archivedAt: null },
       _sum: { value: true },
       _count: { _all: true },
     });
