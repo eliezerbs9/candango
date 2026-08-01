@@ -1,10 +1,11 @@
 /** Profile tab — signed-in user + workspace, Settings entry, API health, sign out. */
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '@/components/Icon';
 import { Button, Card, SectionHeader } from '@/components/ui';
 import { useHealth } from '@/lib/api/health';
+import { useProfile } from '@/lib/api/profile';
 import { useAuthStore } from '@/lib/auth/store';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
 
@@ -12,16 +13,21 @@ export default function ProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
+  const { data: me } = useProfile(); // shares the ['me'] cache → updates after a photo change
   const { data, isLoading, isError } = useHealth();
   const apiStatus = isLoading ? '…' : isError ? 'Offline' : (data?.status ?? 'OK');
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Icon name="person" size={28} color={colors.textMuted} />
-        </View>
-        <Text style={styles.name}>{user?.name ?? user?.email ?? 'You'}</Text>
+        {me?.avatarUrl ? (
+          <Image source={{ uri: me.avatarUrl }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, styles.avatarFallback]}>
+            <Icon name="person" size={28} color={colors.textMuted} />
+          </View>
+        )}
+        <Text style={styles.name}>{me?.name ?? user?.name ?? user?.email ?? 'You'}</Text>
         <Text style={styles.org}>{user?.orgName}</Text>
       </View>
 
@@ -78,12 +84,14 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: radius.pill,
+    marginBottom: space.xs,
+  },
+  avatarFallback: {
     backgroundColor: colors.bg,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: space.xs,
   },
   name: { fontFamily: fonts.display, fontSize: fontSize.h2, color: colors.ink },
   org: { fontFamily: fonts.medium, fontSize: fontSize.lg, color: colors.primary },
