@@ -17,6 +17,15 @@ export function LoginForm() {
   const { signIn } = useAuth();
   const [loading, setLoading] = useState(false);
 
+  // Mobile mode: the native app opens this page with `?platform=mobile&redirect=
+  // candango://auth`. Instead of signing into the web app, we hand the JWT back
+  // to the app via that deep link (the "single Log in button" pattern).
+  const mobileRedirect = params.get('platform') === 'mobile' ? params.get('redirect') : null;
+  const finishMobile = (token: string) => {
+    const sep = mobileRedirect!.includes('?') ? '&' : '?';
+    window.location.href = `${mobileRedirect}${sep}token=${encodeURIComponent(token)}`;
+  };
+
   // New workspaces (incl. Google sign-up) land on the onboarding wizard until it's completed.
   const routeAfterAuth = async (token: string) => {
     try {
@@ -41,6 +50,10 @@ export function LoginForm() {
       });
       router.replace('/login');
     } else if (token) {
+      if (mobileRedirect) {
+        finishMobile(token);
+        return;
+      }
       apiMe(token)
         .then((user) => {
           signIn(token, user);
@@ -67,6 +80,10 @@ export function LoginForm() {
     setLoading(true);
     try {
       const { token, user } = await apiLogin(values);
+      if (mobileRedirect) {
+        finishMobile(token); // hand the token to the mobile app, don't sign into the web
+        return;
+      }
       signIn(token, user);
       notifications.show({ message: 'Signed in', color: 'green' });
       await routeAfterAuth(token);
@@ -82,7 +99,11 @@ export function LoginForm() {
 
   return (
     <Stack gap="md">
-      <OAuthButton onClick={() => { window.location.href = googleLoginUrl('login'); }} />
+      <OAuthButton
+        onClick={() => {
+          window.location.href = googleLoginUrl('login', mobileRedirect ? { redirect: mobileRedirect } : undefined);
+        }}
+      />
       <Divider label="or" labelPosition="center" />
       <form onSubmit={handleSubmit}>
         <Stack gap="sm">
