@@ -1,15 +1,16 @@
 /**
  * Settings → Profile. Mirrors apps/web/app/(app)/settings/profile/page.tsx:
- * name, phone, email (read-only) + Save; and a Change password section
- * (current / new / confirm). Photo upload is handled on the web (no native
- * image picker bundled) — shown as an intentional read-only avatar.
+ * photo (camera/library, resized like the web), name, phone, email (read-only)
+ * + Save; and a Change password section (current / new / confirm).
  */
 import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { Icon } from '@/components/Icon';
 import { Button, Card, Divider, SectionHeader } from '@/components/ui';
 import { useChangePassword, useProfile, useUpdateProfile } from '@/lib/api/profile';
+import { choosePhotoSource, pickPhotoDataUrl } from '@/lib/image';
 import { showToast } from '@/lib/toast';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
 
@@ -25,6 +26,7 @@ export default function ProfileSettingsScreen() {
   const [cur, setCur] = useState('');
   const [nw, setNw] = useState('');
   const [cf, setCf] = useState('');
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   useEffect(() => {
     if (me) {
@@ -60,6 +62,28 @@ export default function ProfileSettingsScreen() {
     );
   };
 
+  const setPhoto = (avatarUrl: string) =>
+    update.mutate(
+      { avatarUrl },
+      { onSuccess: () => showToast(avatarUrl ? 'Photo updated' : 'Photo removed'), onError: fail },
+    );
+
+  const onPickPhoto = () =>
+    choosePhotoSource(
+      async (source) => {
+        setPhotoBusy(true);
+        try {
+          const dataUrl = await pickPhotoDataUrl('avatar', source);
+          if (dataUrl) setPhoto(dataUrl);
+        } catch (e) {
+          fail(e);
+        } finally {
+          setPhotoBusy(false);
+        }
+      },
+      me?.avatarUrl ? { onRemove: () => setPhoto('') } : undefined,
+    );
+
   const initial = (name || me?.email || '?').slice(0, 1).toUpperCase();
 
   return (
@@ -72,16 +96,27 @@ export default function ProfileSettingsScreen() {
       ) : (
         <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Card style={styles.photoCard}>
-            {me?.avatarUrl ? (
-              <Image source={{ uri: me.avatarUrl }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarFallback]}>
-                <Text style={styles.avatarInitial}>{initial}</Text>
+            <Pressable onPress={onPickPhoto} disabled={photoBusy} accessibilityRole="button" accessibilityLabel="Change photo">
+              <View>
+                {me?.avatarUrl ? (
+                  <Image source={{ uri: me.avatarUrl }} style={styles.avatar} />
+                ) : (
+                  <View style={[styles.avatar, styles.avatarFallback]}>
+                    <Text style={styles.avatarInitial}>{initial}</Text>
+                  </View>
+                )}
+                <View style={styles.avatarBadge}>
+                  {photoBusy ? (
+                    <ActivityIndicator size="small" color={colors.white} />
+                  ) : (
+                    <Icon name="add" size={14} color={colors.white} />
+                  )}
+                </View>
               </View>
-            )}
+            </Pressable>
             <View style={styles.photoText}>
               <Text style={styles.photoTitle}>Photo</Text>
-              <Text style={styles.hint}>Upload or change your photo on the web app.</Text>
+              <Text style={styles.hint}>Tap to take a photo or choose from your library.</Text>
             </View>
           </Card>
 
@@ -139,6 +174,19 @@ const styles = StyleSheet.create({
   avatar: { width: 56, height: 56, borderRadius: radius.pill },
   avatarFallback: { backgroundColor: colors.primaryTint, alignItems: 'center', justifyContent: 'center' },
   avatarInitial: { fontFamily: fonts.display, fontSize: fontSize.h3, color: colors.primary },
+  avatarBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.bg,
+  },
   photoText: { flex: 1, gap: 2 },
   photoTitle: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.ink },
   hint: { fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.textMuted },

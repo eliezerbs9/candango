@@ -35,7 +35,14 @@
       "expo-secure-store",
       "expo-web-browser",
       "expo-font",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Candango uses your photos to set your profile photo and workspace logo.",
+          "cameraPermission": "Candango uses your camera to take a profile photo."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
