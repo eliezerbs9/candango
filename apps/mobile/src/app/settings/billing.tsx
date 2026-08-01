@@ -11,6 +11,7 @@ import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, Vi
 import { Icon } from '@/components/Icon';
 import { Card } from '@/components/ui';
 import { useBilling } from '@/lib/api/billing';
+import { formatMoney } from '@/lib/format';
 import { colors, fonts, fontSize, radius, space } from '@/theme';
 
 import { settingsHeaderOptions } from './_header';
@@ -23,13 +24,9 @@ const STATUS_TONE: Record<string, { bg: string; fg: string }> = {
   locked: { bg: colors.dangerTint, fg: colors.danger },
 };
 
-function money(value: number, currency: string) {
-  try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency.toUpperCase() }).format(value);
-  } catch {
-    return `${currency.toUpperCase()} ${value.toFixed(2)}`;
-  }
-}
+// Billing amounts (pricePerSeat, monthlyTotal, invoice amounts) are all in
+// **cents** — format via formatMoney (÷100), matching the web's <Money>.
+const money = (cents: number, currency: string) => formatMoney(cents, (currency || 'USD').toUpperCase());
 
 export default function BillingScreen() {
   const { data: b, isLoading } = useBilling();
