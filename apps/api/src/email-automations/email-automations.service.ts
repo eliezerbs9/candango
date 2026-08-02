@@ -7,6 +7,8 @@ const shape = (a: {
   id: string;
   name: string;
   enabled: boolean;
+  category: string;
+  tags: string[];
   trigger: string;
   action: string;
   config: Prisma.JsonValue;
@@ -17,6 +19,8 @@ const shape = (a: {
   id: a.id,
   name: a.name,
   enabled: a.enabled,
+  category: a.category,
+  tags: a.tags,
   trigger: a.trigger,
   action: a.action,
   config: (a.config ?? {}) as Record<string, unknown>,
@@ -24,6 +28,9 @@ const shape = (a: {
   templateName: a.template?.name ?? null,
   updatedAt: a.updatedAt.toISOString(),
 });
+
+const cleanTags = (tags?: string[]) =>
+  tags ? [...new Set(tags.map((t) => t.trim()).filter(Boolean))].slice(0, 20) : undefined;
 
 @Injectable()
 export class EmailAutomationsService {
@@ -62,6 +69,8 @@ export class EmailAutomationsService {
         orgId,
         createdByUserId: userId,
         name: dto.name.trim(),
+        category: dto.category ?? 'general',
+        tags: cleanTags(dto.tags) ?? [],
         trigger: dto.trigger,
         action: dto.action,
         templateId: dto.action === 'send_email' ? dto.templateId : null,
@@ -88,6 +97,8 @@ export class EmailAutomationsService {
       where: { id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.category !== undefined ? { category: dto.category } : {}),
+        ...(dto.tags !== undefined ? { tags: cleanTags(dto.tags) } : {}),
         ...(dto.trigger !== undefined ? { trigger: dto.trigger } : {}),
         ...(dto.action !== undefined ? { action: dto.action } : {}),
         ...(dto.action !== undefined || dto.templateId !== undefined

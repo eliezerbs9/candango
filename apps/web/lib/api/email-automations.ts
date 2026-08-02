@@ -6,12 +6,21 @@ export interface EmailAutomation {
   id: string;
   name: string;
   enabled: boolean;
+  category: string;
+  tags: string[];
   trigger: string;
   action: AutomationAction;
   config: Record<string, unknown>;
   templateId: string | null;
   templateName: string | null;
   updatedAt: string;
+}
+
+/** System-defined automation category (users pick one but cannot create categories). */
+export interface AutomationCategory {
+  key: string;
+  label: string;
+  description: string;
 }
 
 export interface AutomationTriggerField {
@@ -33,6 +42,8 @@ export interface AutomationTrigger {
 
 export interface EmailAutomationBody {
   name?: string;
+  category?: string;
+  tags?: string[];
   trigger?: string;
   action?: AutomationAction;
   templateId?: string;
@@ -46,6 +57,10 @@ export function getEmailAutomations(token: string) {
 
 export function getAutomationTriggers(token: string) {
   return apiFetch<AutomationTrigger[]>('/email-automations/triggers', { token });
+}
+
+export function getAutomationCategories(token: string) {
+  return apiFetch<AutomationCategory[]>('/email-automations/categories', { token });
 }
 
 export function createEmailAutomation(token: string, body: EmailAutomationBody) {

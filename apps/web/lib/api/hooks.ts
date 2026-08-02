@@ -92,6 +92,7 @@ import {
 import {
   getEmailAutomations,
   getAutomationTriggers,
+  getAutomationCategories,
   createEmailAutomation,
   updateEmailAutomation,
   deleteEmailAutomation,
@@ -844,6 +845,16 @@ export function useAutomationTriggers() {
   return useQuery({
     queryKey: ['automation-triggers'],
     queryFn: () => getAutomationTriggers(token!),
+    enabled: !!token,
+    staleTime: Infinity,
+  });
+}
+
+export function useAutomationCategories() {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['automation-categories'],
+    queryFn: () => getAutomationCategories(token!),
     enabled: !!token,
     staleTime: Infinity,
   });

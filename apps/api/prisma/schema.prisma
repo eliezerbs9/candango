@@ -829,6 +829,8 @@ model EmailAutomation {
   orgId           String
   name            String
   enabled         Boolean   @default(true)
+  category        String    @default("general") // system-defined bucket (see automation-categories.ts); users cannot add categories
+  tags            String[]  @default([]) // freeform, user-creatable labels
   trigger         String
   action          String    @default("send_email") // send_email | create_activity
   config          Json      @default("{}")

@@ -27,8 +27,10 @@ import { notifications } from '@mantine/notifications';
 import { IconBolt, IconBrandGoogle, IconDots, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/useAuth';
+import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
 import {
   useAllStages,
+  useAutomationCategories,
   useAutomationTriggers,
   useCreateEmailAutomation,
   useDeleteEmailAutomation,
@@ -37,7 +39,7 @@ import {
   useGoogleStatus,
   useUpdateEmailAutomation,
 } from '@/lib/api/hooks';
-import type { AutomationTrigger, EmailAutomation } from '@/lib/api/email-automations';
+import type { AutomationCategory, AutomationTrigger, EmailAutomation } from '@/lib/api/email-automations';
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
@@ -47,12 +49,31 @@ export default function AutomationsSettingsPage() {
   const isAdmin = user?.role === 'Admin';
   const { data: automations = [], isLoading } = useEmailAutomations();
   const { data: triggers = [] } = useAutomationTriggers();
+  const { data: categories = [] } = useAutomationCategories();
   const { data: templates = [] } = useEmailTemplates();
   const { data: google } = useGoogleStatus();
   const del = useDeleteEmailAutomation();
   const update = useUpdateEmailAutomation();
 
   const triggerLabel = useMemo(() => Object.fromEntries(triggers.map((t) => [t.key, t.label])), [triggers]);
+  const categoryLabel = useMemo(() => Object.fromEntries(categories.map((c) => [c.key, c.label])), [categories]);
+  const allTags = useMemo(
+    () => [...new Set(automations.flatMap((a) => a.tags ?? []))].sort((a, b) => a.localeCompare(b)),
+    [automations],
+  );
+
+  // Category + tag filters for the list.
+  const [filterCategory, setFilterCategory] = useState<string | null>(null);
+  const [filterTag, setFilterTag] = useState<string | null>(null);
+  const visible = useMemo(
+    () =>
+      automations.filter(
+        (a) =>
+          (!filterCategory || a.category === filterCategory) &&
+          (!filterTag || (a.tags ?? []).includes(filterTag)),
+      ),
+    [automations, filterCategory, filterTag],
+  );
   const { data: stages = [] } = useAllStages();
   const stageName = (id: unknown) => (typeof id === 'string' ? stages.find((s) => s.id === id)?.name : null);
 
@@ -159,13 +180,46 @@ export default function AutomationsSettingsPage() {
         </Alert>
       )}
 
+      {automations.length > 0 && (
+        <Group gap="sm">
+          <Select
+            size="xs"
+            placeholder="All categories"
+            clearable
+            w={180}
+            data={categories.map((c) => ({ value: c.key, label: c.label }))}
+            value={filterCategory}
+            onChange={setFilterCategory}
+          />
+          <Select
+            size="xs"
+            placeholder="All tags"
+            clearable
+            w={180}
+            disabled={allTags.length === 0}
+            data={allTags.map((t) => ({ value: t, label: t }))}
+            value={filterTag}
+            onChange={setFilterTag}
+          />
+          {(filterCategory || filterTag) && (
+            <Text size="xs" c="dimmed">
+              {visible.length} of {automations.length}
+            </Text>
+          )}
+        </Group>
+      )}
+
       {automations.length === 0 ? (
         <Text size="sm" c="dimmed">
           No automations yet.
         </Text>
+      ) : visible.length === 0 ? (
+        <Text size="sm" c="dimmed">
+          No automations match these filters.
+        </Text>
       ) : (
         <Stack gap="sm">
-          {automations.map((a) => (
+          {visible.map((a) => (
             <Card key={a.id} withBorder radius="md" padding="md">
               <Group justify="space-between" wrap="nowrap">
                 <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
@@ -185,7 +239,19 @@ export default function AutomationsSettingsPage() {
                     </div>
                   </Tooltip>
                   <div style={{ minWidth: 0 }}>
-                    <Text fw={500}>{a.name}</Text>
+                    <Group gap={6} wrap="wrap" align="center">
+                      <Text fw={500}>{a.name}</Text>
+                      {a.category !== 'general' && (
+                        <Badge size="xs" variant="light" color="grape" style={{ textTransform: 'none' }}>
+                          {categoryLabel[a.category] ?? a.category}
+                        </Badge>
+                      )}
+                      {(a.tags ?? []).map((tag) => (
+                        <Badge key={tag} size="xs" variant="light" color="candango" style={{ textTransform: 'none' }}>
+                          {tag}
+                        </Badge>
+                      ))}
+                    </Group>
                     <Text size="sm" c="dimmed" lineClamp={2}>
                       <b>When</b> {triggerText(a)}, <b>then</b> {actionText(a)}.
                     </Text>
@@ -220,7 +286,14 @@ export default function AutomationsSettingsPage() {
         </Stack>
       )}
 
-      <AutomationModal opened={opened} onClose={ctl.close} editing={editing} triggers={triggers} />
+      <AutomationModal
+        opened={opened}
+        onClose={ctl.close}
+        editing={editing}
+        triggers={triggers}
+        categories={categories}
+        allTags={allTags}
+      />
     </Stack>
   );
 }
@@ -230,11 +303,15 @@ function AutomationModal({
   onClose,
   editing,
   triggers,
+  categories,
+  allTags,
 }: {
   opened: boolean;
   onClose: () => void;
   editing: EmailAutomation | null;
   triggers: AutomationTrigger[];
+  categories: AutomationCategory[];
+  allTags: string[];
 }) {
   const create = useCreateEmailAutomation();
   const update = useUpdateEmailAutomation();
@@ -243,6 +320,8 @@ function AutomationModal({
   const { data: google } = useGoogleStatus();
 
   const [name, setName] = useState('');
+  const [category, setCategory] = useState('general');
+  const [tags, setTags] = useState<string[]>([]);
   const [trigger, setTrigger] = useState<string | null>(null);
   const [action, setAction] = useState<'send_email' | 'create_activity'>('send_email');
   const [templateId, setTemplateId] = useState<string | null>(null);
@@ -252,6 +331,8 @@ function AutomationModal({
   useEffect(() => {
     if (!opened) return;
     setName(editing?.name ?? '');
+    setCategory(editing?.category ?? 'general');
+    setTags(editing?.tags ?? []);
     setTrigger(editing?.trigger ?? null);
     setAction(editing?.action ?? 'send_email');
     setTemplateId(editing?.templateId ?? null);
@@ -277,6 +358,8 @@ function AutomationModal({
     }
     const body = {
       name: name.trim(),
+      category,
+      tags,
       trigger,
       action,
       templateId: action === 'send_email' ? templateId ?? undefined : undefined,
@@ -305,6 +388,24 @@ function AutomationModal({
           value={name}
           onChange={(e) => setName(e.currentTarget.value)}
           data-autofocus
+        />
+        <Select
+          label="Category"
+          description="A fixed, system-defined bucket — pick the closest one."
+          data={categories.map((c) => ({ value: c.key, label: c.label }))}
+          value={category}
+          onChange={(v) => setCategory(v ?? 'general')}
+          allowDeselect={false}
+        />
+        <CreatableMultiSelect
+          label="Tags"
+          placeholder="e.g. Q3, VIP"
+          options={allTags.map((t) => ({ value: t, label: t }))}
+          value={tags}
+          onChange={setTags}
+          onCreate={async (t) => ({ value: t.trim(), label: t.trim() })}
+          createVerb="Add"
+          emptyText="Type to add a tag"
         />
         <Select
           label="When this happens (trigger)"

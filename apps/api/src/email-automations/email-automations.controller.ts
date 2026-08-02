@@ -5,6 +5,7 @@ import { CurrentUser, type AuthContext } from '../auth/current-user.decorator';
 import { EmailAutomationsService } from './email-automations.service';
 import { CreateEmailAutomationDto, UpdateEmailAutomationDto } from './dto/email-automation.dto';
 import { AUTOMATION_TRIGGERS } from './triggers';
+import { AUTOMATION_CATEGORIES } from './automation-categories';
 
 @UseGuards(JwtAuthGuard)
 @Controller('email-automations')
@@ -15,6 +16,12 @@ export class EmailAutomationsController {
   @Get('triggers')
   triggers() {
     return AUTOMATION_TRIGGERS;
+  }
+
+  /** The system-defined category list (users pick one but cannot add categories). */
+  @Get('categories')
+  categories() {
+    return AUTOMATION_CATEGORIES;
   }
 
   @Get()
