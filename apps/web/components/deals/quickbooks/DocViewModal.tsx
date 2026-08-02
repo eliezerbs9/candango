@@ -86,17 +86,17 @@ export function DocViewModal({
 
         {(() => {
           const subtotal = doc.lines.reduce((s, l) => s + l.amount, 0);
-          const tax = doc.totalAmount - subtotal;
+          const tax = doc.totalAmount - subtotal; // includes QuickBooks' computed tax on QBO docs
           const taxPct = doc.taxRateBps ? doc.taxRateBps / 100 : 0;
           return (
             <Stack gap={2} align="flex-end">
-              {taxPct > 0 && tax > 0 ? (
+              {tax > 0 ? (
                 <>
                   <Text size="sm" c="dimmed">
                     Subtotal: <Money value={subtotal} currency={doc.currency} />
                   </Text>
                   <Text size="sm" c="dimmed">
-                    Tax ({taxPct}%): <Money value={tax} currency={doc.currency} />
+                    {taxPct > 0 ? `Tax (${taxPct}%)` : 'Sales tax'}: <Money value={tax} currency={doc.currency} />
                   </Text>
                 </>
               ) : null}

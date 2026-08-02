@@ -128,16 +128,16 @@ export default function PrintDocPage() {
 
       {(() => {
         const subtotal = doc.lines.reduce((s, l) => s + l.amount, 0);
-        const tax = doc.totalAmount - subtotal;
+        const tax = doc.totalAmount - subtotal; // includes QuickBooks' computed tax on QBO docs
         const taxPct = doc.taxRateBps ? doc.taxRateBps / 100 : 0;
-        return taxPct > 0 && tax > 0 ? (
+        return tax > 0 ? (
           <div className="totals">
             <div className="line">
               <span>Subtotal</span>
               <span>{money(subtotal, doc.currency)}</span>
             </div>
             <div className="line">
-              <span>Tax ({taxPct}%)</span>
+              <span>{taxPct > 0 ? `Tax (${taxPct}%)` : 'Sales tax'}</span>
               <span>{money(tax, doc.currency)}</span>
             </div>
             <div className="line grand">
