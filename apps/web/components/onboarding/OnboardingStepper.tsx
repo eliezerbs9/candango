@@ -23,24 +23,26 @@ import {
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconBrandGoogle, IconCheck, IconGift, IconUpload } from '@tabler/icons-react';
+import { IconBrandGoogle, IconCheck, IconGift, IconReceipt, IconUpload } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/useAuth';
 import { fileToContainedDataUrl, fileToResizedDataUrl } from '@/lib/image';
 import {
   useCompleteOnboarding,
   useConnectGoogle,
+  useConnectQuickbooks,
   useGoogleStatus,
   useInviteUser,
   useOrganization,
   useProfile,
+  useQuickbooksStatus,
   useRoles,
   useUpdateOrganization,
   useUpdateProfile,
   useUsers,
 } from '@/lib/api/hooks';
 
-const STEP_COUNT = 5;
+const STEP_COUNT = 6;
 const STEP_KEY = 'candango.onboarding.step'; // survive the Google OAuth round-trip (full page reload)
 
 const TZ_LIST: string[] = (() => {
@@ -69,6 +71,7 @@ export function OnboardingStepper() {
   const { data: org } = useOrganization();
   const { data: profile } = useProfile();
   const { data: google } = useGoogleStatus();
+  const { data: qbo } = useQuickbooksStatus();
   const updateOrg = useUpdateOrganization();
   const updateProfile = useUpdateProfile();
   const complete = useCompleteOnboarding();
@@ -179,6 +182,16 @@ export function OnboardingStepper() {
     try {
       const { url } = await connectGoogle.mutateAsync();
       sessionStorage.setItem(STEP_KEY, '3'); // come back to the Connect Google step
+      window.location.href = url;
+    } catch (e) {
+      fail(e);
+    }
+  };
+  const connectQbo = useConnectQuickbooks();
+  const onConnectQbo = async () => {
+    try {
+      const { url } = await connectQbo.mutateAsync();
+      sessionStorage.setItem(STEP_KEY, '4'); // come back to the QuickBooks step
       window.location.href = url;
     } catch (e) {
       fail(e);
@@ -302,8 +315,8 @@ export function OnboardingStepper() {
                 <Title order={5}>Connect Google to unlock the full app</Title>
               </Group>
               <Text size="sm">
-                Candango works best connected to Google. <b>Without it, email features are unavailable</b> — you
-                won&apos;t be able to:
+                Candango is best with <b>both Google and QuickBooks</b>. Google powers your email &amp; calendar —{' '}
+                <b>without it, email features are unavailable</b>, so you won&apos;t be able to:
               </Text>
               <List size="sm" spacing={4}>
                 <List.Item>Send estimates &amp; invoices by email, or use email templates &amp; automations</List.Item>
@@ -326,7 +339,54 @@ export function OnboardingStepper() {
           )}
         </Stepper.Step>
 
-        {/* 5 — Trial & billing */}
+        {/* 5 — Connect QuickBooks */}
+        <Stepper.Step label="Connect QuickBooks" description={qbo?.connected ? 'Connected' : 'Recommended'}>
+          {qbo?.connected ? (
+            <Card withBorder radius="md" padding="lg" mt="md" bg="var(--mantine-color-teal-0)" c="black">
+              <Group gap="sm" mb="xs">
+                <ThemeIcon variant="light" color="teal" radius="xl" size="lg">
+                  <IconCheck size={20} />
+                </ThemeIcon>
+                <Title order={4}>QuickBooks is connected! 🎉</Title>
+              </Group>
+              <Text size="sm" c="black">
+                Estimates and invoices now sync with QuickBooks — products, taxes and customers stay in one place.
+                Manage it anytime under Settings → Integrations.
+              </Text>
+            </Card>
+          ) : (
+            <Stack mt="md" gap="sm">
+              <Group gap="xs">
+                <ThemeIcon variant="light" color="candango" radius="xl">
+                  <IconReceipt size={18} />
+                </ThemeIcon>
+                <Title order={5}>Connect QuickBooks for estimates &amp; invoices</Title>
+              </Group>
+              <Text size="sm">
+                Candango is best with <b>both Google and QuickBooks</b>. QuickBooks powers your billing — without it you
+                can still create native estimates, but you won&apos;t be able to:
+              </Text>
+              <List size="sm" spacing={4}>
+                <List.Item>Sync estimates &amp; invoices with QuickBooks (products, taxes, customers)</List.Item>
+                <List.Item>Pull your QuickBooks item catalog into estimates</List.Item>
+                <List.Item>Convert won deals into QuickBooks invoices</List.Item>
+              </List>
+              <Text size="sm" c="dimmed">
+                Optional and per-workspace — you can connect it later under Settings → Integrations.
+              </Text>
+              <Button
+                leftSection={<IconReceipt size={16} />}
+                onClick={onConnectQbo}
+                loading={connectQbo.isPending}
+                w="fit-content"
+              >
+                Connect QuickBooks
+              </Button>
+            </Stack>
+          )}
+        </Stepper.Step>
+
+        {/* 6 — Trial & billing */}
         <Stepper.Step label="You're all set" description="Free trial">
           <Card withBorder radius="md" padding="lg" mt="md" bg="var(--mantine-color-candango-0)" c="black">
             <Group gap="sm" mb="xs">
@@ -354,8 +414,18 @@ export function OnboardingStepper() {
           Back
         </Button>
         {active < STEP_COUNT - 1 ? (
-          <Button onClick={() => goTo(active + 1)} loading={busy}>
-            {active <= 1 ? 'Save & continue' : 'Next'}
+          <Button
+            onClick={() => goTo(active + 1)}
+            loading={busy}
+            variant={
+              (active === 3 && !google?.connected) || (active === 4 && !qbo?.connected) ? 'default' : 'filled'
+            }
+          >
+            {active <= 1
+              ? 'Save & continue'
+              : (active === 3 && !google?.connected) || (active === 4 && !qbo?.connected)
+                ? 'Not now'
+                : 'Next'}
           </Button>
         ) : (
           <Button onClick={finish} loading={complete.isPending} leftSection={<IconCheck size={16} />}>
