@@ -7,10 +7,12 @@ import { notifications } from '@mantine/notifications';
 import { ApiError } from '@/lib/api/client';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
 import { RichTextBody } from '@/components/common/RichTextBody';
+import { ConnectGoogleNotice } from '@/components/email/ConnectGoogleNotice';
 import {
   useDealRecipients,
   useDeals,
   useEmailTemplates,
+  useGoogleStatus,
   useOrganization,
   usePersons,
   useProfile,
@@ -64,6 +66,7 @@ export function ComposeEmail({
   const { data: templates = [] } = useEmailTemplates();
   const { data: profile } = useProfile();
   const { data: org } = useOrganization();
+  const { data: google } = useGoogleStatus();
   const send = useSendMessage();
   const renderTpl = useRenderEmailTemplate();
 
@@ -206,6 +209,15 @@ export function ComposeEmail({
       },
     );
   };
+
+  // Sending goes through the user's Gmail — no composing/sending without a mailbox connection.
+  if (!google?.mailbox) {
+    return (
+      <Modal opened={opened} onClose={onClose} title={reply ? 'Reply' : 'New email'} size="lg">
+        <ConnectGoogleNotice />
+      </Modal>
+    );
+  }
 
   return (
     <Modal opened={opened} onClose={onClose} title={reply ? 'Reply' : 'New email'} size="lg">
