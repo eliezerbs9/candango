@@ -231,6 +231,49 @@ export class DealsService {
     return deal;
   }
 
+  /**
+   * The deal's people for the email composer: primary contact first, then participants, then the
+   * deal company's contacts — deduped. Resolved from the deal's actual relations (not the global
+   * person list), so it works regardless of client-side data. `email` may be null.
+   */
+  async recipients(orgId: string, id: string) {
+    const personSelect = { id: true, name: true, firstName: true, lastName: true, emails: true } as const;
+    const deal = await this.prisma.deal.findFirst({
+      where: { id, orgId, deletedAt: null },
+      select: {
+        primaryPerson: { select: personSelect },
+        participants: { select: { person: { select: personSelect } } },
+        company: { select: { contacts: { select: { person: { select: personSelect } } } } },
+      },
+    });
+    if (!deal) throw new NotFoundException('Deal not found');
+
+    const firstEmail = (emails: unknown): string | null => {
+      if (!Array.isArray(emails) || emails.length === 0) return null;
+      const e = emails[0];
+      if (typeof e === 'string') return e;
+      if (e && typeof e === 'object' && typeof (e as { value?: unknown }).value === 'string') {
+        return (e as { value: string }).value;
+      }
+      return null;
+    };
+
+    type P = { id: string; name: string; firstName: string; lastName: string; emails: unknown };
+    const ordered: P[] = [
+      ...(deal.primaryPerson ? [deal.primaryPerson] : []),
+      ...deal.participants.map((p) => p.person),
+      ...(deal.company?.contacts.map((c) => c.person) ?? []),
+    ];
+    const seen = new Set<string>();
+    const people: { id: string; name: string; email: string | null }[] = [];
+    for (const p of ordered) {
+      if (seen.has(p.id)) continue;
+      seen.add(p.id);
+      people.push({ id: p.id, name: p.name || `${p.firstName} ${p.lastName}`.trim(), email: firstEmail(p.emails) });
+    }
+    return people;
+  }
+
   async update(orgId: string, id: string, dto: UpdateDealDto, currentUserId?: string) {
     const before = await this.get(orgId, id);
     const data: Prisma.DealUncheckedUpdateInput = {

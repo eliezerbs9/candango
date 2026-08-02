@@ -58,6 +58,13 @@ export class DealsController {
     return this.svc.stageHistory(u.orgId, id);
   }
 
+  /** The deal's people (primary contact, participants, company contacts) for the email composer. */
+  @Get(':id/recipients')
+  @Scopes('deals:read')
+  recipients(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.recipients(u.orgId, id);
+  }
+
   @Get(':id/timeline')
   @Scopes('deals:read')
   timeline(

@@ -34,6 +34,17 @@ export function getDeals(token: string, filters: DealFilters = {}) {
   return apiFetch<ApiDeal[]>(`/deals${suffix}`, { token });
 }
 
+export interface DealRecipient {
+  id: string;
+  name: string;
+  email: string | null;
+}
+
+/** The deal's people (primary contact, participants, company contacts) for the email composer. */
+export function getDealRecipients(token: string, dealId: string) {
+  return apiFetch<DealRecipient[]>(`/deals/${dealId}/recipients`, { token });
+}
+
 export function createDeal(
   token: string,
   body: {

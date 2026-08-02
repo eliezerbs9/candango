@@ -8,6 +8,7 @@ import { ApiError } from '@/lib/api/client';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
 import { RichTextBody } from '@/components/common/RichTextBody';
 import {
+  useDealRecipients,
   useDeals,
   useEmailTemplates,
   useOrganization,
@@ -88,23 +89,17 @@ export function ComposeEmail({
     [org, profile],
   );
 
-  // The deal's people: its primary contact + everyone at the deal's company.
-  const dealPeopleOf = (id: string | null) => {
-    if (!id) return [];
-    const deal = deals.find((d) => d.id === id);
-    if (!deal) return [];
-    return persons.filter(
-      (p) =>
-        p.id === deal.primaryPersonId ||
-        (deal.companyId ? p.companies.some((c) => c.id === deal.companyId) : false),
-    );
-  };
-  const dealEmails = (id: string | null): string[] =>
-    dealPeopleOf(id)
-      .map((p) => p.email)
-      .filter((e): e is string => !!e);
-
-  const dealPeople = useMemo(() => dealPeopleOf(dealId), [dealId, deals, persons]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The deal's people (primary contact → participants → company contacts), resolved server-side
+  // from the deal's actual relations — reliable regardless of the global person list.
+  const { data: dealRecipients = [] } = useDealRecipients(dealId);
+  const recipientOptions = useMemo(
+    () =>
+      dealRecipients
+        .filter((r) => r.email)
+        .map((r) => ({ value: r.email as string, label: r.name ? `${r.name} · ${r.email}` : (r.email as string) })),
+    [dealRecipients],
+  );
+  const recipientEmails = useMemo(() => recipientOptions.map((o) => o.value), [recipientOptions]);
 
   // Once the user edits "To", stop auto-prefilling it from the deal.
   const toTouched = useRef(false);
@@ -113,7 +108,7 @@ export function ComposeEmail({
     if (!opened) return;
     toTouched.current = false;
     setDealId(defaultDealId ?? null);
-    setTo(reply ? reply.to : dealEmails(defaultDealId ?? null));
+    setTo(reply ? reply.to : []);
     setSubject(reply ? reply.subject : defaultSubject ?? '');
     setBody('');
     setTemplateId(null);
@@ -121,14 +116,12 @@ export function ComposeEmail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened]);
 
-  // Deals/persons load async — if "To" is still empty and untouched when the deal's people
-  // arrive, prefill it (so the recipients aren't missed just because data loaded after open).
+  // The deal's recipients load async — prefill "To" once they arrive (unless the user touched it).
   useEffect(() => {
     if (!opened || reply || toTouched.current || to.length > 0) return;
-    const emails = dealEmails(dealId);
-    if (emails.length > 0) setTo(emails);
+    if (recipientEmails.length > 0) setTo(recipientEmails);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dealPeople]);
+  }, [recipientEmails]);
 
   // Load a template, resolving its variables against the current deal.
   const applyTemplate = (id: string | null, forDealId: string | null) => {
@@ -149,7 +142,10 @@ export function ComposeEmail({
 
   const onDealChange = (id: string | null) => {
     setDealId(id);
-    if (!reply) setTo(dealEmails(id)); // prefill recipients from the deal's people
+    if (!reply) {
+      toTouched.current = false;
+      setTo([]); // re-prefills from the new deal's recipients once they load
+    }
     if (templateId) applyTemplate(templateId, id); // re-resolve the chosen template for the new deal
   };
 
@@ -233,9 +229,7 @@ export function ComposeEmail({
         <CreatableMultiSelect
           label="To"
           placeholder="Type a name or email"
-          options={dealPeople
-            .filter((p) => p.email)
-            .map((p) => ({ value: p.email as string, label: p.name ? `${p.name} · ${p.email}` : (p.email as string) }))}
+          options={recipientOptions}
           value={to}
           onChange={(v) => {
             toTouched.current = true;

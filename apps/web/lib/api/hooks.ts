@@ -16,6 +16,7 @@ import {
   createDeal,
   getDeal,
   getDeals,
+  getDealRecipients,
   getStageHistory,
   loseDeal,
   reopenDeal,
@@ -205,6 +206,15 @@ export function useDeals(filters: DealFilters = {}) {
     queryKey: ['deals', filters],
     queryFn: () => getDeals(token!, filters),
     enabled: !!token,
+  });
+}
+
+export function useDealRecipients(id: string | null) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['deal-recipients', id],
+    queryFn: () => getDealRecipients(token!, id!),
+    enabled: !!token && !!id,
   });
 }
 
