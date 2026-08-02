@@ -292,7 +292,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
           isStatusLocked={(d) => d.status === 'closed' || isReadOnlyDoc(d)}
           emptyText={mode === 'link' ? 'Link the deal to add estimates.' : 'No estimates yet.'}
           connected={connected}
-          actions={mode === 'link' ? undefined : estimateActions}
+          actions={estimateActions}
         />
 
         {/* Invoices — created only by converting estimates; shown read-only if kept after a disconnect */}
@@ -398,6 +398,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         currency={deal.currency}
         items={itemList}
         taxRatePct={taxRatePct}
+        qboTax={mode === 'qbo'}
         taxDefaultOn={org?.taxDefaultOn}
         initial={estEditing}
         loading={createEstimate.isPending || updateEstimate.isPending}
@@ -411,6 +412,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         currency={deal.currency}
         items={itemList}
         taxRatePct={taxRatePct}
+        qboTax={mode === 'qbo'}
         taxDefaultOn={org?.taxDefaultOn}
         initial={invEditing}
         loading={updateInvoice.isPending}

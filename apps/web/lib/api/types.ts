@@ -98,6 +98,7 @@ export interface CreateDocInput {
   includeInValue?: boolean;
   setAsValue?: boolean;
   taxRateBps?: number; // local docs only; QBO computes its own tax
+  applyTax?: boolean; // QBO docs: make the doc taxable so QuickBooks computes sales tax
 }
 
 export interface QbCustomer {

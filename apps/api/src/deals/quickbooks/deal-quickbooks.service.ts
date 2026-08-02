@@ -76,6 +76,7 @@ export class DealQuickbooksService {
       shipAddr: deal.shipTo as Addr,
       privateNote: dealPrivateNote(deal),
       memo: dto.notes ?? undefined,
+      applyTax: dto.applyTax,
     };
   }
 

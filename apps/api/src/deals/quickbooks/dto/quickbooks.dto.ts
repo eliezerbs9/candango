@@ -87,6 +87,11 @@ export class CreateDocDto {
   @Max(5000)
   taxRateBps?: number;
 
+  /** QBO docs: make the document taxable so QuickBooks computes sales tax. */
+  @IsOptional()
+  @IsBoolean()
+  applyTax?: boolean;
+
   /** For invoices: the local DealEstimate this was generated from. */
   @IsOptional()
   @IsString()

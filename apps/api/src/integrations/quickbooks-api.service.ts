@@ -44,6 +44,7 @@ export interface DocInput {
   privateNote?: string; // internal note (traceability: deal ref + id) — QBO PrivateNote
   memo?: string; // customer-facing message shown on the document — QBO CustomerMemo
   linkedTxns?: { txnId: string; txnType: string }[]; // e.g. estimates this invoice was generated from
+  applyTax?: boolean; // mark lines taxable + let QuickBooks Automated Sales Tax compute the amount
 }
 export interface NormalizedLine {
   description: string;
@@ -184,12 +185,19 @@ export class QuickbooksApiService {
   }
 
   // --- Items (Products / Services) ---
-  async listItems(orgId: string): Promise<{ id: string; name: string }[]> {
+  // QuickBooks Items carry a UnitPrice (auto-filled on the estimate) but no unit
+  // of measure in the standard API, so `unit` isn't available for QBO items.
+  async listItems(orgId: string): Promise<{ id: string; name: string; description: string | null; unitPrice: number | null }[]> {
     const r = await this.query(
       orgId,
-      "select Id, Name from Item where Active = true and Type in ('Service','Inventory','NonInventory') MAXRESULTS 200",
+      "select Id, Name, Description, UnitPrice from Item where Active = true and Type in ('Service','Inventory','NonInventory') MAXRESULTS 200",
     );
-    return (r?.QueryResponse?.Item ?? []).map((i: any) => ({ id: i.Id, name: i.Name }));
+    return (r?.QueryResponse?.Item ?? []).map((i: any) => ({
+      id: i.Id,
+      name: i.Name,
+      description: i.Description ?? null,
+      unitPrice: i.UnitPrice != null ? fromQbAmount(i.UnitPrice) : null,
+    }));
   }
 
   // --- Customers ---
@@ -245,13 +253,19 @@ export class QuickbooksApiService {
   }
 
   // --- Estimates / Invoices ---
-  private async buildLines(orgId: string, realmId: string, lines: LineInput[]) {
+  private async buildLines(orgId: string, realmId: string, lines: LineInput[], taxable = false) {
     const fallback = await this.defaultItemId(orgId, realmId);
     return lines.map((l) => ({
       DetailType: 'SalesItemLineDetail',
       Amount: toQbAmount(l.quantity * l.unitPrice),
       Description: l.description,
-      SalesItemLineDetail: { ItemRef: { value: l.itemId || fallback }, Qty: l.quantity, UnitPrice: toQbAmount(l.unitPrice) },
+      SalesItemLineDetail: {
+        ItemRef: { value: l.itemId || fallback },
+        Qty: l.quantity,
+        UnitPrice: toQbAmount(l.unitPrice),
+        // 'TAX' = taxable → QuickBooks Automated Sales Tax computes the rate from the address.
+        ...(taxable ? { TaxCodeRef: { value: 'TAX' } } : {}),
+      },
     }));
   }
 
@@ -281,8 +295,10 @@ export class QuickbooksApiService {
     const { realmId } = await this.authContext(orgId);
     const body: Record<string, unknown> = {
       CustomerRef: { value: input.customerId },
-      Line: await this.buildLines(orgId, realmId, input.lines),
+      Line: await this.buildLines(orgId, realmId, input.lines, input.applyTax),
     };
+    // Let QuickBooks add sales tax on top of the line amounts (Automated Sales Tax).
+    if (input.applyTax) body.GlobalTaxCalculation = 'TaxExcluded';
     if (input.txnDate) body.TxnDate = input.txnDate.slice(0, 10);
     if (input.currency && input.currency !== 'USD') body.CurrencyRef = { value: input.currency };
     const bill = toQbAddr(input.billAddr);

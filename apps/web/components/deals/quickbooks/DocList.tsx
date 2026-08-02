@@ -67,11 +67,6 @@ export function DocList({
                     <Text size="sm" fw={500}>
                       {d.docNumber ? `#${d.docNumber}` : 'Draft'}
                     </Text>
-                    {connected && d.source === 'native' && (
-                      <Badge size="xs" variant="light" color="grape">
-                        local
-                      </Badge>
-                    )}
                     {d.includeInValue && (
                       <Badge size="xs" variant="light" color="green">
                         in value

@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Alert, Badge, Button, Card, Group, SimpleGrid, Stack, Text } from '@mantine/core';
+import { Alert, Badge, Button, Card, Group, Modal, SimpleGrid, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconBrandGoogle, IconInfoCircle, IconReceipt } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
@@ -15,31 +15,74 @@ import {
   useQuickbooksStatus,
 } from '@/lib/api/hooks';
 
-/** Shows a toast for ?google=…/?quickbooks=… set by the OAuth callback redirect, then cleans the URL.
- *  `redirectTo` (used for QuickBooks): after a successful connect, send the user there after 5s so they
- *  can review their imported items and decide on tax. */
-function useOAuthResultToast(param: string, label: string, redirectTo?: string) {
-  const router = useRouter();
+/** Shows a toast for ?google=… set by the OAuth callback redirect, then cleans the URL. */
+function useOAuthResultToast(param: string, label: string) {
   useEffect(() => {
     const result = new URLSearchParams(window.location.search).get(param);
     if (!result) return;
+    notifications.show(
+      result === 'connected'
+        ? { message: `${label} connected`, color: 'green' }
+        : { message: `${label} connection failed — please try again`, color: 'red' },
+    );
     window.history.replaceState(null, '', window.location.pathname);
-    if (result !== 'connected') {
-      notifications.show({ message: `${label} connection failed — please try again`, color: 'red' });
+  }, [param, label]);
+}
+
+/**
+ * After the QuickBooks OAuth callback returns (?quickbooks=connected), show a modal
+ * with a 5s countdown and take the user to Invoicing settings to review their
+ * imported items and set sales tax. Reads the param once (StrictMode-safe).
+ */
+function QbConnectRedirect() {
+  const router = useRouter();
+  const processed = useRef(false);
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (processed.current) return;
+    const result = new URLSearchParams(window.location.search).get('quickbooks');
+    if (!result) return;
+    processed.current = true;
+    window.history.replaceState(null, '', window.location.pathname);
+    if (result === 'connected') setCount(5);
+    else notifications.show({ message: 'QuickBooks connection failed — please try again', color: 'red' });
+  }, []);
+
+  useEffect(() => {
+    if (count == null) return;
+    if (count <= 0) {
+      router.push('/settings/invoicing');
       return;
     }
-    if (!redirectTo) {
-      notifications.show({ message: `${label} connected`, color: 'green' });
-      return;
-    }
-    notifications.show({
-      message: `${label} connected — taking you to Invoicing settings to review your items and tax…`,
-      color: 'green',
-      autoClose: 5000,
-    });
-    const t = setTimeout(() => router.push(redirectTo), 5000);
+    const t = setTimeout(() => setCount((c) => (c == null ? c : c - 1)), 1000);
     return () => clearTimeout(t);
-  }, [param, label, redirectTo, router]);
+  }, [count, router]);
+
+  const go = () => {
+    setCount(null);
+    router.push('/settings/invoicing');
+  };
+
+  return (
+    <Modal opened={count != null} onClose={() => setCount(null)} title="QuickBooks connected" centered withCloseButton>
+      <Stack gap="sm">
+        <Text size="sm">
+          Your QuickBooks account is connected. We'll take you to <b>Invoicing settings</b> to review the products
+          imported from QuickBooks and choose whether to apply sales tax.
+        </Text>
+        <Text size="sm" c="dimmed">
+          Redirecting in {count ?? 0}s…
+        </Text>
+        <Group justify="flex-end" mt="xs">
+          <Button variant="default" onClick={() => setCount(null)}>
+            Stay here
+          </Button>
+          <Button onClick={go}>Go now</Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
 }
 
 function GoogleCard() {
@@ -90,7 +133,6 @@ function QuickbooksCard() {
   const connect = useConnectQuickbooks();
   const disconnect = useDisconnectQuickbooks();
   const connected = !!status?.connected;
-  useOAuthResultToast('quickbooks', 'QuickBooks', '/settings/invoicing');
 
   const onConnect = async () => {
     try {
@@ -131,6 +173,7 @@ function QuickbooksCard() {
 export default function IntegrationsPage() {
   return (
     <Stack>
+      <QbConnectRedirect />
       <Alert variant="light" color="blue" icon={<IconInfoCircle size={16} />}>
         Full email sync is pending.
       </Alert>
