@@ -13,6 +13,7 @@ import {
   IconPrinter,
   IconReceipt,
   IconSend,
+  IconTrash,
   IconX,
 } from '@tabler/icons-react';
 import {
@@ -33,7 +34,7 @@ import { ApiError } from '@/lib/api/client';
 import { fetchDocPdf } from '@/lib/api/quickbooks';
 import { runBusy } from '@/lib/ui/useBusy';
 import type { ApiDeal, CreateDocInput, DealDoc } from '@/lib/api/types';
-import { DocList } from './DocList';
+import { DocList, type DocAction } from './DocList';
 import { DocEditorModal } from './DocEditorModal';
 import { DocViewModal } from './DocViewModal';
 import { LinkAccountModal } from './LinkAccountModal';
@@ -69,7 +70,6 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const connected = !!qb?.connected;
   const linked = !!deal.qbSubcustomerId;
   const mode: 'native' | 'link' | 'qbo' = !connected ? 'native' : linked ? 'qbo' : 'link';
-  const canSelect = mode !== 'link';
   // QBO-sourced docs are kept after a disconnect, but become read-only (can't edit/change status/send).
   const isReadOnlyDoc = (d: DealDoc) => !connected && d.source === 'quickbooks';
 
@@ -86,8 +86,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const [estEditing, setEstEditing] = useState<DealDoc | null>(null);
   const [invEditing, setInvEditing] = useState<DealDoc | null>(null);
   const [view, setView] = useState<{ doc: DealDoc; kind: 'Estimate' | 'Invoice' } | null>(null);
-  const [estSel, setEstSel] = useState<Set<string>>(new Set());
-  const [invSel, setInvSel] = useState<Set<string>>(new Set());
+  const [convertDoc, setConvertDoc] = useState<DealDoc | null>(null); // estimate being converted to an invoice
   const [composeOpen, composeCtl] = useDisclosure(false);
   const [compose, setCompose] = useState<{
     subject: string;
@@ -102,17 +101,6 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   // Show the invoices section while connected, OR when disconnected docs were kept (read-only).
   const showInvoices = mode === 'qbo' || invoiceDocs.length > 0;
   const hasKeptQboDocs = !connected && [...estimateDocs, ...invoiceDocs].some((d) => d.source === 'quickbooks');
-  const selEstimates = estimateDocs.filter((e) => estSel.has(e.id));
-  const selInvoices = invoiceDocs.filter((i) => invSel.has(i.id));
-  // Closed (already-invoiced) estimates are terminal: value / convert / send don't apply to them.
-  const openEstimates = selEstimates.filter((e) => e.status !== 'closed');
-
-  const toggle = (set: (fn: (p: Set<string>) => Set<string>) => void) => (id: string) =>
-    set((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
 
   // Connected → open the actual QuickBooks PDF; otherwise our own print page.
   const openDoc = async (doc: DealDoc, kind: 'estimate' | 'invoice') => {
@@ -214,6 +202,37 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
     }
   };
 
+  // Per-row actions (shown in each doc's ⋯ menu) — only the ones that apply to that doc.
+  const estimateActions = (d: DealDoc): DocAction[] => {
+    const ro = isReadOnlyDoc(d);
+    const live = d.status !== 'closed' && !ro; // closed estimates are terminal
+    const acts: DocAction[] = [];
+    if (mode === 'qbo' && live)
+      acts.push({ key: 'send', label: 'Send', icon: <IconSend size={14} />, onClick: () => startSend([d], 'estimate') });
+    acts.push({ key: 'print', label: 'Print', icon: <IconPrinter size={14} />, onClick: () => printMany([d], 'estimate') });
+    if (mode === 'qbo' && live)
+      acts.push({ key: 'convert', label: 'Convert to invoice', icon: <IconReceipt size={14} />, onClick: () => { setConvertDoc(d); convertCtl.open(); } });
+    if (live) {
+      if (d.includeInValue) {
+        // The value must stay backed by ≥1 estimate — only allow removing when there's more than one.
+        if (estimateDocs.length > 1)
+          acts.push({ key: 'value', label: 'Remove from deal value', icon: <IconX size={14} />, onClick: () => markEstimates([d.id], false) });
+      } else {
+        acts.push({ key: 'value', label: 'Add to deal value', icon: <IconCurrencyDollar size={14} />, onClick: () => markEstimates([d.id], true) });
+      }
+      acts.push({ key: 'delete', label: 'Delete', icon: <IconTrash size={14} />, color: 'red', onClick: () => removeEstimate(d) });
+    }
+    return acts;
+  };
+
+  const invoiceActions = (d: DealDoc): DocAction[] => {
+    const acts: DocAction[] = [];
+    if (!isReadOnlyDoc(d))
+      acts.push({ key: 'send', label: 'Send', icon: <IconSend size={14} />, onClick: () => startSend([d], 'invoice') });
+    acts.push({ key: 'print', label: 'Print', icon: <IconPrinter size={14} />, onClick: () => printMany([d], 'invoice') });
+    return acts;
+  };
+
   return (
     <Card withBorder radius="md" padding="lg">
       <Stack gap="md">
@@ -249,53 +268,15 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
             </Button>
           )}
         </Group>
-        {canSelect && estSel.size > 0 && (
-          <Group gap="xs">
-            <Text size="sm" c="dimmed">{estSel.size} selected</Text>
-            {openEstimates.length > 0 && (
-              <>
-                <Button size="xs" variant="light" leftSection={<IconCurrencyDollar size={14} />} onClick={() => markEstimates(openEstimates.map((e) => e.id), true)}>
-                  Use as deal value
-                </Button>
-                {/* The value must stay backed by ≥1 estimate — only offer "remove" when there's more than one. */}
-                {(estimates.data?.length ?? 0) > 1 && (
-                  <Button size="xs" variant="light" color="gray" leftSection={<IconX size={14} />} onClick={() => markEstimates(openEstimates.map((e) => e.id), false)}>
-                    Remove from value
-                  </Button>
-                )}
-                {mode === 'qbo' && (
-                  <Button size="xs" variant="light" color="teal" leftSection={<IconReceipt size={14} />} onClick={convertCtl.open}>
-                    Convert to invoice
-                  </Button>
-                )}
-                {mode === 'qbo' && (
-                  <Button size="xs" variant="light" leftSection={<IconSend size={14} />} onClick={() => startSend(openEstimates, 'estimate')}>
-                    Send
-                  </Button>
-                )}
-              </>
-            )}
-            <Button size="xs" variant="light" leftSection={<IconPrinter size={14} />} onClick={() => printMany(selEstimates, 'estimate')}>
-              Print
-            </Button>
-            <Button size="xs" variant="subtle" color="gray" onClick={() => setEstSel(new Set())}>
-              Clear
-            </Button>
-          </Group>
-        )}
         <DocList
           docs={estimateDocs}
           statuses={ESTIMATE_STATUSES}
           onSetStatus={(id, status) => setEstStatus.mutate({ id, status }, { onError: fail })}
           onOpen={(doc) => setView({ doc, kind: 'Estimate' })}
-          selectedIds={canSelect ? estSel : undefined}
-          onToggleSelect={canSelect ? toggle(setEstSel) : undefined}
           isStatusLocked={(d) => d.status === 'closed' || isReadOnlyDoc(d)}
           emptyText={mode === 'link' ? 'Link the deal to add estimates.' : 'No estimates yet.'}
           connected={connected}
-          onDelete={removeEstimate}
-          // Can't delete a converted (closed) estimate, or a QBO estimate while disconnected.
-          isDeletable={(d) => d.status !== 'closed' && !isReadOnlyDoc(d)}
+          actions={mode === 'link' ? undefined : estimateActions}
         />
 
         {/* Invoices — created only by converting estimates; shown read-only if kept after a disconnect */}
@@ -303,30 +284,15 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
           <>
             <Divider />
             <Text fw={500}>Invoices</Text>
-            {mode === 'qbo' && invSel.size > 0 && (
-              <Group gap="xs">
-                <Text size="sm" c="dimmed">{invSel.size} selected</Text>
-                <Button size="xs" variant="light" leftSection={<IconSend size={14} />} onClick={() => startSend(selInvoices, 'invoice')}>
-                  Send
-                </Button>
-                <Button size="xs" variant="light" leftSection={<IconPrinter size={14} />} onClick={() => printMany(selInvoices, 'invoice')}>
-                  Print
-                </Button>
-                <Button size="xs" variant="subtle" color="gray" onClick={() => setInvSel(new Set())}>
-                  Clear
-                </Button>
-              </Group>
-            )}
             <DocList
               docs={invoiceDocs}
               statuses={INVOICE_STATUSES}
               onSetStatus={(id, status) => setInvStatus.mutate({ id, status }, { onSuccess: () => stageCtl.open(), onError: fail })}
               onOpen={(doc) => setView({ doc, kind: 'Invoice' })}
-              selectedIds={mode === 'qbo' ? invSel : undefined}
-              onToggleSelect={mode === 'qbo' ? toggle(setInvSel) : undefined}
               isStatusLocked={(d) => isReadOnlyDoc(d)}
-              emptyText="No invoices yet — select estimate(s) above and convert them."
+              emptyText="No invoices yet — convert an estimate (⋯ → Convert to invoice)."
               connected={connected}
+              actions={mode === 'qbo' ? invoiceActions : undefined}
             />
           </>
         )}
@@ -357,12 +323,15 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
 
       <ConvertToInvoiceModal
         dealId={deal.id}
-        estimates={openEstimates}
+        estimates={convertDoc ? [convertDoc] : []}
         currency={deal.currency}
         opened={convertOpen}
-        onClose={convertCtl.close}
+        onClose={() => {
+          convertCtl.close();
+          setConvertDoc(null);
+        }}
         onConverted={() => {
-          setEstSel(new Set());
+          setConvertDoc(null);
           stageCtl.open(); // offer to move the deal in the pipeline after converting
         }}
       />
