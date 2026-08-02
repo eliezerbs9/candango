@@ -11,6 +11,7 @@ import {
   Image,
   Loader,
   Paper,
+  Select,
   Stack,
   Text,
   TextInput,
@@ -31,12 +32,14 @@ export default function GeneralSettingsPage() {
   const [name, setName] = useState('');
   const [logo, setLogo] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
+  const [nameFormat, setNameFormat] = useState<'first_last' | 'last_first'>('first_last');
 
   useEffect(() => {
     if (org) {
       setName(org.name);
       setLogo(org.logoUrl);
       setLogoError(false);
+      setNameFormat(org.qboNameFormat);
     }
   }, [org]);
 
@@ -62,7 +65,7 @@ export default function GeneralSettingsPage() {
 
   const save = () =>
     update.mutate(
-      { name },
+      { name, qboNameFormat: nameFormat },
       { onSuccess: () => notifications.show({ message: 'Workspace updated', color: 'green' }), onError: fail },
     );
 
@@ -123,6 +126,19 @@ export default function GeneralSettingsPage() {
         value={name}
         onChange={(e) => setName(e.currentTarget.value)}
         disabled={!isAdmin}
+      />
+
+      <Select
+        label="QuickBooks customer name format"
+        description="How a contact's name is written when creating a QuickBooks customer."
+        data={[
+          { value: 'first_last', label: 'First Last (e.g. Sherry Lee)' },
+          { value: 'last_first', label: 'Last, First (e.g. Lee, Sherry)' },
+        ]}
+        value={nameFormat}
+        onChange={(v) => setNameFormat((v as 'first_last' | 'last_first') ?? 'first_last')}
+        disabled={!isAdmin}
+        allowDeselect={false}
       />
 
       <Group gap="xl">

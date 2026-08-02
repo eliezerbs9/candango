@@ -7,12 +7,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/auth/store';
 
+export type QboNameFormat = 'first_last' | 'last_first';
+
 export interface Organization {
   id: string;
   name: string;
   slug: string;
   plan: string;
   logoUrl: string | null;
+  qboNameFormat: QboNameFormat;
   onboardingState: Record<string, unknown>;
   createdAt: string;
 }
@@ -30,7 +33,7 @@ export function useUpdateOrganization() {
   const token = useAuthStore((s) => s.token);
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { name?: string; logoUrl?: string }) =>
+    mutationFn: (body: { name?: string; logoUrl?: string; qboNameFormat?: QboNameFormat }) =>
       apiFetch<Organization>('/organization', {
         method: 'PATCH',
         token: token!,

@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Icon } from '@/components/Icon';
-import { Button, Card } from '@/components/ui';
+import { Button, Card, Chip } from '@/components/ui';
 import { useOrganization, useUpdateOrganization } from '@/lib/api/organization';
 import { useAuthStore } from '@/lib/auth/store';
 import { choosePhotoSource, pickPhotoDataUrl } from '@/lib/image';
@@ -27,18 +27,20 @@ export default function GeneralSettingsScreen() {
   const [name, setName] = useState('');
   const [logoError, setLogoError] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
+  const [nameFormat, setNameFormat] = useState<'first_last' | 'last_first'>('first_last');
 
   useEffect(() => {
     if (org) {
       setName(org.name);
       setLogoError(false);
+      setNameFormat(org.qboNameFormat);
     }
   }, [org]);
 
   const fail = (e: unknown) => showToast(e instanceof Error ? e.message : 'Something went wrong', 'error');
 
   const save = () =>
-    update.mutate({ name }, { onSuccess: () => showToast('Workspace updated'), onError: fail });
+    update.mutate({ name, qboNameFormat: nameFormat }, { onSuccess: () => showToast('Workspace updated'), onError: fail });
 
   const setLogo = (logoUrl: string) => {
     setLogoError(false);
@@ -126,6 +128,21 @@ export default function GeneralSettingsScreen() {
             editable={isAdmin}
           />
 
+          <Text style={styles.label}>QuickBooks customer name format</Text>
+          <View style={styles.formatRow}>
+            <Chip
+              label="First Last"
+              on={nameFormat === 'first_last'}
+              onPress={isAdmin ? () => setNameFormat('first_last') : undefined}
+            />
+            <Chip
+              label="Last, First"
+              on={nameFormat === 'last_first'}
+              onPress={isAdmin ? () => setNameFormat('last_first') : undefined}
+            />
+          </View>
+          <Text style={styles.hint}>How a contact&apos;s name is written when creating a QuickBooks customer.</Text>
+
           <View style={styles.meta}>
             <View>
               <Text style={styles.metaLabel}>Plan</Text>
@@ -191,6 +208,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   inputDisabled: { backgroundColor: colors.surface, color: colors.textMuted },
+  formatRow: { flexDirection: 'row', gap: space.sm, marginTop: space.xs },
   meta: { flexDirection: 'row', gap: space.xl, marginTop: space.md },
   metaId: { flex: 1 },
   metaLabel: { fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textSubtle, marginBottom: 4 },

@@ -16,6 +16,12 @@ function dealPrivateNote(deal: DealForQbo) {
   return `Candango deal #${deal.refNumber ?? '?'} (${deal.id})`;
 }
 
+/** Build a person's QuickBooks customer name per the org's qboNameFormat. */
+function formatQboPersonName(p: { name: string; firstName: string; lastName: string }, format?: string | null): string {
+  if (format === 'last_first' && p.firstName && p.lastName) return `${p.lastName}, ${p.firstName}`;
+  return p.name || `${p.firstName} ${p.lastName}`.trim();
+}
+
 @Injectable()
 export class DealQuickbooksService {
   constructor(
@@ -27,7 +33,10 @@ export class DealQuickbooksService {
   private async requireDeal(orgId: string, dealId: string) {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, orgId, deletedAt: null },
-      include: { company: { select: { name: true } }, primaryPerson: { select: { name: true } } },
+      include: {
+        company: { select: { name: true } },
+        primaryPerson: { select: { name: true, firstName: true, lastName: true } },
+      },
     });
     if (!deal) throw new NotFoundException('Deal not found');
     return deal;
@@ -75,7 +84,10 @@ export class DealQuickbooksService {
     const deal = await this.requireDeal(orgId, dealId);
     const clientType = deal.companyId ? 'company' : deal.primaryPersonId ? 'person' : null;
     const clientId = deal.companyId ?? deal.primaryPersonId ?? null;
-    const clientName = deal.company?.name ?? deal.primaryPerson?.name ?? deal.title;
+    // A person's QuickBooks customer name follows the org's qboNameFormat (First Last | Last, First).
+    const org = await this.prisma.organization.findUnique({ where: { id: orgId }, select: { qboNameFormat: true } });
+    const personName = deal.primaryPerson ? formatQboPersonName(deal.primaryPerson, org?.qboNameFormat) : null;
+    const clientName = deal.company?.name ?? personName ?? deal.title;
 
     // Resolve the parent Customer: explicit id → existing link (client already in QBO) → create from the client.
     let parentCustomerId = dto.parentCustomerId ?? null;

@@ -70,7 +70,7 @@ import {
   updateUser,
   type RoleBody,
 } from './members';
-import { getOrganization, updateOrganization } from './organization';
+import { getOrganization, updateOrganization, type OrganizationBody } from './organization';
 import { getOnboarding, setOnboardingCompleted } from './onboarding';
 import { createApiKey, getApiKeys, revokeApiKey } from './apikeys';
 import {
@@ -694,7 +694,7 @@ export function useUpdateOrganization() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { name?: string; logoUrl?: string }) => updateOrganization(token!, body),
+    mutationFn: (body: OrganizationBody) => updateOrganization(token!, body),
     onSuccess: (data) => qc.setQueryData(['organization'], data),
   });
 }
