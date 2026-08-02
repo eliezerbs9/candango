@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateOrganizationDto } from './dto/organization.dto';
-import { normalizeSignatureConfig } from '../email-templates/template-vars';
+import { normalizeSignature } from '../email-templates/template-vars';
 
 const PUBLIC_FIELDS = {
   id: true,
@@ -18,10 +18,10 @@ const PUBLIC_FIELDS = {
   createdAt: true,
 } as const;
 
-// Always hand the client a complete signature config (default when unset).
+// Always hand the client a signature string (the default HTML when unset).
 const shape = <T extends { emailSignature: unknown }>(org: T) => ({
   ...org,
-  emailSignature: normalizeSignatureConfig(org.emailSignature),
+  emailSignature: normalizeSignature(org.emailSignature),
 });
 
 @Injectable()
@@ -58,7 +58,7 @@ export class OrganizationService {
         taxRateBps: dto.taxRateBps,
         taxDefaultOn: dto.taxDefaultOn,
         ...(dto.emailSignature !== undefined
-          ? { emailSignature: normalizeSignatureConfig(dto.emailSignature) as unknown as Prisma.InputJsonValue }
+          ? { emailSignature: dto.emailSignature as unknown as Prisma.InputJsonValue }
           : {}),
       },
       select: PUBLIC_FIELDS,

@@ -33,91 +33,81 @@ export const TEMPLATE_VARIABLES: TemplateVariable[] = [
 const VALID_KEYS = new Set(TEMPLATE_VARIABLES.map((v) => v.key));
 
 // ── Signature ────────────────────────────────────────────────────────────────
-// A per-workspace signature appended below every template body. Which elements appear
-// is configurable (Organization.emailSignature); the sender's photo/name/email/phone and
-// the workspace logo are filled in per send. Kept OUT of the rich-text body (tiptap
-// StarterKit has no image node and would strip <img>). Mirror any change to the builder in
-// apps/web/lib/email-signature.ts (the preview copy).
+// A per-workspace signature (Organization.emailSignature, stored as an HTML string with
+// {{variables}}) appended below every template body. Edited in the SAME rich-text editor as
+// the body, but only sender/company variables are offered — never deal/contact. The image
+// variables render as <img> at send/preview time (they stay as `{{...}}` text in the editor,
+// since tiptap StarterKit has no image node). Mirror the renderer in apps/web/lib/email-signature.ts.
 
-export interface SignatureConfig {
-  photo: boolean;
-  name: boolean;
-  email: boolean;
-  phone: boolean;
-  logo: boolean;
-  text: string;
-}
+/** Variables offered when editing the signature (sender + company only). */
+export const SIGNATURE_VARIABLES: TemplateVariable[] = [
+  { key: 'sender.name', label: 'Full name', group: 'You', example: 'John Carter' },
+  { key: 'sender.first_name', label: 'First name', group: 'You', example: 'John' },
+  { key: 'sender.last_name', label: 'Last name', group: 'You', example: 'Carter' },
+  { key: 'sender.email', label: 'Email', group: 'You', example: 'john@bsbtechub.com' },
+  { key: 'sender.phone', label: 'Phone', group: 'You', example: '(555) 987-6543' },
+  { key: 'sender.avatar_url', label: 'Profile photo', group: 'You', example: '' },
+  { key: 'workspace.name', label: 'Company name', group: 'Company', example: 'BSB Tech Hub' },
+  { key: 'workspace.logo_url', label: 'Company logo', group: 'Company', example: '' },
+];
 
-/** Default: photo · name · email · phone · company logo, no extra text. */
-export const DEFAULT_SIGNATURE_CONFIG: SignatureConfig = {
-  photo: true,
-  name: true,
-  email: true,
-  phone: true,
-  logo: true,
-  text: '',
+/** Keys that render as an image, with their inline attributes. */
+const SIGNATURE_IMAGE_ATTRS: Record<string, string> = {
+  'sender.avatar_url': 'width="48" height="48" style="border-radius:24px;vertical-align:middle"',
+  'workspace.logo_url': 'style="max-height:40px"',
 };
 
-/** Coerce arbitrary JSON (or null) into a valid SignatureConfig (used on read + before save). */
-export function normalizeSignatureConfig(input: unknown): SignatureConfig {
-  const o = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
-  const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d);
-  return {
-    photo: bool(o.photo, true),
-    name: bool(o.name, true),
-    email: bool(o.email, true),
-    phone: bool(o.phone, true),
-    logo: bool(o.logo, true),
-    text: typeof o.text === 'string' ? o.text.slice(0, 2000) : '',
-  };
+/** Default signature body: Profile photo → Full name → Email → Phone → Company name → Company logo. */
+export const DEFAULT_SIGNATURE_HTML =
+  '<p>{{sender.avatar_url}}</p>' +
+  '<p><strong>{{sender.name}}</strong><br />{{sender.email}} · {{sender.phone}}<br />{{workspace.name}}</p>' +
+  '<p>{{workspace.logo_url}}</p>';
+
+/** A string (even empty) is the user's signature; anything else (null/undefined) → the default. */
+export function normalizeSignature(input: unknown): string {
+  return typeof input === 'string' ? input : DEFAULT_SIGNATURE_HTML;
 }
 
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-export interface SignatureValues {
+export interface SignatureSender {
   name?: string | null;
   email?: string | null;
   phone?: string | null;
   avatarUrl?: string | null;
-  logoUrl?: string | null;
+}
+
+/** Build the `{{key}} → value` map for signature rendering (first/last split from the full name). */
+export function buildSignatureValues(
+  sender: SignatureSender,
+  workspace: { name?: string | null; logoUrl?: string | null },
+): Record<string, string> {
+  const full = (sender.name ?? '').trim();
+  const parts = full ? full.split(/\s+/) : [];
+  return {
+    'sender.name': full,
+    'sender.first_name': parts[0] ?? '',
+    'sender.last_name': parts.slice(1).join(' '),
+    'sender.email': sender.email ?? '',
+    'sender.phone': sender.phone ?? '',
+    'sender.avatar_url': sender.avatarUrl ?? '',
+    'workspace.name': workspace.name ?? '',
+    'workspace.logo_url': workspace.logoUrl ?? '',
+  };
 }
 
 /**
- * Build the signature HTML from its config + the resolved sender/workspace values. Elements
- * whose toggle is off — or whose value is empty — are skipped, so an all-off config (or a
- * workspace with no logo/avatar) yields a clean (possibly empty) block.
+ * Resolve a signature HTML string: replace `{{key}}` with values, wrapping the image keys in
+ * `<img>` and dropping any variable whose value is empty (so a missing photo/logo leaves no gap).
  */
-export function buildSignatureHtml(config: SignatureConfig, v: SignatureValues): string {
-  const name = (v.name ?? '').trim();
-  const email = (v.email ?? '').trim();
-  const phone = (v.phone ?? '').trim();
-  const avatar = v.avatarUrl ?? '';
-  const logo = v.logoUrl ?? '';
-
-  const photoImg =
-    config.photo && avatar
-      ? `<img src="${escapeHtml(avatar)}" alt="${escapeHtml(name)}" width="48" height="48" ` +
-        'style="border-radius:24px;vertical-align:middle;margin-right:10px" />'
-      : '';
-
-  const lines: string[] = [];
-  if (config.name && name) lines.push(`<strong>${escapeHtml(name)}</strong>`);
-  const contact = [config.email ? email : '', config.phone ? phone : '']
-    .filter(Boolean)
-    .map(escapeHtml)
-    .join(' · ');
-  if (contact) lines.push(contact);
-  if (config.text.trim()) lines.push(escapeHtml(config.text.trim()).replace(/\n/g, '<br />'));
-
-  const logoImg =
-    config.logo && logo ? `<img src="${escapeHtml(logo)}" alt="${escapeHtml(name)}" style="max-height:40px" />` : '';
-
-  if (!photoImg && lines.length === 0 && !logoImg) return '';
-
-  const person = photoImg || lines.length ? `<p>${photoImg}${lines.join('<br />')}</p>` : '';
-  const logoBlock = logoImg ? `<p>${logoImg}</p>` : '';
-  return `<p>—</p>${person}${logoBlock}`;
+export function renderSignatureHtml(html: string, values: Record<string, string>): string {
+  return html.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
+    const v = values[key] ?? '';
+    if (!v) return '';
+    if (SIGNATURE_IMAGE_ATTRS[key]) return `<img src="${escapeHtml(v)}" alt="" ${SIGNATURE_IMAGE_ATTRS[key]} />`;
+    return escapeHtml(v);
+  });
 }
 
 // ── Starter templates ────────────────────────────────────────────────────────

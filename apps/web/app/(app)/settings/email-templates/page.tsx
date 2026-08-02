@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Accordion,
   ActionIcon,
   Badge,
   Button,
@@ -15,14 +16,12 @@ import {
   Paper,
   SimpleGrid,
   Stack,
-  Switch,
   Text,
   TextInput,
-  Textarea,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconDots, IconPencil, IconPlus, IconSparkles, IconTrash } from '@tabler/icons-react';
+import { IconDots, IconPencil, IconPlus, IconSignature, IconSparkles, IconTrash } from '@tabler/icons-react';
 import type { Editor } from '@tiptap/react';
 import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/useAuth';
@@ -41,7 +40,13 @@ import {
 import type { EmailTemplate, TemplateVariable } from '@/lib/api/email-templates';
 import type { Organization } from '@/lib/api/organization';
 import type { Profile } from '@/lib/api/profile';
-import { DEFAULT_SIGNATURE_CONFIG, buildSignatureHtml, renderVars, type SignatureConfig } from '@/lib/email-signature';
+import {
+  DEFAULT_SIGNATURE_HTML,
+  SIGNATURE_VARIABLES,
+  buildSignatureValues,
+  renderSignatureHtml,
+  renderVars,
+} from '@/lib/email-signature';
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
@@ -56,9 +61,6 @@ export default function EmailTemplatesSettingsPage() {
   const del = useDeleteEmailTemplate();
   const seed = useSeedDefaultTemplates();
 
-  const [editing, setEditing] = useState<EmailTemplate | null>(null);
-  const [opened, ctl] = useDisclosure(false);
-
   // Values used to preview a body: catalog examples, overridden with the real sender/workspace.
   const values = useMemo(() => {
     const base: Record<string, string> = Object.fromEntries(variables.map((v) => [v.key, v.example]));
@@ -71,18 +73,22 @@ export default function EmailTemplatesSettingsPage() {
     };
   }, [variables, profile, org]);
 
-  // The resolved signature (from the saved config) appended to every preview.
-  const signatureHtml = useMemo(
+  const sigValues = useMemo(
     () =>
-      buildSignatureHtml(org?.emailSignature ?? DEFAULT_SIGNATURE_CONFIG, {
-        name: profile?.name,
-        email: profile?.email,
-        phone: profile?.phone,
-        avatarUrl: profile?.avatarUrl,
-        logoUrl: org?.logoUrl,
-      }),
-    [org, profile],
+      buildSignatureValues(
+        { name: profile?.name, email: profile?.email, phone: profile?.phone, avatarUrl: profile?.avatarUrl },
+        { name: org?.name, logoUrl: org?.logoUrl },
+      ),
+    [profile, org],
   );
+  // Resolved signature (from the saved config) appended to every preview.
+  const signatureHtml = useMemo(
+    () => renderSignatureHtml(org?.emailSignature ?? DEFAULT_SIGNATURE_HTML, sigValues),
+    [org, sigValues],
+  );
+
+  const [editing, setEditing] = useState<EmailTemplate | null>(null);
+  const [opened, ctl] = useDisclosure(false);
 
   const openCreate = () => {
     setEditing(null);
@@ -115,21 +121,15 @@ export default function EmailTemplatesSettingsPage() {
 
   return (
     <Stack gap="lg">
-      <div>
-        <Text fw={600}>Email templates</Text>
-        <Text size="sm" c="dimmed">
-          Reusable subject + body for emails you send from deals. Use{' '}
-          <Text span ff="monospace">{'{{variables}}'}</Text> to auto-fill the contact&apos;s name, email, phone and
-          more. Your signature (below) is added to every email.
-        </Text>
-      </div>
-
-      {org && <SignatureCard org={org} profile={profile} isAdmin={isAdmin} />}
-
-      <Divider />
-
       <Group justify="space-between" align="center">
-        <Text fw={600}>Templates</Text>
+        <div>
+          <Text fw={600}>Email templates</Text>
+          <Text size="sm" c="dimmed">
+            Reusable subject + body for emails you send from deals. Use{' '}
+            <Text span ff="monospace">{'{{variables}}'}</Text> to auto-fill the contact&apos;s name, email, phone and
+            more.
+          </Text>
+        </div>
         {isAdmin && (
           <Group gap="xs">
             <Button variant="default" leftSection={<IconSparkles size={16} />} onClick={addStarters} loading={seed.isPending}>
@@ -214,6 +214,8 @@ export default function EmailTemplatesSettingsPage() {
         </SimpleGrid>
       )}
 
+      {org && <SignatureAccordion org={org} profile={profile} sigValues={sigValues} isAdmin={isAdmin} />}
+
       <TemplateModal
         opened={opened}
         onClose={ctl.close}
@@ -226,100 +228,101 @@ export default function EmailTemplatesSettingsPage() {
   );
 }
 
-function SignatureCard({
+/** Compact, secondary signature editor — same rich-text editor as the body, signature vars only. */
+function SignatureAccordion({
   org,
   profile,
+  sigValues,
   isAdmin,
 }: {
   org: Organization;
   profile: Profile | undefined;
+  sigValues: Record<string, string>;
   isAdmin: boolean;
 }) {
   const update = useUpdateOrganization();
-  const [config, setConfig] = useState<SignatureConfig>(org.emailSignature ?? DEFAULT_SIGNATURE_CONFIG);
+  const [html, setHtml] = useState(org.emailSignature ?? DEFAULT_SIGNATURE_HTML);
+  const editorRef = useRef<Editor | null>(null);
 
   useEffect(() => {
-    setConfig(org.emailSignature ?? DEFAULT_SIGNATURE_CONFIG);
+    setHtml(org.emailSignature ?? DEFAULT_SIGNATURE_HTML);
   }, [org.emailSignature]);
 
-  const preview = buildSignatureHtml(config, {
-    name: profile?.name,
-    email: profile?.email,
-    phone: profile?.phone,
-    avatarUrl: profile?.avatarUrl,
-    logoUrl: org.logoUrl,
-  });
-
-  const toggle = (key: keyof Omit<SignatureConfig, 'text'>) => (checked: boolean) =>
-    setConfig((c) => ({ ...c, [key]: checked }));
+  const insertVar = (key: string) => editorRef.current?.chain().focus().insertContent(`{{${key}}}`).run();
 
   const save = () =>
     update.mutate(
-      { emailSignature: config },
+      { emailSignature: html },
       {
         onSuccess: () => notifications.show({ message: 'Signature saved', color: 'green' }),
         onError: fail,
       },
     );
 
+  const preview = renderSignatureHtml(html, sigValues);
+
   return (
-    <Card withBorder radius="md" padding="lg">
-      <Stack gap="sm">
-        <div>
-          <Text fw={600}>Email signature</Text>
-          <Text size="sm" c="dimmed">
-            Added to the bottom of every email you send. Each sender&apos;s own photo, name, email and phone fill in
-            automatically. Turn everything off to send with no signature.
+    <Accordion variant="contained">
+      <Accordion.Item value="signature">
+        <Accordion.Control icon={<IconSignature size={18} />}>
+          <Text fw={600} size="sm">
+            Email signature
           </Text>
-        </div>
-
-        <Group align="flex-start" gap="xl" wrap="wrap">
-          <Stack gap="xs">
-            <Switch label="Profile photo" checked={config.photo} onChange={(e) => toggle('photo')(e.currentTarget.checked)} disabled={!isAdmin} />
-            <Switch label="Name" checked={config.name} onChange={(e) => toggle('name')(e.currentTarget.checked)} disabled={!isAdmin} />
-            <Switch label="Email" checked={config.email} onChange={(e) => toggle('email')(e.currentTarget.checked)} disabled={!isAdmin} />
-            <Switch label="Phone" checked={config.phone} onChange={(e) => toggle('phone')(e.currentTarget.checked)} disabled={!isAdmin} />
-            <Switch label="Company logo" checked={config.logo} onChange={(e) => toggle('logo')(e.currentTarget.checked)} disabled={!isAdmin} />
-            <Textarea
-              label="Additional text"
-              description="Optional — e.g. a title, website or booking link"
-              autosize
-              minRows={2}
-              value={config.text}
-              onChange={(e) => setConfig((c) => ({ ...c, text: e.currentTarget.value }))}
-              disabled={!isAdmin}
-              w={260}
-            />
-          </Stack>
-
-          <Stack gap={4} style={{ flex: 1, minWidth: 240 }}>
-            <Text size="xs" c="dimmed">
-              Preview
-            </Text>
-            <Paper withBorder p="sm" radius="md" mih={120} bg="var(--mantine-color-gray-0)">
-              {preview ? (
-                <div style={{ fontSize: 14, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: preview }} />
-              ) : (
-                <Text size="sm" c="dimmed">
-                  No signature — emails go out without one.
+          <Text size="xs" c="dimmed">
+            Added to the bottom of every email — click to edit (leave empty for none)
+          </Text>
+        </Accordion.Control>
+        <Accordion.Panel>
+          {isAdmin ? (
+            <Stack gap="sm">
+              <RichTextBody value={html} onChange={setHtml} onReady={(e) => (editorRef.current = e)} minHeight={130} />
+              <Group gap={6} wrap="wrap">
+                <Text size="xs" c="dimmed">
+                  Insert:
                 </Text>
-              )}
+                {SIGNATURE_VARIABLES.map((v) => (
+                  <Badge
+                    key={v.key}
+                    variant="light"
+                    color="candango"
+                    style={{ cursor: 'pointer', textTransform: 'none' }}
+                    onClick={() => insertVar(v.key)}
+                  >
+                    {v.label}
+                  </Badge>
+                ))}
+              </Group>
+              <div>
+                <Text size="xs" c="dimmed" mb={4}>
+                  Preview
+                </Text>
+                <Paper withBorder p="sm" radius="md" bg="var(--mantine-color-gray-0)">
+                  {preview ? (
+                    <div style={{ fontSize: 14, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: preview }} />
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      No signature.
+                    </Text>
+                  )}
+                </Paper>
+              </div>
+              <Group gap="xs">
+                <Button size="xs" onClick={save} loading={update.isPending}>
+                  Save signature
+                </Button>
+                <Button size="xs" variant="subtle" onClick={() => setHtml(DEFAULT_SIGNATURE_HTML)}>
+                  Reset to default
+                </Button>
+              </Group>
+            </Stack>
+          ) : (
+            <Paper withBorder p="sm" radius="md" bg="var(--mantine-color-gray-0)">
+              <div style={{ fontSize: 14, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: preview }} />
             </Paper>
-            {!profile?.avatarUrl && config.photo && (
-              <Text size="xs" c="dimmed">
-                Add a profile photo in Settings → Profile to show it here.
-              </Text>
-            )}
-          </Stack>
-        </Group>
-
-        {isAdmin && (
-          <Button onClick={save} loading={update.isPending} w="fit-content">
-            Save signature
-          </Button>
-        )}
-      </Stack>
-    </Card>
+          )}
+        </Accordion.Panel>
+      </Accordion.Item>
+    </Accordion>
   );
 }
 
@@ -436,7 +439,7 @@ function TemplateModal({
           </Text>
           <RichTextBody value={body} onChange={setBody} onReady={onBodyReady} minHeight={200} />
           <Text size="xs" c="dimmed" mt={4}>
-            Your signature is added automatically below the body — manage it above.
+            Your signature is added automatically below the body — manage it under &ldquo;Email signature&rdquo;.
           </Text>
         </div>
 

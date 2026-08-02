@@ -1,5 +1,4 @@
 import { apiFetch } from './client';
-import type { SignatureConfig } from '@/lib/email-signature';
 
 export type QboNameFormat = 'first_last' | 'last_first';
 
@@ -12,7 +11,7 @@ export interface Organization {
   qboNameFormat: QboNameFormat;
   taxRateBps: number;
   taxDefaultOn: boolean;
-  emailSignature: SignatureConfig;
+  emailSignature: string; // HTML with sender/company {{variables}}
   onboardingState: Record<string, unknown>;
   createdAt: string;
 }
@@ -23,7 +22,7 @@ export interface OrganizationBody {
   qboNameFormat?: QboNameFormat;
   taxRateBps?: number;
   taxDefaultOn?: boolean;
-  emailSignature?: SignatureConfig;
+  emailSignature?: string;
 }
 
 export function getOrganization(token: string) {
