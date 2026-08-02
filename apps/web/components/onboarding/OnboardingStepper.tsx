@@ -6,51 +6,300 @@ import {
   Avatar,
   Badge,
   Button,
+  Card,
   FileButton,
   Group,
   Image,
+  List,
   Select,
   Stack,
   Stepper,
   Text,
   TextInput,
+  ThemeIcon,
+  Title,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconCheck, IconUpload } from '@tabler/icons-react';
+import { IconBrandGoogle, IconCheck, IconGift, IconUpload } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
-import { fileToContainedDataUrl } from '@/lib/image';
+import { fileToContainedDataUrl, fileToResizedDataUrl } from '@/lib/image';
 import {
   useCompleteOnboarding,
+  useConnectGoogle,
   useInviteUser,
   useOrganization,
-  usePipelines,
+  useProfile,
   useRoles,
   useUpdateOrganization,
+  useUpdateProfile,
   useUsers,
 } from '@/lib/api/hooks';
 
 const STEP_COUNT = 5;
 
-function PipelineStep() {
-  const { data: pipelines = [] } = usePipelines();
-  const def = pipelines.find((p) => p.isDefault) ?? pipelines[0];
+const TZ_LIST: string[] = (() => {
+  try {
+    return (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? [];
+  } catch {
+    return [];
+  }
+})();
+const DETECTED: string = (() => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return '';
+  }
+})();
+
+const fail = (e: unknown) =>
+  notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
+
+export function OnboardingStepper() {
+  const router = useRouter();
+  const isMobile = useMediaQuery('(max-width: 48em)');
+  const [active, setActive] = useState(0);
+
+  const { data: org } = useOrganization();
+  const { data: profile } = useProfile();
+  const updateOrg = useUpdateOrganization();
+  const updateProfile = useUpdateProfile();
+  const complete = useCompleteOnboarding();
+
+  // Workspace
+  const [wsName, setWsName] = useState('');
+  const [tz, setTz] = useState<string | null>(DETECTED || null);
+  const [logo, setLogo] = useState<string | null>(null);
+  // Profile
+  const [pName, setPName] = useState('');
+  const [pPhone, setPPhone] = useState('');
+  const [avatar, setAvatar] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (org) {
+      setWsName(org.name);
+      setTz(org.timezone ?? DETECTED ?? null);
+      setLogo(org.logoUrl);
+    }
+  }, [org]);
+  useEffect(() => {
+    if (profile) {
+      setPName(profile.name ?? '');
+      setPPhone(profile.phone ?? '');
+      setAvatar(profile.avatarUrl);
+    }
+  }, [profile]);
+
+  const saveWorkspace = async () => {
+    if (!wsName.trim()) return notifications.show({ message: 'Workspace name is required', color: 'red' }), false;
+    if (!tz) return notifications.show({ message: 'Pick your timezone', color: 'red' }), false;
+    try {
+      await updateOrg.mutateAsync({ name: wsName.trim(), timezone: tz, ...(logo ? { logoUrl: logo } : {}) });
+      return true;
+    } catch (e) {
+      fail(e);
+      return false;
+    }
+  };
+  const saveProfile = async () => {
+    if (!pName.trim()) return notifications.show({ message: 'Your name is required', color: 'red' }), false;
+    try {
+      await updateProfile.mutateAsync({ name: pName.trim(), phone: pPhone.trim(), ...(avatar ? { avatarUrl: avatar } : {}) });
+      return true;
+    } catch (e) {
+      fail(e);
+      return false;
+    }
+  };
+
+  const next = async () => {
+    if (active === 0 && !(await saveWorkspace())) return;
+    if (active === 1 && !(await saveProfile())) return;
+    setActive((c) => Math.min(c + 1, STEP_COUNT - 1));
+  };
+  const back = () => setActive((c) => Math.max(c - 1, 0));
+  const finish = () => complete.mutate(true, { onSuccess: () => router.push('/dashboard'), onError: fail });
+
+  const pickLogo = async (file: File | null) => {
+    if (!file) return;
+    try {
+      setLogo(await fileToContainedDataUrl(file));
+    } catch {
+      notifications.show({ message: 'Could not read image', color: 'red' });
+    }
+  };
+  const pickAvatar = async (file: File | null) => {
+    if (!file) return;
+    try {
+      setAvatar(await fileToResizedDataUrl(file, 256));
+    } catch {
+      notifications.show({ message: 'Could not read image', color: 'red' });
+    }
+  };
+
+  const connectGoogle = useConnectGoogle();
+  const onConnectGoogle = async () => {
+    try {
+      const { url } = await connectGoogle.mutateAsync();
+      window.location.href = url;
+    } catch (e) {
+      fail(e);
+    }
+  };
+
+  const busy = updateOrg.isPending || updateProfile.isPending;
+
   return (
-    <Stack mt="md" gap="xs">
-      <Group gap="xs">
-        <IconCheck size={18} color="var(--mantine-color-teal-6)" />
-        <Text fw={500}>Your pipeline is ready.</Text>
+    <>
+      <Stepper active={active} onStepClick={setActive} orientation={isMobile ? 'vertical' : 'horizontal'}>
+        {/* 1 — Workspace */}
+        <Stepper.Step label="Workspace" description="Name & timezone">
+          <Stack mt="md" gap="sm">
+            <Text c="dimmed" size="sm">
+              Confirm your workspace basics. The timezone keeps due dates, reminders and automations on your local
+              clock.
+            </Text>
+            <TextInput
+              label="Workspace name"
+              required
+              value={wsName}
+              onChange={(e) => setWsName(e.currentTarget.value)}
+            />
+            <Select
+              label="Timezone"
+              required
+              searchable
+              data={TZ_LIST.length ? TZ_LIST : tz ? [tz] : []}
+              value={tz}
+              onChange={setTz}
+              nothingFoundMessage="No match"
+            />
+            <Group>
+              {logo ? (
+                <Image src={logo} h={40} w="auto" maw={120} fit="contain" alt="Logo" />
+              ) : (
+                <Avatar radius="md" color="candango">
+                  {wsName.slice(0, 1).toUpperCase() || 'C'}
+                </Avatar>
+              )}
+              <FileButton onChange={pickLogo} accept="image/png,image/jpeg,image/svg+xml,image/webp">
+                {(props) => (
+                  <Button {...props} variant="default" leftSection={<IconUpload size={16} />}>
+                    Upload logo (optional)
+                  </Button>
+                )}
+              </FileButton>
+            </Group>
+          </Stack>
+        </Stepper.Step>
+
+        {/* 2 — Your profile */}
+        <Stepper.Step label="Your profile" description="Name & photo">
+          <Stack mt="md" gap="sm">
+            <Text c="dimmed" size="sm">
+              This is how you&apos;ll appear to teammates and on the emails you send.
+            </Text>
+            <Group>
+              <Avatar src={avatar ?? undefined} radius="xl" size="lg" color="candango">
+                {pName.slice(0, 1).toUpperCase() || profile?.email?.slice(0, 1).toUpperCase() || 'U'}
+              </Avatar>
+              <FileButton onChange={pickAvatar} accept="image/png,image/jpeg,image/webp">
+                {(props) => (
+                  <Button {...props} variant="default" leftSection={<IconUpload size={16} />}>
+                    Upload photo (optional)
+                  </Button>
+                )}
+              </FileButton>
+            </Group>
+            <TextInput label="Your name" required value={pName} onChange={(e) => setPName(e.currentTarget.value)} />
+            <TextInput
+              label="Phone"
+              description="Optional"
+              value={pPhone}
+              onChange={(e) => setPPhone(e.currentTarget.value)}
+            />
+          </Stack>
+        </Stepper.Step>
+
+        {/* 3 — Invite team */}
+        <Stepper.Step label="Invite team" description="Optional">
+          <InviteStep />
+        </Stepper.Step>
+
+        {/* 4 — Connect Google */}
+        <Stepper.Step label="Connect Google" description="Recommended">
+          <Stack mt="md" gap="sm">
+            <Group gap="xs">
+              <ThemeIcon variant="light" color="candango" radius="xl">
+                <IconBrandGoogle size={18} />
+              </ThemeIcon>
+              <Title order={5}>Connect Google to unlock the full app</Title>
+            </Group>
+            <Text size="sm">
+              Candango works best connected to Google. <b>Without it, email features are unavailable</b> — you won&apos;t
+              be able to:
+            </Text>
+            <List size="sm" spacing={4}>
+              <List.Item>Send estimates &amp; invoices by email, or use email templates &amp; automations</List.Item>
+              <List.Item>See client replies logged automatically on the deal timeline</List.Item>
+              <List.Item>Sync your calendar &amp; meetings</List.Item>
+            </List>
+            <Text size="sm" c="dimmed">
+              We recommend connecting now to get 100% of the features. You can also do it later under Settings →
+              Integrations (per user).
+            </Text>
+            <Button
+              leftSection={<IconBrandGoogle size={16} />}
+              onClick={onConnectGoogle}
+              loading={connectGoogle.isPending}
+              w="fit-content"
+            >
+              Connect Google
+            </Button>
+          </Stack>
+        </Stepper.Step>
+
+        {/* 5 — Trial & billing */}
+        <Stepper.Step label="You're all set" description="Free trial">
+          <Card withBorder radius="md" padding="lg" mt="md" bg="var(--mantine-color-candango-0)">
+            <Group gap="sm" mb="xs">
+              <ThemeIcon variant="light" color="candango" radius="xl" size="lg">
+                <IconGift size={20} />
+              </ThemeIcon>
+              <div>
+                <Badge color="candango" variant="filled">
+                  7-day free trial
+                </Badge>
+              </div>
+            </Group>
+            <Title order={4} mb={4}>
+              Full access, free for 7 days — no card required.
+            </Title>
+            <Text size="sm" c="dimmed">
+              Explore everything with zero commitment. <b>You won&apos;t be asked for payment now</b>, and you won&apos;t
+              be charged until your trial ends. Add a card whenever you&apos;re ready under Settings → Billing — cancel
+              anytime.
+            </Text>
+          </Card>
+        </Stepper.Step>
+      </Stepper>
+
+      <Group justify="space-between" mt="xl">
+        <Button variant="default" onClick={back} disabled={active === 0}>
+          Back
+        </Button>
+        {active < STEP_COUNT - 1 ? (
+          <Button onClick={next} loading={busy}>
+            {active <= 1 ? 'Save & continue' : 'Next'}
+          </Button>
+        ) : (
+          <Button onClick={finish} loading={complete.isPending} leftSection={<IconCheck size={16} />}>
+            Finish &amp; enter Candango
+          </Button>
+        )}
       </Group>
-      {def ? (
-        <Text c="dimmed" size="sm">
-          Default pipeline: <strong>{def.name}</strong>. Rename or add stages anytime under Pipelines.
-        </Text>
-      ) : (
-        <Text c="dimmed" size="sm">
-          No pipeline found.
-        </Text>
-      )}
-    </Stack>
+    </>
   );
 }
 
@@ -73,8 +322,7 @@ function InviteStep() {
           notifications.show({ message: 'Invitation created', color: 'green' });
           setEmail('');
         },
-        onError: (e) =>
-          notifications.show({ message: e instanceof ApiError ? e.message : 'Failed', color: 'red' }),
+        onError: (e) => notifications.show({ message: e instanceof ApiError ? e.message : 'Failed', color: 'red' }),
       },
     );
   };
@@ -82,7 +330,7 @@ function InviteStep() {
   return (
     <Stack mt="md" gap="sm">
       <Text c="dimmed" size="sm">
-        Invite teammates (optional). Each active user is a billable seat ($30/mo).
+        Invite teammates (optional). Each active user is a billable seat ($30/mo) — but not during your trial.
       </Text>
       <Group align="flex-end" wrap="nowrap">
         <TextInput
@@ -115,121 +363,5 @@ function InviteStep() {
         ))}
       </Stack>
     </Stack>
-  );
-}
-
-function LogoStep() {
-  const { data: org } = useOrganization();
-  const update = useUpdateOrganization();
-  const [logo, setLogo] = useState<string | null>(null);
-  const [logoError, setLogoError] = useState(false);
-
-  useEffect(() => {
-    if (org) {
-      setLogo(org.logoUrl);
-      setLogoError(false);
-    }
-  }, [org]);
-
-  const pick = async (file: File | null) => {
-    if (!file) return;
-    try {
-      const dataUrl = await fileToContainedDataUrl(file);
-      setLogo(dataUrl);
-      setLogoError(false);
-      update.mutate(
-        { logoUrl: dataUrl },
-        { onSuccess: () => notifications.show({ message: 'Logo uploaded', color: 'green' }) },
-      );
-    } catch {
-      notifications.show({ message: 'Could not read image', color: 'red' });
-    }
-  };
-
-  return (
-    <Stack mt="md" gap="sm">
-      <Text c="dimmed" size="sm">
-        Upload your workspace logo (optional). Change it later in Settings → General.
-      </Text>
-      <Group>
-        {logo && !logoError ? (
-          <Image src={logo} h={40} w="auto" maw={120} fit="contain" alt="Logo" onError={() => setLogoError(true)} />
-        ) : (
-          <Avatar radius="md" color="candango">
-            {org?.name?.slice(0, 1).toUpperCase() ?? 'C'}
-          </Avatar>
-        )}
-        <FileButton onChange={pick} accept="image/png,image/jpeg,image/svg+xml,image/webp">
-          {(props) => (
-            <Button {...props} variant="default" leftSection={<IconUpload size={16} />} loading={update.isPending}>
-              Upload logo
-            </Button>
-          )}
-        </FileButton>
-      </Group>
-    </Stack>
-  );
-}
-
-function ComingSoonStep({ title, desc }: { title: string; desc: string }) {
-  return (
-    <Stack mt="md" gap="xs">
-      <Text fw={500}>{title}</Text>
-      <Text c="dimmed" size="sm">
-        {desc}
-      </Text>
-    </Stack>
-  );
-}
-
-export function OnboardingStepper() {
-  const router = useRouter();
-  const isMobile = useMediaQuery('(max-width: 48em)');
-  const [active, setActive] = useState(0);
-  const complete = useCompleteOnboarding();
-
-  const next = () => setActive((c) => Math.min(c + 1, STEP_COUNT - 1));
-  const back = () => setActive((c) => Math.max(c - 1, 0));
-  const finish = () => complete.mutate(true, { onSuccess: () => router.push('/dashboard') });
-
-  return (
-    <>
-      <Stepper active={active} onStepClick={setActive} orientation={isMobile ? 'vertical' : 'horizontal'}>
-        <Stepper.Step label="Pipeline" description="Ready">
-          <PipelineStep />
-        </Stepper.Step>
-        <Stepper.Step label="Invite team" description="Optional">
-          <InviteStep />
-        </Stepper.Step>
-        <Stepper.Step label="Logo" description="Optional">
-          <LogoStep />
-        </Stepper.Step>
-        <Stepper.Step label="Connect Google" description="Optional">
-          <ComingSoonStep
-            title="Connect Google"
-            desc="Sync meetings and email per user. Available soon — you can connect it later under Settings → Integrations."
-          />
-        </Stepper.Step>
-        <Stepper.Step label="Payment" description="Optional">
-          <ComingSoonStep
-            title="Add payment"
-            desc="You're on a 7-day free trial. Add a card later in Settings → Billing — no charge until the trial ends."
-          />
-        </Stepper.Step>
-      </Stepper>
-
-      <Group justify="space-between" mt="xl">
-        <Button variant="default" onClick={back} disabled={active === 0}>
-          Back
-        </Button>
-        {active < STEP_COUNT - 1 ? (
-          <Button onClick={next}>Next</Button>
-        ) : (
-          <Button onClick={finish} loading={complete.isPending}>
-            Finish setup
-          </Button>
-        )}
-      </Group>
-    </>
   );
 }

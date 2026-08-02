@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button, Modal, Select, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { ApiError } from '@/lib/api/client';
-import { useOrganization, useUpdateOrganization } from '@/lib/api/hooks';
+import { useOnboarding, useOrganization, useUpdateOrganization } from '@/lib/api/hooks';
 
 // All IANA zones where the browser supports it (Chrome/Safari/FF recent); falls back to the detected one.
 const TZ_LIST: string[] = (() => {
@@ -28,10 +28,13 @@ const DETECTED: string = (() => {
  */
 export function WorkspaceSetupGate({ children }: { children: React.ReactNode }) {
   const { data: org } = useOrganization();
+  const { data: onboarding } = useOnboarding();
   const update = useUpdateOrganization();
   const [tz, setTz] = useState<string | null>(DETECTED || null);
 
-  const needsSetup = !!org && !org.timezone;
+  // Onboarding (which collects the timezone) covers new/incomplete workspaces; this modal is only a
+  // fallback for workspaces that already finished onboarding but somehow have no timezone.
+  const needsSetup = !!org && !org.timezone && onboarding?.completed === true;
 
   const save = () => {
     if (!tz) {
