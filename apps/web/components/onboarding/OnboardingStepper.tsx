@@ -268,17 +268,30 @@ export function OnboardingStepper() {
         {/* 4 — Connect Google */}
         <Stepper.Step label="Connect Google" description={google?.connected ? 'Connected' : 'Recommended'}>
           {google?.connected ? (
-            <Card withBorder radius="md" padding="lg" mt="md" bg="var(--mantine-color-teal-0)">
+            <Card withBorder radius="md" padding="lg" mt="md" bg="var(--mantine-color-teal-0)" c="black">
               <Group gap="sm" mb="xs">
                 <ThemeIcon variant="light" color="teal" radius="xl" size="lg">
                   <IconCheck size={20} />
                 </ThemeIcon>
                 <Title order={4}>Nice — Google is connected! 🎉</Title>
               </Group>
-              <Text size="sm" c="dimmed">
+              <Text size="sm" c="black">
                 Email &amp; calendar features are now fully available — you can send estimates/invoices, use templates
                 &amp; automations, and see replies on the timeline. Manage it anytime under Settings → Integrations.
               </Text>
+              <Text fw={700} mt="md" mb={4} c="black">
+                One more thing: set up your email
+              </Text>
+              <Text size="sm" c="black">
+                Add your <b>email signature</b> and create reusable <b>templates</b> so sending estimates, invoices and
+                follow-ups is one click. Do it anytime under Settings → Email Templates.
+              </Text>
+              <Checkbox
+                mt="sm"
+                label="Take me there after this"
+                checked={goToTemplates}
+                onChange={(e) => setGoToTemplates(e.currentTarget.checked)}
+              />
             </Card>
           ) : (
             <Stack mt="md" gap="sm">
@@ -315,42 +328,24 @@ export function OnboardingStepper() {
 
         {/* 5 — Trial & billing */}
         <Stepper.Step label="You're all set" description="Free trial">
-          <Stack mt="md" gap="md">
-            <Card withBorder radius="md" padding="lg" bg="var(--mantine-color-candango-0)">
-              <Group gap="sm" mb="xs">
-                <ThemeIcon variant="light" color="candango" radius="xl" size="lg">
-                  <IconGift size={20} />
-                </ThemeIcon>
-                <Badge color="candango" variant="filled">
-                  7-day free trial
-                </Badge>
-              </Group>
-              <Title order={4} mb={4}>
-                Full access, free for 7 days — no card required.
-              </Title>
-              <Text size="sm">
-                Explore everything with zero commitment. <b>You won&apos;t be asked for payment now</b>, and you
-                won&apos;t be charged until your trial ends. Add a card whenever you&apos;re ready under Settings →
-                Billing — cancel anytime.
-              </Text>
-            </Card>
-
-            <Card withBorder radius="md" padding="md">
-              <Text fw={600} mb={4}>
-                One more thing: set up your email
-              </Text>
-              <Text size="sm">
-                Add your <b>email signature</b> and create reusable <b>templates</b> so sending estimates, invoices and
-                follow-ups is one click. You can do it anytime under Settings → Email Templates.
-              </Text>
-              <Checkbox
-                mt="sm"
-                label="Take me there after this"
-                checked={goToTemplates}
-                onChange={(e) => setGoToTemplates(e.currentTarget.checked)}
-              />
-            </Card>
-          </Stack>
+          <Card withBorder radius="md" padding="lg" mt="md" bg="var(--mantine-color-candango-0)" c="black">
+            <Group gap="sm" mb="xs">
+              <ThemeIcon variant="light" color="candango" radius="xl" size="lg">
+                <IconGift size={20} />
+              </ThemeIcon>
+              <Badge color="candango" variant="filled">
+                7-day free trial
+              </Badge>
+            </Group>
+            <Title order={4} mb={4}>
+              Full access, free for 7 days — no card required.
+            </Title>
+            <Text size="sm" c="black">
+              Explore everything with zero commitment. <b>You won&apos;t be asked for payment now</b>, and you
+              won&apos;t be charged until your trial ends. Add a card whenever you&apos;re ready under Settings →
+              Billing — cancel anytime.
+            </Text>
+          </Card>
         </Stepper.Step>
       </Stepper>
 
