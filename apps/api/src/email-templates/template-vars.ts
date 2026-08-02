@@ -1,22 +1,18 @@
 /**
- * Email-template variables. Templates use `{{key}}` placeholders in the subject/body;
- * `renderTemplate` resolves them against a deal's contact/company/deal/sender/workspace
- * context. Shared by the template settings UI (via GET /email-templates/variables),
- * the send flow, and (later) email automations — keep this the single source of truth.
+ * Email-template variables + the configurable email signature.
+ *
+ * Templates use `{{key}}` placeholders in the subject/body; `renderTemplate` resolves them
+ * against a deal's contact/company/deal/sender/workspace context. The signature is a separate,
+ * per-workspace configurable block (see SignatureConfig) appended below the body at send time.
+ * Shared by the template settings UI, the send flow, and (later) email automations — keep this
+ * the single source of truth.
  */
 
 export interface TemplateVariable {
-  /** Placeholder key used as `{{key}}`. */
   key: string;
-  /** Human label for the palette. */
   label: string;
-  /** Grouping for the palette (Contact, Company, Deal, Sender, Workspace). */
   group: string;
-  /** Example value shown in the preview. */
   example: string;
-  /** When true, the key is valid for rendering but hidden from the click-to-insert palette
-   *  (e.g. a URL that only makes sense inside an <img>, not as body text). */
-  hidden?: boolean;
 }
 
 export const TEMPLATE_VARIABLES: TemplateVariable[] = [
@@ -32,36 +28,99 @@ export const TEMPLATE_VARIABLES: TemplateVariable[] = [
   { key: 'sender.email', label: 'Your email', group: 'Sender', example: 'john@bsbtechub.com' },
   { key: 'sender.phone', label: 'Your phone', group: 'Sender', example: '(555) 987-6543' },
   { key: 'workspace.name', label: 'Workspace name', group: 'Workspace', example: 'BSB Tech Hub' },
-  // Image URLs — only meaningful inside the signature's <img>; not text badges.
-  { key: 'sender.avatar_url', label: 'Your profile photo URL', group: 'Sender', example: '', hidden: true },
-  { key: 'workspace.logo_url', label: 'Workspace logo URL', group: 'Workspace', example: '', hidden: true },
 ];
 
 const VALID_KEYS = new Set(TEMPLATE_VARIABLES.map((v) => v.key));
 
-/**
- * A ready-made HTML signature (uses sender + workspace variables) appended below the body
- * when a template is sent/previewed. Kept OUT of the editable body because the shared
- * rich-text editor (tiptap StarterKit) has no image node and would strip the <img> tags.
- * `renderSignature` resolves it and drops any image whose URL is empty.
- * NOTE: mirror any change in apps/web/lib/email-signature.ts (the preview copy).
- */
-export const SIGNATURE_HTML =
-  '<p>—</p>' +
-  '<p>' +
-  '<img src="{{sender.avatar_url}}" alt="{{sender.name}}" width="48" height="48" ' +
-  'style="border-radius:24px;vertical-align:middle;margin-right:10px" />' +
-  '<strong>{{sender.name}}</strong><br />' +
-  '{{sender.email}} · {{sender.phone}}<br />' +
-  '{{workspace.name}}' +
-  '</p>' +
-  '<p><img src="{{workspace.logo_url}}" alt="{{workspace.name}}" style="max-height:40px" /></p>';
+// ── Signature ────────────────────────────────────────────────────────────────
+// A per-workspace signature appended below every template body. Which elements appear
+// is configurable (Organization.emailSignature); the sender's photo/name/email/phone and
+// the workspace logo are filled in per send. Kept OUT of the rich-text body (tiptap
+// StarterKit has no image node and would strip <img>). Mirror any change to the builder in
+// apps/web/lib/email-signature.ts (the preview copy).
 
-/** Resolve the signature and remove any <img> left with an empty src (no avatar/logo set). */
-export function renderSignature(ctx: Record<string, string>): string {
-  return renderTemplate(SIGNATURE_HTML, ctx).replace(/<img[^>]*\ssrc=""[^>]*>/gi, '');
+export interface SignatureConfig {
+  photo: boolean;
+  name: boolean;
+  email: boolean;
+  phone: boolean;
+  logo: boolean;
+  text: string;
 }
 
+/** Default: photo · name · email · phone · company logo, no extra text. */
+export const DEFAULT_SIGNATURE_CONFIG: SignatureConfig = {
+  photo: true,
+  name: true,
+  email: true,
+  phone: true,
+  logo: true,
+  text: '',
+};
+
+/** Coerce arbitrary JSON (or null) into a valid SignatureConfig (used on read + before save). */
+export function normalizeSignatureConfig(input: unknown): SignatureConfig {
+  const o = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+  const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d);
+  return {
+    photo: bool(o.photo, true),
+    name: bool(o.name, true),
+    email: bool(o.email, true),
+    phone: bool(o.phone, true),
+    logo: bool(o.logo, true),
+    text: typeof o.text === 'string' ? o.text.slice(0, 2000) : '',
+  };
+}
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+export interface SignatureValues {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
+  logoUrl?: string | null;
+}
+
+/**
+ * Build the signature HTML from its config + the resolved sender/workspace values. Elements
+ * whose toggle is off — or whose value is empty — are skipped, so an all-off config (or a
+ * workspace with no logo/avatar) yields a clean (possibly empty) block.
+ */
+export function buildSignatureHtml(config: SignatureConfig, v: SignatureValues): string {
+  const name = (v.name ?? '').trim();
+  const email = (v.email ?? '').trim();
+  const phone = (v.phone ?? '').trim();
+  const avatar = v.avatarUrl ?? '';
+  const logo = v.logoUrl ?? '';
+
+  const photoImg =
+    config.photo && avatar
+      ? `<img src="${escapeHtml(avatar)}" alt="${escapeHtml(name)}" width="48" height="48" ` +
+        'style="border-radius:24px;vertical-align:middle;margin-right:10px" />'
+      : '';
+
+  const lines: string[] = [];
+  if (config.name && name) lines.push(`<strong>${escapeHtml(name)}</strong>`);
+  const contact = [config.email ? email : '', config.phone ? phone : '']
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join(' · ');
+  if (contact) lines.push(contact);
+  if (config.text.trim()) lines.push(escapeHtml(config.text.trim()).replace(/\n/g, '<br />'));
+
+  const logoImg =
+    config.logo && logo ? `<img src="${escapeHtml(logo)}" alt="${escapeHtml(name)}" style="max-height:40px" />` : '';
+
+  if (!photoImg && lines.length === 0 && !logoImg) return '';
+
+  const person = photoImg || lines.length ? `<p>${photoImg}${lines.join('<br />')}</p>` : '';
+  const logoBlock = logoImg ? `<p>${logoImg}</p>` : '';
+  return `<p>—</p>${person}${logoBlock}`;
+}
+
+// ── Starter templates ────────────────────────────────────────────────────────
 export interface DefaultTemplate {
   name: string;
   subject: string;
@@ -70,8 +129,7 @@ export interface DefaultTemplate {
 
 /**
  * Starter templates seeded for a new workspace (and available on demand for existing ones).
- * Bodies hold the message text only — the signature (with the sender's photo + phone and the
- * workspace logo) is appended automatically at send/preview time (see SIGNATURE_HTML).
+ * Bodies hold the message text only — the signature is appended automatically at send/preview time.
  */
 export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
   {
@@ -103,6 +161,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
   },
 ];
 
+// ── Body variable rendering ──────────────────────────────────────────────────
 type JsonContact = { value?: string; label?: string };
 
 export interface TemplateContextSources {
@@ -115,8 +174,8 @@ export interface TemplateContextSources {
   } | null;
   company?: { name?: string | null } | null;
   deal?: { title?: string | null; value?: number | null; currency?: string | null } | null;
-  sender?: { name?: string | null; email?: string | null; phone?: string | null; avatarUrl?: string | null } | null;
-  workspace?: { name?: string | null; logoUrl?: string | null } | null;
+  sender?: { name?: string | null; email?: string | null; phone?: string | null } | null;
+  workspace?: { name?: string | null } | null;
 }
 
 function firstJsonValue(v: unknown): string {
@@ -151,9 +210,7 @@ export function buildTemplateContext(src: TemplateContextSources): Record<string
     'sender.name': src.sender?.name ?? '',
     'sender.email': src.sender?.email ?? '',
     'sender.phone': src.sender?.phone ?? '',
-    'sender.avatar_url': src.sender?.avatarUrl ?? '',
     'workspace.name': src.workspace?.name ?? '',
-    'workspace.logo_url': src.workspace?.logoUrl ?? '',
   };
 }
 

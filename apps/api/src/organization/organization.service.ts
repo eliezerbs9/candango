@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateOrganizationDto } from './dto/organization.dto';
+import { normalizeSignatureConfig } from '../email-templates/template-vars';
 
 const PUBLIC_FIELDS = {
   id: true,
@@ -11,9 +13,16 @@ const PUBLIC_FIELDS = {
   qboNameFormat: true,
   taxRateBps: true,
   taxDefaultOn: true,
+  emailSignature: true,
   onboardingState: true,
   createdAt: true,
 } as const;
+
+// Always hand the client a complete signature config (default when unset).
+const shape = <T extends { emailSignature: unknown }>(org: T) => ({
+  ...org,
+  emailSignature: normalizeSignatureConfig(org.emailSignature),
+});
 
 @Injectable()
 export class OrganizationService {
@@ -26,7 +35,7 @@ export class OrganizationService {
       select: PUBLIC_FIELDS,
     });
     if (!org) throw new NotFoundException('Organization not found');
-    return org;
+    return shape(org);
   }
 
   /** Active members of the tenant — for assignee pickers, etc. */
@@ -40,7 +49,7 @@ export class OrganizationService {
 
   async update(orgId: string, dto: UpdateOrganizationDto) {
     await this.get(orgId);
-    return this.prisma.organization.update({
+    const org = await this.prisma.organization.update({
       where: { id: orgId },
       data: {
         name: dto.name,
@@ -48,8 +57,12 @@ export class OrganizationService {
         qboNameFormat: dto.qboNameFormat,
         taxRateBps: dto.taxRateBps,
         taxDefaultOn: dto.taxDefaultOn,
+        ...(dto.emailSignature !== undefined
+          ? { emailSignature: normalizeSignatureConfig(dto.emailSignature) as unknown as Prisma.InputJsonValue }
+          : {}),
       },
       select: PUBLIC_FIELDS,
     });
+    return shape(org);
   }
 }

@@ -1,4 +1,5 @@
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import type { SignatureConfig } from '../../email-templates/template-vars';
 
 export class UpdateOrganizationDto {
   @IsOptional()
@@ -27,4 +28,9 @@ export class UpdateOrganizationDto {
   @IsOptional()
   @IsBoolean()
   taxDefaultOn?: boolean;
+
+  /** Email signature config `{ photo, name, email, phone, logo, text }` — normalized server-side. */
+  @IsOptional()
+  @IsObject()
+  emailSignature?: SignatureConfig;
 }

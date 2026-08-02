@@ -13,9 +13,12 @@ import {
   Menu,
   Modal,
   Paper,
+  SimpleGrid,
   Stack,
+  Switch,
   Text,
   TextInput,
+  Textarea,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -33,9 +36,12 @@ import {
   useSeedDefaultTemplates,
   useTemplateVariables,
   useUpdateEmailTemplate,
+  useUpdateOrganization,
 } from '@/lib/api/hooks';
 import type { EmailTemplate, TemplateVariable } from '@/lib/api/email-templates';
-import { SIGNATURE_HTML, renderWithVars } from '@/lib/email-signature';
+import type { Organization } from '@/lib/api/organization';
+import type { Profile } from '@/lib/api/profile';
+import { DEFAULT_SIGNATURE_CONFIG, buildSignatureHtml, renderVars, type SignatureConfig } from '@/lib/email-signature';
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
@@ -45,11 +51,38 @@ export default function EmailTemplatesSettingsPage() {
   const isAdmin = user?.role === 'Admin';
   const { data: templates = [], isLoading } = useEmailTemplates();
   const { data: variables = [] } = useTemplateVariables();
+  const { data: profile } = useProfile();
+  const { data: org } = useOrganization();
   const del = useDeleteEmailTemplate();
   const seed = useSeedDefaultTemplates();
 
   const [editing, setEditing] = useState<EmailTemplate | null>(null);
   const [opened, ctl] = useDisclosure(false);
+
+  // Values used to preview a body: catalog examples, overridden with the real sender/workspace.
+  const values = useMemo(() => {
+    const base: Record<string, string> = Object.fromEntries(variables.map((v) => [v.key, v.example]));
+    return {
+      ...base,
+      'sender.name': profile?.name || base['sender.name'] || '',
+      'sender.email': profile?.email || base['sender.email'] || '',
+      'sender.phone': profile?.phone || base['sender.phone'] || '',
+      'workspace.name': org?.name || base['workspace.name'] || '',
+    };
+  }, [variables, profile, org]);
+
+  // The resolved signature (from the saved config) appended to every preview.
+  const signatureHtml = useMemo(
+    () =>
+      buildSignatureHtml(org?.emailSignature ?? DEFAULT_SIGNATURE_CONFIG, {
+        name: profile?.name,
+        email: profile?.email,
+        phone: profile?.phone,
+        avatarUrl: profile?.avatarUrl,
+        logoUrl: org?.logoUrl,
+      }),
+    [org, profile],
+  );
 
   const openCreate = () => {
     setEditing(null);
@@ -82,15 +115,21 @@ export default function EmailTemplatesSettingsPage() {
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between" align="flex-start">
-        <div>
-          <Text fw={600}>Email templates</Text>
-          <Text size="sm" c="dimmed">
-            Reusable subject + body for emails you send from deals. Use{' '}
-            <Text span ff="monospace">{'{{variables}}'}</Text> to auto-fill the contact&apos;s name, email, phone and
-            more, and a <b>signature</b> (your photo, name, phone + the workspace logo) is added automatically.
-          </Text>
-        </div>
+      <div>
+        <Text fw={600}>Email templates</Text>
+        <Text size="sm" c="dimmed">
+          Reusable subject + body for emails you send from deals. Use{' '}
+          <Text span ff="monospace">{'{{variables}}'}</Text> to auto-fill the contact&apos;s name, email, phone and
+          more. Your signature (below) is added to every email.
+        </Text>
+      </div>
+
+      {org && <SignatureCard org={org} profile={profile} isAdmin={isAdmin} />}
+
+      <Divider />
+
+      <Group justify="space-between" align="center">
+        <Text fw={600}>Templates</Text>
         {isAdmin && (
           <Group gap="xs">
             <Button variant="default" leftSection={<IconSparkles size={16} />} onClick={addStarters} loading={seed.isPending}>
@@ -117,14 +156,16 @@ export default function EmailTemplatesSettingsPage() {
           </Stack>
         </Card>
       ) : (
-        <Stack gap="sm">
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
           {templates.map((t) => (
             <Card key={t.id} withBorder radius="md" padding="md">
-              <Group justify="space-between" wrap="nowrap" align="flex-start">
+              <Group justify="space-between" wrap="nowrap" align="flex-start" mb={6}>
                 <div style={{ minWidth: 0 }}>
-                  <Text fw={500}>{t.name}</Text>
-                  <Text size="sm" c="dimmed" lineClamp={1}>
-                    {t.subject}
+                  <Text fw={600} lineClamp={1}>
+                    {t.name}
+                  </Text>
+                  <Text size="xs" c="dimmed" lineClamp={1}>
+                    {renderVars(t.subject, values)}
                   </Text>
                 </div>
                 {isAdmin && (
@@ -145,13 +186,140 @@ export default function EmailTemplatesSettingsPage() {
                   </Menu>
                 )}
               </Group>
+              {/* Small rendered preview of the body + signature. */}
+              <Paper
+                withBorder
+                radius="sm"
+                p="xs"
+                bg="var(--mantine-color-gray-0)"
+                style={{ height: 150, overflow: 'hidden', position: 'relative' }}
+              >
+                <div
+                  style={{ fontSize: 11, lineHeight: 1.4, pointerEvents: 'none' }}
+                  dangerouslySetInnerHTML={{ __html: renderVars(t.body, values) + signatureHtml }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: 40,
+                    background: 'linear-gradient(transparent, var(--mantine-color-gray-0))',
+                  }}
+                />
+              </Paper>
             </Card>
           ))}
-        </Stack>
+        </SimpleGrid>
       )}
 
-      <TemplateModal opened={opened} onClose={ctl.close} editing={editing} variables={variables} />
+      <TemplateModal
+        opened={opened}
+        onClose={ctl.close}
+        editing={editing}
+        variables={variables}
+        values={values}
+        signatureHtml={signatureHtml}
+      />
     </Stack>
+  );
+}
+
+function SignatureCard({
+  org,
+  profile,
+  isAdmin,
+}: {
+  org: Organization;
+  profile: Profile | undefined;
+  isAdmin: boolean;
+}) {
+  const update = useUpdateOrganization();
+  const [config, setConfig] = useState<SignatureConfig>(org.emailSignature ?? DEFAULT_SIGNATURE_CONFIG);
+
+  useEffect(() => {
+    setConfig(org.emailSignature ?? DEFAULT_SIGNATURE_CONFIG);
+  }, [org.emailSignature]);
+
+  const preview = buildSignatureHtml(config, {
+    name: profile?.name,
+    email: profile?.email,
+    phone: profile?.phone,
+    avatarUrl: profile?.avatarUrl,
+    logoUrl: org.logoUrl,
+  });
+
+  const toggle = (key: keyof Omit<SignatureConfig, 'text'>) => (checked: boolean) =>
+    setConfig((c) => ({ ...c, [key]: checked }));
+
+  const save = () =>
+    update.mutate(
+      { emailSignature: config },
+      {
+        onSuccess: () => notifications.show({ message: 'Signature saved', color: 'green' }),
+        onError: fail,
+      },
+    );
+
+  return (
+    <Card withBorder radius="md" padding="lg">
+      <Stack gap="sm">
+        <div>
+          <Text fw={600}>Email signature</Text>
+          <Text size="sm" c="dimmed">
+            Added to the bottom of every email you send. Each sender&apos;s own photo, name, email and phone fill in
+            automatically. Turn everything off to send with no signature.
+          </Text>
+        </div>
+
+        <Group align="flex-start" gap="xl" wrap="wrap">
+          <Stack gap="xs">
+            <Switch label="Profile photo" checked={config.photo} onChange={(e) => toggle('photo')(e.currentTarget.checked)} disabled={!isAdmin} />
+            <Switch label="Name" checked={config.name} onChange={(e) => toggle('name')(e.currentTarget.checked)} disabled={!isAdmin} />
+            <Switch label="Email" checked={config.email} onChange={(e) => toggle('email')(e.currentTarget.checked)} disabled={!isAdmin} />
+            <Switch label="Phone" checked={config.phone} onChange={(e) => toggle('phone')(e.currentTarget.checked)} disabled={!isAdmin} />
+            <Switch label="Company logo" checked={config.logo} onChange={(e) => toggle('logo')(e.currentTarget.checked)} disabled={!isAdmin} />
+            <Textarea
+              label="Additional text"
+              description="Optional — e.g. a title, website or booking link"
+              autosize
+              minRows={2}
+              value={config.text}
+              onChange={(e) => setConfig((c) => ({ ...c, text: e.currentTarget.value }))}
+              disabled={!isAdmin}
+              w={260}
+            />
+          </Stack>
+
+          <Stack gap={4} style={{ flex: 1, minWidth: 240 }}>
+            <Text size="xs" c="dimmed">
+              Preview
+            </Text>
+            <Paper withBorder p="sm" radius="md" mih={120} bg="var(--mantine-color-gray-0)">
+              {preview ? (
+                <div style={{ fontSize: 14, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: preview }} />
+              ) : (
+                <Text size="sm" c="dimmed">
+                  No signature — emails go out without one.
+                </Text>
+              )}
+            </Paper>
+            {!profile?.avatarUrl && config.photo && (
+              <Text size="xs" c="dimmed">
+                Add a profile photo in Settings → Profile to show it here.
+              </Text>
+            )}
+          </Stack>
+        </Group>
+
+        {isAdmin && (
+          <Button onClick={save} loading={update.isPending} w="fit-content">
+            Save signature
+          </Button>
+        )}
+      </Stack>
+    </Card>
   );
 }
 
@@ -160,16 +328,18 @@ function TemplateModal({
   onClose,
   editing,
   variables,
+  values,
+  signatureHtml,
 }: {
   opened: boolean;
   onClose: () => void;
   editing: EmailTemplate | null;
   variables: TemplateVariable[];
+  values: Record<string, string>;
+  signatureHtml: string;
 }) {
   const create = useCreateEmailTemplate();
   const update = useUpdateEmailTemplate();
-  const { data: profile } = useProfile();
-  const { data: org } = useOrganization();
 
   const [name, setName] = useState('');
   const [subject, setSubject] = useState('');
@@ -178,7 +348,6 @@ function TemplateModal({
 
   const subjectRef = useRef<HTMLInputElement>(null);
   const bodyEditor = useRef<Editor | null>(null);
-  // Which field a variable click inserts into (the last one the user touched).
   const active = useRef<'subject' | 'body'>('body');
 
   useEffect(() => {
@@ -213,25 +382,9 @@ function TemplateModal({
     }
   };
 
-  // Real sender/workspace values so the preview (and its signature) look like the real thing;
-  // everything else uses the catalog's example values.
-  const values = useMemo(() => {
-    const base: Record<string, string> = Object.fromEntries(variables.map((v) => [v.key, v.example]));
-    return {
-      ...base,
-      'sender.name': profile?.name || base['sender.name'] || '',
-      'sender.email': profile?.email || base['sender.email'] || '',
-      'sender.phone': profile?.phone || base['sender.phone'] || '',
-      'sender.avatar_url': profile?.avatarUrl || '',
-      'workspace.name': org?.name || base['workspace.name'] || '',
-      'workspace.logo_url': org?.logoUrl || '',
-    };
-  }, [variables, profile, org]);
-
   const groups = useMemo(() => {
     const map = new Map<string, TemplateVariable[]>();
     for (const v of variables) {
-      if (v.hidden) continue; // image-URL vars aren't text badges
       const list = map.get(v.group) ?? [];
       list.push(v);
       map.set(v.group, list);
@@ -283,8 +436,7 @@ function TemplateModal({
           </Text>
           <RichTextBody value={body} onChange={setBody} onReady={onBodyReady} minHeight={200} />
           <Text size="xs" c="dimmed" mt={4}>
-            A signature with your profile photo, name, email, phone and the workspace logo is added automatically —
-            no need to type it here.
+            Your signature is added automatically below the body — manage it above.
           </Text>
         </div>
 
@@ -324,7 +476,7 @@ function TemplateModal({
               Subject
             </Text>
             <Text size="sm" fw={500} mb="xs">
-              {renderWithVars(subject, values) || '—'}
+              {renderVars(subject, values) || '—'}
             </Text>
             <Divider mb="xs" />
             <Text size="xs" c="dimmed" mb={4}>
@@ -332,8 +484,7 @@ function TemplateModal({
             </Text>
             <div
               style={{ fontSize: 14, lineHeight: 1.5 }}
-              // Admin-authored HTML shown to the same admin; variables resolved to example/real values.
-              dangerouslySetInnerHTML={{ __html: renderWithVars(body, values) + renderWithVars(SIGNATURE_HTML, values) }}
+              dangerouslySetInnerHTML={{ __html: renderVars(body, values) + signatureHtml }}
             />
           </Paper>
         )}

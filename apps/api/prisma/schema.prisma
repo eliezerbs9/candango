@@ -33,6 +33,7 @@ model Organization {
   dealSeq         Int      @default(0)         // per-tenant counter for human-readable Deal.refNumber
   logoUrl         String?   // workspace logo (data URL for now; object storage in production)
   qboNameFormat   String   @default("first_last") // how to build a QuickBooks customer name from a person: first_last | last_first
+  emailSignature  Json?     // configurable email signature { photo, name, email, phone, logo, text } — null = default
   taxRateBps      Int      @default(0) // sales-tax rate for LOCAL estimates, in basis points (700 = 7.00%); 0 = no tax
   taxDefaultOn    Boolean  @default(false) // pre-select "apply tax" when creating a new estimate/invoice
   createdAt       DateTime @default(now())
