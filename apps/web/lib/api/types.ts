@@ -67,6 +67,7 @@ export interface DealDoc {
   sourceEstimateId: string | null;
   sourceEstimateIds?: string[];
   includeInValue?: boolean;
+  taxRateBps?: number; // tax rate applied to a local doc, basis points (0 = none)
   createdAt: string;
   lines: DealDocLine[];
 }
@@ -94,6 +95,7 @@ export interface CreateDocInput {
   // `includeInValue` adds it to the value (sum). Omitted = don't count (FR-13.11).
   includeInValue?: boolean;
   setAsValue?: boolean;
+  taxRateBps?: number; // local docs only; QBO computes its own tax
 }
 
 export interface QbCustomer {
@@ -111,7 +113,7 @@ export interface Address {
   country?: string;
 }
 
-export type QbItem = { id: string; name: string };
+export type QbItem = { id: string; name: string; unitPrice?: number | null };
 
 export interface QbLinkStatus {
   linked: boolean;

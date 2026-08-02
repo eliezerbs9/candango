@@ -19,6 +19,8 @@ import {
 import {
   useCreateEstimate,
   useDealEstimates,
+  useEstimateItems,
+  useOrganization,
   useDealInvoices,
   useDeleteEstimate,
   useIncludeEstimatesInValue,
@@ -76,6 +78,8 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const estimates = useDealEstimates(deal.id);
   const invoices = useDealInvoices(deal.id);
   const items = useQbItems(deal.id, mode === 'qbo');
+  const estimateItems = useEstimateItems();
+  const { data: org } = useOrganization();
   const createEstimate = useCreateEstimate(deal.id);
   const updateEstimate = useUpdateEstimate(deal.id);
   const updateInvoice = useUpdateInvoice(deal.id);
@@ -95,7 +99,13 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
     docIds: string[];
   } | null>(null);
 
-  const itemList = mode === 'qbo' ? items.data : undefined;
+  // QBO products when connected+linked; otherwise the org's local estimate-item catalog.
+  const itemList =
+    mode === 'qbo'
+      ? items.data
+      : (estimateItems.data ?? []).map((i) => ({ id: i.id, name: i.name, unitPrice: i.unitPrice }));
+  // Local docs can apply the org tax rate; QBO computes its own tax.
+  const taxRatePct = mode === 'qbo' ? undefined : (org?.taxRateBps ?? 0) / 100;
   const estimateDocs = estimates.data ?? [];
   const invoiceDocs = invoices.data ?? [];
   // Show the invoices section while connected, OR when disconnected docs were kept (read-only).
@@ -381,6 +391,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         submitLabel={estEditing ? 'Save' : 'Create'}
         currency={deal.currency}
         items={itemList}
+        taxRatePct={taxRatePct}
         initial={estEditing}
         loading={createEstimate.isPending || updateEstimate.isPending}
         onSubmit={submitEstimate}
@@ -392,6 +403,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         submitLabel="Save"
         currency={deal.currency}
         items={itemList}
+        taxRatePct={taxRatePct}
         initial={invEditing}
         loading={updateInvoice.isPending}
         onSubmit={(input) => updateInvoice.mutateAsync({ id: invEditing!.id, body: input })}

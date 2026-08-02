@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import {
   ActionIcon,
   Button,
+  Checkbox,
   Group,
   Modal,
   NumberInput,
@@ -46,6 +47,7 @@ export function DocEditorModal({
   items,
   initial,
   submitLabel = 'Create',
+  taxRatePct,
   onSubmit,
 }: {
   opened: boolean;
@@ -53,9 +55,10 @@ export function DocEditorModal({
   title: string;
   currency?: string;
   loading?: boolean;
-  items?: QbItem[]; // QBO products/services (omit for native estimates)
+  items?: QbItem[]; // catalog products/services (QBO items, or the local catalog for native)
   initial?: DealDoc | null; // prefill for editing
   submitLabel?: string;
+  taxRatePct?: number; // when set (native/local docs), shows an "Apply tax" toggle at this %
   onSubmit: (input: CreateDocInput) => Promise<unknown>;
 }) {
   const [txnDate, setTxnDate] = useState('');
@@ -63,11 +66,13 @@ export function DocEditorModal({
   const [lines, setLines] = useState<LineRow[]>([blankLine()]);
   // How a NEW estimate affects the deal value (FR-13.11). Edit mode ignores it.
   const [valueChoice, setValueChoice] = useState<'set' | 'add' | 'none'>('set');
+  const [taxOn, setTaxOn] = useState(false);
 
   // (Re)initialise whenever the modal opens.
   useEffect(() => {
     if (!opened) return;
     setValueChoice('set');
+    setTaxOn(!!initial?.taxRateBps);
     if (initial) {
       setTxnDate(initial.txnDate?.slice(0, 10) ?? '');
       setNotes(initial.notes ?? '');
@@ -92,12 +97,20 @@ export function DocEditorModal({
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
 
   const cents = (l: LineRow) => Math.round(Number(l.quantity || 0) * Number(l.unitPrice || 0) * 100);
-  const total = lines.reduce((sum, l) => sum + cents(l), 0);
+  const subtotal = lines.reduce((sum, l) => sum + cents(l), 0);
+  const canTax = taxRatePct != null && taxRatePct > 0;
+  const taxRateBps = taxOn && canTax ? Math.round(taxRatePct * 100) : 0;
+  const taxAmount = Math.round((subtotal * taxRateBps) / 10000);
+  const total = subtotal + taxAmount;
   const itemData = (items ?? []).map((i) => ({ value: i.id, label: i.name }));
 
   const pickItem = (i: number, itemId: string | null) => {
-    const name = items?.find((it) => it.id === itemId)?.name;
-    setLine(i, { itemId, ...(name && !lines[i].description ? { description: name } : {}) });
+    const item = items?.find((it) => it.id === itemId);
+    setLine(i, {
+      itemId,
+      ...(item?.name && !lines[i].description ? { description: item.name } : {}),
+      ...(item?.unitPrice != null ? { unitPrice: item.unitPrice / 100 } : {}), // catalog price (cents → form dollars)
+    });
   };
 
   const submit = async () => {
@@ -122,7 +135,13 @@ export function DocEditorModal({
           ? { includeInValue: true }
           : {};
     try {
-      await onSubmit({ txnDate: txnDate || undefined, notes: notes || undefined, lines: clean, ...valueFlags });
+      await onSubmit({
+        txnDate: txnDate || undefined,
+        notes: notes || undefined,
+        lines: clean,
+        ...(canTax ? { taxRateBps } : {}),
+        ...valueFlags,
+      });
       onClose();
     } catch (e) {
       notifications.show({ message: e instanceof ApiError ? e.message : 'Could not save', color: 'red' });
@@ -209,9 +228,29 @@ export function DocEditorModal({
           >
             Add line
           </Button>
-          <Text fw={600}>
-            Total: <Money value={total} currency={currency} />
-          </Text>
+          <Stack gap={4} align="flex-end">
+            {canTax && (
+              <Checkbox
+                size="sm"
+                label={`Apply tax (${taxRatePct}%)`}
+                checked={taxOn}
+                onChange={(e) => setTaxOn(e.currentTarget.checked)}
+              />
+            )}
+            {taxOn && canTax ? (
+              <>
+                <Text size="sm" c="dimmed">
+                  Subtotal: <Money value={subtotal} currency={currency} />
+                </Text>
+                <Text size="sm" c="dimmed">
+                  Tax ({taxRatePct}%): <Money value={taxAmount} currency={currency} />
+                </Text>
+              </>
+            ) : null}
+            <Text fw={600}>
+              Total: <Money value={total} currency={currency} />
+            </Text>
+          </Stack>
         </Group>
 
         <Textarea label="Memo" autosize minRows={2} value={notes} onChange={(e) => setNotes(e.currentTarget.value)} />
