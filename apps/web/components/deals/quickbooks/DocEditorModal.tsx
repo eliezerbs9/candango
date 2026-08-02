@@ -112,9 +112,10 @@ export function DocEditorModal({
 
   const pickItem = (i: number, itemId: string | null) => {
     const item = items?.find((it) => it.id === itemId);
+    const descFill = item?.description || item?.name;
     setLine(i, {
       itemId,
-      ...(item?.name && !lines[i].description ? { description: item.name } : {}),
+      ...(descFill && !lines[i].description ? { description: descFill } : {}),
       ...(item?.unit ? { unit: item.unit } : {}),
       ...(item?.unitPrice != null ? { unitPrice: item.unitPrice / 100 } : {}), // catalog price (cents → form dollars)
     });

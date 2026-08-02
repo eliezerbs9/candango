@@ -103,7 +103,13 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const itemList =
     mode === 'qbo'
       ? items.data
-      : (estimateItems.data ?? []).map((i) => ({ id: i.id, name: i.name, unitPrice: i.unitPrice }));
+      : (estimateItems.data ?? []).map((i) => ({
+          id: i.id,
+          name: i.name,
+          description: i.description,
+          unit: i.unit,
+          unitPrice: i.unitPrice,
+        }));
   // Local docs can apply the org tax rate; QBO computes its own tax.
   const taxRatePct = mode === 'qbo' ? undefined : (org?.taxRateBps ?? 0) / 100;
   const estimateDocs = estimates.data ?? [];
