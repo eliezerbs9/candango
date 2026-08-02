@@ -1,16 +1,16 @@
 'use client';
 
-import { Button, Card, List, Stack, Text, ThemeIcon, Title } from '@mantine/core';
+import { Button, Card, Stack, Text, ThemeIcon, Title } from '@mantine/core';
 import { IconBrandGoogle } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { ApiError } from '@/lib/api/client';
 import { useConnectGoogle } from '@/lib/api/hooks';
 
 /**
- * Shown in place of an email feature when the workspace user has no Google connection.
- * Email features send through the user's Gmail, so they're unavailable until it's connected.
+ * Standard notice shown in place of any email feature when the user has no Gmail connection.
+ * Email features send through the user's Gmail, so they need it connected first.
  */
-export function ConnectGoogleNotice({ feature }: { feature: string }) {
+export function ConnectGoogleNotice() {
   const connect = useConnectGoogle();
   const onConnect = async () => {
     try {
@@ -22,31 +22,26 @@ export function ConnectGoogleNotice({ feature }: { feature: string }) {
   };
 
   return (
-    <Card withBorder radius="md" padding="xl" maw={620}>
+    <Card withBorder radius="md" padding="xl" maw={560}>
       <Stack gap="sm">
         <ThemeIcon variant="light" color="candango" radius="xl" size="lg">
           <IconBrandGoogle size={20} />
         </ThemeIcon>
-        <Title order={4}>Connect Google to use {feature}</Title>
+        <Title order={4}>This feature requires a connected Gmail account</Title>
         <Text size="sm">
-          {feature} works through your Google account, so it&apos;s unavailable until you connect Gmail. Once connected
-          you can:
+          Email is sent through your Gmail, so connect it to send estimates &amp; invoices, use templates &amp;
+          automations, and see client replies on the deal timeline.
         </Text>
-        <List size="sm" spacing={4}>
-          <List.Item>Send estimates &amp; invoices by email, with templates &amp; your signature</List.Item>
-          <List.Item>Run email automations</List.Item>
-          <List.Item>See client replies logged on the deal timeline</List.Item>
-        </List>
         <Button
           leftSection={<IconBrandGoogle size={16} />}
           onClick={onConnect}
           loading={connect.isPending}
           w="fit-content"
         >
-          Connect Google
+          Connect Gmail
         </Button>
         <Text size="xs" c="dimmed">
-          You can also manage integrations under Settings → Integrations (each user connects their own Google).
+          You can also connect it under Settings → Integrations (each user connects their own Google).
         </Text>
       </Stack>
     </Card>

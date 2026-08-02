@@ -124,7 +124,7 @@ export default function EmailTemplatesSettingsPage() {
   }
 
   // Email features send through the user's Gmail — unavailable without a mailbox connection.
-  if (!google?.mailbox) return <ConnectGoogleNotice feature="email templates" />;
+  if (!google?.mailbox) return <ConnectGoogleNotice />;
 
   return (
     <Stack gap="lg">

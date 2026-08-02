@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useDisclosure } from '@mantine/hooks';
 import { Alert, Badge, Box, Button, Card, Center, Group, Loader, SegmentedControl, Stack, Text } from '@mantine/core';
-import { IconInfoCircle, IconMail, IconMailOff, IconPencil } from '@tabler/icons-react';
+import { IconInfoCircle, IconMail, IconPencil } from '@tabler/icons-react';
 import { PageHeader } from '@/components/primitives/PageHeader';
 import { ComposeEmail } from '@/components/email/ComposeEmail';
+import { ConnectGoogleNotice } from '@/components/email/ConnectGoogleNotice';
 import { useFolderCounts, useGoogleStatus, useInbox } from '@/lib/api/hooks';
 import type { ApiMessage, MessageFolder } from '@/lib/api/messages';
 
@@ -55,19 +55,7 @@ export default function EmailsPage() {
           <Loader />
         </Center>
       ) : !connected ? (
-        <Card withBorder radius="md" padding="xl">
-          <Stack align="center" gap="xs">
-            <IconMailOff size={28} stroke={1.5} />
-            <Text fw={500}>Gmail isn&apos;t connected</Text>
-            <Text size="sm" c="dimmed" ta="center" maw={360}>
-              Connect your Google account to sync your inbox into Candango — emails are matched to your
-              contacts and deals automatically.
-            </Text>
-            <Button component={Link} href="/settings/integrations" mt="sm">
-              Connect Gmail
-            </Button>
-          </Stack>
-        </Card>
+        <ConnectGoogleNotice />
       ) : (
         <>
           <SegmentedControl
