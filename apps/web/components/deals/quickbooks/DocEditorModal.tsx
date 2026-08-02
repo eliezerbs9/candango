@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   ActionIcon,
+  Autocomplete,
   Button,
   Checkbox,
   Group,
@@ -16,6 +17,7 @@ import {
   TextInput,
   Textarea,
 } from '@mantine/core';
+import { POPULAR_UNITS } from '@/lib/units';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { Money } from '@/components/primitives/Money';
@@ -199,10 +201,11 @@ export function DocEditorModal({
                   <NumberInput min={1} value={l.quantity} onChange={(v) => setLine(i, { quantity: v })} hideControls />
                 </Table.Td>
                 <Table.Td>
-                  <TextInput
+                  <Autocomplete
                     placeholder="unit"
+                    data={POPULAR_UNITS}
                     value={l.unit}
-                    onChange={(e) => setLine(i, { unit: e.currentTarget.value })}
+                    onChange={(v) => setLine(i, { unit: v })}
                   />
                 </Table.Td>
                 <Table.Td>

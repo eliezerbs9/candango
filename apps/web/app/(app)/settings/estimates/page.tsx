@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   ActionIcon,
+  Autocomplete,
   Button,
   Card,
   Center,
@@ -30,9 +31,11 @@ import {
   useDeleteEstimateItem,
   useEstimateItems,
   useOrganization,
+  useQuickbooksStatus,
   useUpdateEstimateItem,
   useUpdateOrganization,
 } from '@/lib/api/hooks';
+import { POPULAR_UNITS } from '@/lib/units';
 import type { EstimateItem } from '@/lib/api/estimate-items';
 
 const fail = (e: unknown) =>
@@ -42,6 +45,8 @@ export default function EstimatesSettingsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin';
   const { data: org } = useOrganization();
+  const { data: qb } = useQuickbooksStatus();
+  const connected = !!qb?.connected;
   const updateOrg = useUpdateOrganization();
   const { data: items = [], isLoading } = useEstimateItems();
 
@@ -101,10 +106,22 @@ export default function EstimatesSettingsPage() {
       {/* Tax settings */}
       <Card withBorder radius="md" padding="lg">
         <Stack gap="md">
-          <Group align="flex-end" gap="md">
+          <Checkbox
+            label="Apply sales tax by default on new estimates and invoices"
+            description={
+              connected
+                ? 'The tax rate comes from your QuickBooks automated sales tax.'
+                : 'Turn this on and set your local rate below.'
+            }
+            checked={taxDefault}
+            onChange={(e) => setTaxDefault(e.currentTarget.checked)}
+            disabled={!isAdmin}
+          />
+          {/* Local rate only matters when NOT connected to QuickBooks. */}
+          {!connected && taxDefault && (
             <NumberInput
               label="Sales tax rate"
-              description="Applied to local estimates/invoices when tax is on. Set your jurisdiction's rate."
+              description="Applied to local estimates/invoices. Set your jurisdiction's rate."
               suffix="%"
               min={0}
               max={50}
@@ -115,13 +132,7 @@ export default function EstimatesSettingsPage() {
               disabled={!isAdmin}
               w={220}
             />
-          </Group>
-          <Checkbox
-            label="Apply sales tax by default on new estimates and invoices"
-            checked={taxDefault}
-            onChange={(e) => setTaxDefault(e.currentTarget.checked)}
-            disabled={!isAdmin}
-          />
+          )}
           {isAdmin && (
             <Button onClick={saveTax} loading={updateOrg.isPending} w="fit-content">
               Save
@@ -258,12 +269,13 @@ function ItemModal({ opened, onClose, editing }: { opened: boolean; onClose: () 
           value={description}
           onChange={(e) => setDescription(e.currentTarget.value)}
         />
-        <TextInput
+        <Autocomplete
           label="Unit"
-          description='Unit of measure — e.g. "hour", "each", "sq ft"'
+          description="Unit of measure — pick a common one or type your own"
           placeholder="unit"
+          data={POPULAR_UNITS}
           value={unit}
-          onChange={(e) => setUnit(e.currentTarget.value)}
+          onChange={setUnit}
         />
         <NumberInput
           label="Price"
