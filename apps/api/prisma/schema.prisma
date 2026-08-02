@@ -33,6 +33,7 @@ model Organization {
   dealSeq         Int      @default(0)         // per-tenant counter for human-readable Deal.refNumber
   logoUrl         String?   // workspace logo (data URL for now; object storage in production)
   qboNameFormat   String   @default("first_last") // how to build a QuickBooks customer name from a person: first_last | last_first
+  taxRateBps      Int      @default(0) // sales-tax rate for LOCAL estimates, in basis points (700 = 7.00%); 0 = no tax
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   deletedAt       DateTime?
@@ -46,11 +47,12 @@ model Organization {
   persons      Person[]
   companies    Company[]
   activities   Activity[]
-  notes        Note[]
-  webhooks     Webhook[]
-  apiKeys      ApiKey[]
-  auditLogs    AuditLog[]
-  eventOutbox  EventOutbox[]
+  notes         Note[]
+  webhooks      Webhook[]
+  apiKeys       ApiKey[]
+  auditLogs     AuditLog[]
+  eventOutbox   EventOutbox[]
+  estimateItems EstimateItem[]
   messages     Message[]
   subscription Subscription?
   invoices     Invoice[]
@@ -683,7 +685,8 @@ model DealEstimate {
   status      String    @default("draft")  // draft | sent | accepted | rejected | closed
   docNumber   String?
   currency    String    @default("USD")
-  totalAmount Int       @default(0) // minor units (= sum of line amounts, or QBO TotalAmt)
+  totalAmount Int       @default(0) // minor units (= subtotal + tax for native, or QBO TotalAmt)
+  taxRateBps  Int       @default(0) // tax rate applied to a LOCAL estimate, basis points; 0 = none (QBO handles its own tax)
   txnDate     DateTime?
   notes       String?
   qbId        String?   // QBO Estimate.Id (null for native)
@@ -729,6 +732,7 @@ model DealInvoice {
   docNumber        String?
   currency         String    @default("USD")
   totalAmount      Int       @default(0)
+  taxRateBps       Int       @default(0) // tax rate applied to a LOCAL invoice, basis points; 0 = none
   txnDate          DateTime?
   notes            String?
   sourceEstimateId String?   // primary local DealEstimate this invoice was generated from
@@ -765,4 +769,21 @@ model DealInvoiceLine {
   invoice DealInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([invoiceId])
+}
+
+/// Org-level catalog of products/services for LOCAL estimates (QBO uses its own
+/// Items when connected). Name required; description and price optional.
+model EstimateItem {
+  id          String    @id @default(cuid())
+  orgId       String
+  name        String
+  description String?
+  unitPrice   Int? // minor units (cents); optional
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@index([orgId])
 }

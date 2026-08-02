@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class UpdateOrganizationDto {
   @IsOptional()
@@ -15,4 +15,11 @@ export class UpdateOrganizationDto {
   @IsOptional()
   @IsIn(['first_last', 'last_first'])
   qboNameFormat?: string;
+
+  /** Sales-tax rate for LOCAL estimates, in basis points (700 = 7%). 0–5000 (0–50%). */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(5000)
+  taxRateBps?: number;
 }

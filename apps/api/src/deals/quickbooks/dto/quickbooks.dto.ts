@@ -9,6 +9,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Max,
   Min,
   MinLength,
   ValidateNested,
@@ -71,6 +72,14 @@ export class CreateDocDto {
   @IsOptional()
   @IsBoolean()
   setAsValue?: boolean;
+
+  /** Sales-tax rate for a LOCAL estimate/invoice, in basis points (700 = 7%).
+   *  0/omitted = no tax. Ignored for QuickBooks docs (QBO computes its own tax). */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(5000)
+  taxRateBps?: number;
 
   /** For invoices: the local DealEstimate this was generated from. */
   @IsOptional()

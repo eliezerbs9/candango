@@ -23,6 +23,7 @@ import { NotesModule } from './notes/notes.module';
 import { MessagesModule } from './messages/messages.module';
 import { BillingModule } from './billing/billing.module';
 import { ContactModule } from './contact/contact.module';
+import { EstimateItemsModule } from './estimate-items/estimate-items.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -66,6 +67,7 @@ import { HealthController } from './health.controller';
     NotesModule,
     MessagesModule,
     BillingModule,
+    EstimateItemsModule,
   ],
   controllers: [HealthController],
 })

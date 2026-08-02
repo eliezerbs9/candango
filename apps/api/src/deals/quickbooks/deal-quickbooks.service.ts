@@ -207,6 +207,7 @@ export class DealQuickbooksService {
           status: 'draft',
           currency: deal.currency,
           totalAmount: nativeTotal(dto),
+          taxRateBps: dto.taxRateBps ?? 0,
           txnDate: dto.txnDate ? new Date(dto.txnDate) : null,
           notes: dto.notes ?? null,
           includeInValue,
@@ -256,6 +257,7 @@ export class DealQuickbooksService {
       where: { id: estimateId },
       data: {
         totalAmount: nativeTotal(dto),
+        taxRateBps: dto.taxRateBps ?? 0,
         txnDate: dto.txnDate ? new Date(dto.txnDate) : est.txnDate,
         notes: dto.notes ?? est.notes,
         lines: { deleteMany: {}, create: nativeLines(dto) },
@@ -580,8 +582,15 @@ function nativeLines(dto: CreateDocDto) {
   }));
 }
 
-function nativeTotal(dto: CreateDocDto) {
+function nativeSubtotal(dto: CreateDocDto) {
   return dto.lines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
+}
+
+/** Native doc total = subtotal + tax (tax = subtotal × taxRateBps / 10000). */
+function nativeTotal(dto: CreateDocDto) {
+  const bps = dto.taxRateBps ?? 0;
+  const subtotal = nativeSubtotal(dto);
+  return subtotal + (bps > 0 ? Math.round((subtotal * bps) / 10000) : 0);
 }
 
 type DocRow = {
@@ -592,6 +601,7 @@ type DocRow = {
   docNumber: string | null;
   currency: string;
   totalAmount: number;
+  taxRateBps?: number;
   txnDate: Date | null;
   notes: string | null;
   qbId: string | null;
@@ -620,6 +630,7 @@ function shapeDoc(d: DocRow) {
     docNumber: d.docNumber,
     currency: d.currency,
     totalAmount: d.totalAmount,
+    taxRateBps: d.taxRateBps ?? 0,
     txnDate: d.txnDate,
     notes: d.notes,
     qbId: d.qbId,
