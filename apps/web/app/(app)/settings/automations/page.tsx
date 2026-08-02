@@ -47,6 +47,56 @@ export default function AutomationsSettingsPage() {
   const update = useUpdateEmailAutomation();
 
   const triggerLabel = useMemo(() => Object.fromEntries(triggers.map((t) => [t.key, t.label])), [triggers]);
+  const { data: stages = [] } = useAllStages();
+  const stageName = (id: unknown) => (typeof id === 'string' ? stages.find((s) => s.id === id)?.name : null);
+
+  // Human-readable "when …" clause describing the trigger + its config.
+  const triggerText = (a: EmailAutomation) => {
+    const c = a.config;
+    switch (a.trigger) {
+      case 'deal_stage_changed':
+        return c.stageId ? <>a deal enters <b>{stageName(c.stageId) ?? 'a stage'}</b></> : <>a deal enters <b>any stage</b></>;
+      case 'deal_won':
+        return <>a deal is <b>won</b></>;
+      case 'deal_lost':
+        return <>a deal is <b>lost</b></>;
+      case 'doc_sent':
+        return c.docKind ? <>an <b>{String(c.docKind)}</b> is sent</> : <>an <b>estimate/invoice</b> is sent</>;
+      case 'follow_up': {
+        const d = Number(c.afterDays) || 0;
+        return (
+          <>
+            a deal stays in <b>{stageName(c.stageId) ?? 'any stage'}</b> for <b>{d} day{d === 1 ? '' : 's'}</b>
+          </>
+        );
+      }
+      default:
+        return <b>{triggerLabel[a.trigger] ?? a.trigger}</b>;
+    }
+  };
+
+  // Human-readable "then …" clause describing the action + its config.
+  const actionText = (a: EmailAutomation) => {
+    const c = a.config;
+    if (a.action === 'create_activity') {
+      const type = (c.activityType as string) || 'task';
+      const kind = type === 'call' ? 'Call' : type === 'meeting' ? 'Meeting' : null; // a plain task = a generic activity
+      const days = Number(c.dueInDays) || 0;
+      const due = days === 0 ? 'due the same day' : `due in ${days} day${days === 1 ? '' : 's'}`;
+      const subject = String(c.activitySubject ?? '').trim();
+      return (
+        <>
+          create an activity{subject ? <> “<b>{subject}</b>”</> : ''} ({kind ? `${kind}, ` : ''}
+          {due})
+        </>
+      );
+    }
+    return (
+      <>
+        send the <b>{a.templateName ?? 'template'}</b> email to the primary contact
+      </>
+    );
+  };
 
   const [editing, setEditing] = useState<EmailAutomation | null>(null);
   const [opened, ctl] = useDisclosure(false);
@@ -76,7 +126,7 @@ export default function AutomationsSettingsPage() {
           <Text fw={600}>Automations</Text>
           <Text size="sm" c="dimmed">
             When something happens on a deal, automatically <b>send an email</b> (from the deal owner&apos;s mailbox to
-            the primary contact, with your signature) or <b>create a task</b> for the deal owner.
+            the primary contact, with your signature) or <b>create an activity</b> for the deal owner.
           </Text>
         </div>
         {isAdmin && (
@@ -105,13 +155,8 @@ export default function AutomationsSettingsPage() {
                   <Switch checked={a.enabled} onChange={(e) => toggle(a, e.currentTarget.checked)} disabled={!isAdmin} />
                   <div style={{ minWidth: 0 }}>
                     <Text fw={500}>{a.name}</Text>
-                    <Text size="sm" c="dimmed" lineClamp={1}>
-                      When <b>{triggerLabel[a.trigger] ?? a.trigger}</b> →{' '}
-                      {a.action === 'create_activity' ? (
-                        <>create a <b>{(a.config.activityType as string) ?? 'task'}</b></>
-                      ) : (
-                        <>send <b>{a.templateName ?? 'template'}</b></>
-                      )}
+                    <Text size="sm" c="dimmed" lineClamp={2}>
+                      <b>When</b> {triggerText(a)}, <b>then</b> {actionText(a)}.
                     </Text>
                   </div>
                 </Group>
@@ -292,7 +337,7 @@ function AutomationModal({
           required
           data={[
             { value: 'send_email', label: 'Send an email' },
-            { value: 'create_activity', label: 'Create a task/activity' },
+            { value: 'create_activity', label: 'Create an activity' },
           ]}
           value={action}
           onChange={(v) => setAction((v as 'send_email' | 'create_activity') ?? 'send_email')}
@@ -310,7 +355,8 @@ function AutomationModal({
         ) : (
           <>
             <Select
-              label="Task type"
+              label="Activity type"
+              description="Same activity types as the deal's New activity form"
               data={[
                 { value: 'task', label: 'Task' },
                 { value: 'call', label: 'Call' },
@@ -320,7 +366,7 @@ function AutomationModal({
               onChange={(v) => setCfg('activityType', v ?? 'task')}
             />
             <TextInput
-              label="Task subject"
+              label="Activity subject"
               required
               placeholder="e.g. Follow up with the client"
               value={(config.activitySubject as string) ?? ''}
