@@ -37,7 +37,7 @@ export function CreatableSelect({
   options: Option[];
   value: string | null;
   onChange: (value: string | null) => void;
-  onCreate: (name: string) => Promise<Option>;
+  onCreate: (name: string) => Promise<Option | null>;
 }) {
   const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
   const [creating, setCreating] = useState(false);
@@ -63,6 +63,7 @@ export function CreatableSelect({
     setCreating(true);
     try {
       const created = await onCreate(query);
+      if (!created) return; // creation cancelled
       setExtra((prev) => [...prev, created]);
       onChange(created.value);
       setSearch(created.label);

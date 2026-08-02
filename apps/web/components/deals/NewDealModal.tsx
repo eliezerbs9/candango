@@ -5,6 +5,7 @@ import { Button, Modal, NumberInput, Select, Stack, TextInput } from '@mantine/c
 import { notifications } from '@mantine/notifications';
 import { ApiError } from '@/lib/api/client';
 import { CreatableSelect } from '@/components/common/CreatableSelect';
+import { usePersonCreate } from '@/components/contacts/PersonCreateModal';
 import {
   useCompanies,
   useCreateCompany,
@@ -39,6 +40,19 @@ export function NewDealModal({
   const [primaryPersonId, setPrimaryPersonId] = useState<string | null>(null);
 
   const { data: stages = [] } = useStages(pipelineId ?? '');
+
+  // Type-and-create a contact → captures First + Last (prefilled from the typed text).
+  const personCreate = usePersonCreate({
+    linkLabel: companyId ? companies.find((c) => c.id === companyId)?.name : undefined,
+    create: async ({ firstName, lastName, link }) => {
+      const p = await createPerson.mutateAsync({
+        firstName,
+        lastName,
+        companyIds: link && companyId ? [companyId] : undefined,
+      });
+      return { value: p.id, label: p.name };
+    },
+  });
 
   useEffect(() => {
     if (opened) {
@@ -109,14 +123,7 @@ export function NewDealModal({
           options={persons.map((p) => ({ value: p.id, label: p.name }))}
           value={primaryPersonId}
           onChange={setPrimaryPersonId}
-          onCreate={async (name) => {
-            // If a company is selected, link the new contact to it.
-            const p = await createPerson.mutateAsync({
-              name,
-              companyIds: companyId ? [companyId] : undefined,
-            });
-            return { value: p.id, label: p.name };
-          }}
+          onCreate={personCreate.prompt}
         />
         <Select
           label="Pipeline"
@@ -136,6 +143,7 @@ export function NewDealModal({
           Create deal
         </Button>
       </Stack>
+      {personCreate.modal}
     </Modal>
   );
 }

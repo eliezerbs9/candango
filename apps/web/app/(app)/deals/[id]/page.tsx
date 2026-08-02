@@ -26,6 +26,7 @@ import { ComposeEmail } from '@/components/email/ComposeEmail';
 import { StatusBadge } from '@/components/primitives/StatusBadge';
 import { Money } from '@/components/primitives/Money';
 import { CreatableSelect } from '@/components/common/CreatableSelect';
+import { usePersonCreate } from '@/components/contacts/PersonCreateModal';
 import { AddressFields, type Address } from '@/components/deals/AddressFields';
 import { CustomFieldsEditor } from '@/components/deals/CustomFieldsEditor';
 import { DealTimeline } from '@/components/deals/DealTimeline';
@@ -78,6 +79,19 @@ export default function DealDetailPage() {
   const [winConvertOpen, winConvertCtl] = useDisclosure(false);
 
   const [form, setForm] = useState<DealForm | null>(null);
+
+  // Type-and-create a contact → captures First + Last (prefilled from the typed text).
+  const personCreate = usePersonCreate({
+    linkLabel: form?.companyId ? companies.find((c) => c.id === form.companyId)?.name : undefined,
+    create: async ({ firstName, lastName, link }) => {
+      const p = await createPerson.mutateAsync({
+        firstName,
+        lastName,
+        companyIds: link && form?.companyId ? [form.companyId] : undefined,
+      });
+      return { value: p.id, label: p.name };
+    },
+  });
 
   useEffect(() => {
     if (deal) {
@@ -197,6 +211,7 @@ export default function DealDetailPage() {
         </Group>
       </Group>
 
+      {personCreate.modal}
       <ComposeEmail opened={emailOpen} onClose={emailCtl.close} defaultDealId={deal.id} />
       <WinConvertModal dealId={deal.id} currency={deal.currency} opened={winConvertOpen} onClose={winConvertCtl.close} />
 
@@ -247,13 +262,7 @@ export default function DealDetailPage() {
                 options={persons.map((p) => ({ value: p.id, label: p.name }))}
                 value={form.primaryPersonId}
                 onChange={(v) => setForm({ ...form, primaryPersonId: v })}
-                onCreate={async (name) => {
-                  const p = await createPerson.mutateAsync({
-                    name,
-                    companyIds: form.companyId ? [form.companyId] : undefined,
-                  });
-                  return { value: p.id, label: p.name };
-                }}
+                onCreate={personCreate.prompt}
               />
               <TextInput
                 type="date"

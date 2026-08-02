@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button, Modal, Select, Stack, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
+import { usePersonCreate } from '@/components/contacts/PersonCreateModal';
 import { ApiError } from '@/lib/api/client';
 import { useCompanies, useCreateActivity, useCreatePerson, useDeals, usePersons, useUpdateActivity, useUsers } from '@/lib/api/hooks';
 import { useAuthStore } from '@/lib/auth/store';
@@ -118,6 +119,19 @@ export function ActivityForm({
     label: persons.find((p) => p.id === id)?.name ?? 'Unknown',
   }));
 
+  // Type-and-create a participant → captures First + Last (prefilled from the typed text).
+  const personCreate = usePersonCreate({
+    linkLabel: dealCompany?.name,
+    create: async ({ firstName, lastName, link }) => {
+      const p = await createPerson.mutateAsync({
+        firstName,
+        lastName,
+        companyIds: link && dealCompany ? [dealCompany.id] : undefined,
+      });
+      return { value: p.id, label: p.name };
+    },
+  });
+
   const submit = () => {
     if (!subject.trim()) {
       notifications.show({ message: 'Subject is required', color: 'red' });
@@ -190,13 +204,7 @@ export function ActivityForm({
           options={participantOptions}
           value={participantIds}
           onChange={setParticipantIds}
-          onCreate={async (name) => {
-            const link = dealCompany
-              ? window.confirm(`Also add ${name} as a contact of ${dealCompany.name}?`)
-              : false;
-            const p = await createPerson.mutateAsync(link ? { name, companyIds: [dealCompany!.id] } : { name });
-            return { value: p.id, label: p.name };
-          }}
+          onCreate={personCreate.prompt}
         />
 
         {timed ? (
@@ -250,6 +258,7 @@ export function ActivityForm({
           {activity ? 'Save changes' : 'Create activity'}
         </Button>
       </Stack>
+      {personCreate.modal}
     </Modal>
   );
 }
