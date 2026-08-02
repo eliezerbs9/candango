@@ -14,6 +14,9 @@ export interface ApiPerson {
   email: string | null;
   phone: string | null;
   address: Address | null;
+  tags: string[];
+  emailSubscribed: boolean;
+  emailUnsubscribedAt: string | null;
   companies: ContactRef[];
   customFields: Record<string, unknown>;
 }
@@ -24,8 +27,41 @@ export interface ApiCompany {
   domain: string | null;
   address: Address | null;
   phone: string | null;
+  tags: string[];
   contacts: ContactRef[];
   customFields: Record<string, unknown>;
+}
+
+/** A deal as summarised on a contact/company detail view. */
+export interface ContactDeal {
+  id: string;
+  refNumber: number | null;
+  title: string;
+  value: number;
+  currency: string;
+  status: string;
+  stageName: string | null;
+}
+
+/** A message as summarised on a contact/company detail view. */
+export interface ContactMessage {
+  id: string;
+  direction: string;
+  subject: string | null;
+  snippet: string | null;
+  fromAddress: string;
+  at: string;
+  dealId: string | null;
+}
+
+export interface ApiPersonDetail extends ApiPerson {
+  deals: ContactDeal[];
+  messages: ContactMessage[];
+}
+
+export interface ApiCompanyDetail extends ApiCompany {
+  deals: ContactDeal[];
+  messages: ContactMessage[];
 }
 
 export interface PersonBody {
@@ -36,6 +72,8 @@ export interface PersonBody {
   phone?: string;
   address?: Address;
   companyIds?: string[];
+  tags?: string[];
+  emailSubscribed?: boolean;
   customFields?: Record<string, unknown>;
 }
 
@@ -45,11 +83,16 @@ export interface CompanyBody {
   address?: Address;
   phone?: string;
   contactIds?: string[];
+  tags?: string[];
   customFields?: Record<string, unknown>;
 }
 
 export function getPersons(token: string) {
   return apiFetch<ApiPerson[]>('/persons', { token });
+}
+
+export function getPersonDetail(token: string, id: string) {
+  return apiFetch<ApiPersonDetail>(`/persons/${id}/detail`, { token });
 }
 
 export function createPerson(token: string, body: PersonBody) {
@@ -66,6 +109,10 @@ export function deletePerson(token: string, id: string) {
 
 export function getCompanies(token: string) {
   return apiFetch<ApiCompany[]>('/companies', { token });
+}
+
+export function getCompanyDetail(token: string, id: string) {
+  return apiFetch<ApiCompanyDetail>(`/companies/${id}/detail`, { token });
 }
 
 export function createCompany(token: string, body: CompanyBody) {

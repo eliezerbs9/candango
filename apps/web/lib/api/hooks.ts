@@ -44,6 +44,8 @@ import {
   deleteCompany,
   deletePerson,
   getCompanies,
+  getCompanyDetail,
+  getPersonDetail,
   getPersons,
   updateCompany,
   updatePerson,
@@ -519,9 +521,27 @@ export function usePersons() {
   return useQuery({ queryKey: ['persons'], queryFn: () => getPersons(token!), enabled: !!token });
 }
 
+export function usePersonDetail(id: string | null) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['person-detail', id],
+    queryFn: () => getPersonDetail(token!, id!),
+    enabled: !!token && !!id,
+  });
+}
+
 export function useCompanies() {
   const token = useToken();
   return useQuery({ queryKey: ['companies'], queryFn: () => getCompanies(token!), enabled: !!token });
+}
+
+export function useCompanyDetail(id: string | null) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['company-detail', id],
+    queryFn: () => getCompanyDetail(token!, id!),
+    enabled: !!token && !!id,
+  });
 }
 
 export function useCreatePerson() {
@@ -539,7 +559,10 @@ export function useUpdatePerson() {
   return useMutation({
     mutationFn: ({ id, ...body }: { id: string } & Partial<PersonBody>) =>
       updatePerson(token!, id, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['persons'] }),
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: ['persons'] });
+      qc.invalidateQueries({ queryKey: ['person-detail', id] });
+    },
   });
 }
 
@@ -567,7 +590,10 @@ export function useUpdateCompany() {
   return useMutation({
     mutationFn: ({ id, ...body }: { id: string } & Partial<CompanyBody>) =>
       updateCompany(token!, id, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['companies'] }),
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: ['companies'] });
+      qc.invalidateQueries({ queryKey: ['company-detail', id] });
+    },
   });
 }
 

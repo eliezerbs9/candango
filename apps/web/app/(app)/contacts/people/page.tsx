@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import {
   ActionIcon,
+  Anchor,
   Button,
   Center,
   Group,
@@ -49,7 +51,10 @@ export default function PeoplePage() {
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState<Address>({});
   const [companyIds, setCompanyIds] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
   const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
+
+  const allTags = [...new Set(persons.flatMap((p) => p.tags ?? []))].sort((a, b) => a.localeCompare(b));
 
   const openCreate = () => {
     setEditing(null);
@@ -59,6 +64,7 @@ export default function PeoplePage() {
     setPhone('');
     setAddress({});
     setCompanyIds([]);
+    setTags([]);
     setCustomFields({});
     ctl.open();
   };
@@ -71,6 +77,7 @@ export default function PeoplePage() {
     setPhone(p.phone ?? '');
     setAddress(p.address ?? {});
     setCompanyIds(p.companies.map((c) => c.id));
+    setTags(p.tags ?? []);
     setCustomFields(p.customFields ?? {});
     ctl.open();
   };
@@ -105,7 +112,15 @@ export default function PeoplePage() {
   const companyNames = (p: ApiPerson) => (p.companies.length ? p.companies.map((c) => c.name).join(', ') : '—');
 
   const columns: Column<ApiPerson>[] = [
-    { key: 'name', header: 'Name', render: (p) => <Text fw={500}>{p.name}</Text> },
+    {
+      key: 'name',
+      header: 'Name',
+      render: (p) => (
+        <Anchor component={Link} href={`/contacts/people/${p.id}`} fw={500}>
+          {p.name}
+        </Anchor>
+      ),
+    },
     { key: 'email', header: 'Email', render: (p) => p.email ?? '—' },
     { key: 'companies', header: 'Companies', render: companyNames },
     { key: 'actions', header: '', render: (p) => rowMenu(p) },
@@ -123,6 +138,7 @@ export default function PeoplePage() {
       phone: phone || undefined,
       address: Object.values(address).some(Boolean) ? address : undefined,
       companyIds,
+      tags,
       customFields,
     };
     const onSuccess = () => {
@@ -194,6 +210,16 @@ export default function PeoplePage() {
               const c = await createCompany.mutateAsync({ name: n });
               return { value: c.id, label: c.name };
             }}
+          />
+          <CreatableMultiSelect
+            label="Labels"
+            placeholder="e.g. VIP, Newsletter"
+            options={allTags.map((t) => ({ value: t, label: t }))}
+            value={tags}
+            onChange={setTags}
+            onCreate={async (t) => ({ value: t.trim(), label: t.trim() })}
+            createVerb="Add"
+            emptyText="Type to add a label"
           />
           <CustomFieldsEditor
             entity="person"
