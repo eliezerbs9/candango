@@ -813,6 +813,8 @@ model EmailTemplate {
   subject         String
   body            String
   bodyFormat      String    @default("richtext") // richtext | html (raw pasted HTML)
+  scope           String    @default("deal") // deal | marketing — the variable context it renders against (template-vars.ts)
+  systemKey       String? // non-null = protected built-in (send_estimate/send_invoice); always exists, cannot be deleted
   tags            String[]  @default([])
   createdByUserId String?
   archivedAt      DateTime?
@@ -822,6 +824,7 @@ model EmailTemplate {
   organization Organization      @relation(fields: [orgId], references: [id])
   automations  EmailAutomation[]
 
+  @@unique([orgId, systemKey])
   @@index([orgId])
 }
 

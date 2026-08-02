@@ -8,29 +8,62 @@
  * the single source of truth.
  */
 
+/**
+ * A template's scope decides which variable context it renders against — and therefore where it
+ * can be used. This is the shared contract that stops an automation (or a send modal) from ever
+ * pairing a template with a context it can't fill:
+ *  - `deal`      — sent in the context of one deal: contact, company, deal AND the sending user
+ *                  (sender.*). Used by the deal send modal and deal-triggered automations.
+ *  - `marketing` — broadcast to an audience of contacts from the workspace (no single deal, no
+ *                  personal sender): contact, company, workspace only. Used by marketing automations.
+ */
+export type TemplateScope = 'deal' | 'marketing';
+export const TEMPLATE_SCOPES: TemplateScope[] = ['deal', 'marketing'];
+
 export interface TemplateVariable {
   key: string;
   label: string;
   group: string;
   example: string;
+  /**
+   * Scopes this variable is available in (a deal-only var can't appear in a marketing template).
+   * Optional because the signature palette (SIGNATURE_VARIABLES) reuses this shape without scoping.
+   */
+  scopes?: TemplateScope[];
 }
 
+const BOTH: TemplateScope[] = ['deal', 'marketing'];
+const DEAL_ONLY: TemplateScope[] = ['deal'];
+
 export const TEMPLATE_VARIABLES: TemplateVariable[] = [
-  { key: 'contact.first_name', label: 'Contact first name', group: 'Contact', example: 'Alex' },
-  { key: 'contact.last_name', label: 'Contact last name', group: 'Contact', example: 'Taylor' },
-  { key: 'contact.name', label: 'Contact full name', group: 'Contact', example: 'Alex Taylor' },
-  { key: 'contact.email', label: 'Contact email', group: 'Contact', example: 'alex@example.com' },
-  { key: 'contact.phone', label: 'Contact phone', group: 'Contact', example: '(555) 123-4567' },
-  { key: 'company.name', label: 'Company name', group: 'Company', example: 'Acme Inc.' },
-  { key: 'deal.title', label: 'Deal title', group: 'Deal', example: 'your project' },
-  { key: 'deal.value', label: 'Deal value', group: 'Deal', example: '$5,000.00' },
-  { key: 'sender.name', label: 'Your name', group: 'Sender', example: 'Jordan Lee' },
-  { key: 'sender.email', label: 'Your email', group: 'Sender', example: 'jordan@example.com' },
-  { key: 'sender.phone', label: 'Your phone', group: 'Sender', example: '(555) 987-6543' },
-  { key: 'workspace.name', label: 'Workspace name', group: 'Workspace', example: 'Your Company' },
+  { key: 'contact.first_name', label: 'Contact first name', group: 'Contact', example: 'Alex', scopes: BOTH },
+  { key: 'contact.last_name', label: 'Contact last name', group: 'Contact', example: 'Taylor', scopes: BOTH },
+  { key: 'contact.name', label: 'Contact full name', group: 'Contact', example: 'Alex Taylor', scopes: BOTH },
+  { key: 'contact.email', label: 'Contact email', group: 'Contact', example: 'alex@example.com', scopes: BOTH },
+  { key: 'contact.phone', label: 'Contact phone', group: 'Contact', example: '(555) 123-4567', scopes: BOTH },
+  { key: 'company.name', label: 'Company name', group: 'Company', example: 'Acme Inc.', scopes: BOTH },
+  { key: 'deal.title', label: 'Deal title', group: 'Deal', example: 'your project', scopes: DEAL_ONLY },
+  { key: 'deal.value', label: 'Deal value', group: 'Deal', example: '$5,000.00', scopes: DEAL_ONLY },
+  { key: 'sender.name', label: 'Your name', group: 'Sender', example: 'Jordan Lee', scopes: DEAL_ONLY },
+  { key: 'sender.email', label: 'Your email', group: 'Sender', example: 'jordan@example.com', scopes: DEAL_ONLY },
+  { key: 'sender.phone', label: 'Your phone', group: 'Sender', example: '(555) 987-6543', scopes: DEAL_ONLY },
+  { key: 'workspace.name', label: 'Workspace name', group: 'Workspace', example: 'Your Company', scopes: BOTH },
 ];
 
 const VALID_KEYS = new Set(TEMPLATE_VARIABLES.map((v) => v.key));
+
+/** Every known template variable key (across all scopes) — used to tell a real var from a typo. */
+export const ALL_TEMPLATE_KEYS: ReadonlySet<string> = VALID_KEYS;
+
+/** Variables available in a given scope (used to populate the editor palette + validate a body). */
+export function variablesForScope(scope: TemplateScope): TemplateVariable[] {
+  return TEMPLATE_VARIABLES.filter((v) => v.scopes?.includes(scope));
+}
+
+/** Keys a template of this scope is allowed to reference. */
+export function allowedKeysForScope(scope: TemplateScope): Set<string> {
+  return new Set(variablesForScope(scope).map((v) => v.key));
+}
 
 // ── Signature ────────────────────────────────────────────────────────────────
 // A per-workspace signature (Organization.emailSignature, stored as an HTML string with
@@ -115,14 +148,24 @@ export interface DefaultTemplate {
   name: string;
   subject: string;
   body: string;
+  /** Defaults to 'deal'. */
+  scope?: TemplateScope;
+  /**
+   * Set for built-in templates that back a system function (Send estimate / Send invoice). These
+   * are always seeded and can be edited but never deleted, so those flows always have a template.
+   */
+  systemKey?: string;
 }
 
 /**
  * Starter templates seeded for a new workspace (and available on demand for existing ones).
  * Bodies hold the message text only — the signature is appended automatically at send/preview time.
+ * The `systemKey` ones are protected (non-deletable); the rest are ordinary starters.
  */
 export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
   {
+    systemKey: 'send_estimate',
+    scope: 'deal',
     name: 'Send estimate',
     subject: 'Your estimate from {{workspace.name}}',
     body:
@@ -132,6 +175,8 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
       '<p>We look forward to working with you.</p>',
   },
   {
+    systemKey: 'send_invoice',
+    scope: 'deal',
     name: 'Send invoice',
     subject: 'Invoice for {{deal.title}}',
     body:
@@ -141,6 +186,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
       '<p>Thank you for your business!</p>',
   },
   {
+    scope: 'deal',
     name: 'Follow-up',
     subject: 'Following up on {{deal.title}}',
     body:
@@ -150,6 +196,9 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
       '<p>Happy to hop on a quick call whenever works for you.</p>',
   },
 ];
+
+/** The protected system templates (subset of DEFAULT_TEMPLATES). */
+export const SYSTEM_TEMPLATES = DEFAULT_TEMPLATES.filter((t) => t.systemKey);
 
 // ── Body variable rendering ──────────────────────────────────────────────────
 type JsonContact = { value?: string; label?: string };

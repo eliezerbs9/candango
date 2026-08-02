@@ -45,12 +45,19 @@ export class EmailAutomationsService {
     return rows.map(shape);
   }
 
-  /** The send_email action needs a template that belongs to this org. */
+  /**
+   * The send_email action needs a template that belongs to this org AND is deal-scoped — these
+   * automations run in the context of one deal, so a marketing template (no deal/sender variables)
+   * could never render correctly here.
+   */
   private async validateAction(orgId: string, action: string, templateId?: string | null) {
     if (action === 'send_email') {
       if (!templateId) throw new BadRequestException('Pick a template for the email action');
       const t = await this.prisma.emailTemplate.findFirst({ where: { id: templateId, orgId, archivedAt: null } });
       if (!t) throw new BadRequestException('Template not found');
+      if (t.scope !== 'deal') {
+        throw new BadRequestException('Pick a deal email template — marketing templates can’t be used in deal automations');
+      }
     }
   }
 

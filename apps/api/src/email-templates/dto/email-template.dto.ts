@@ -1,4 +1,5 @@
 import { ArrayMaxSize, IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { TEMPLATE_SCOPES } from '../template-vars';
 
 const BODY_FORMATS = ['richtext', 'html'];
 
@@ -7,6 +8,12 @@ export class CreateEmailTemplateDto {
   @MinLength(1)
   @MaxLength(120)
   name!: string;
+
+  // Immutable after creation: the scope fixes which variable context the template renders against
+  // and where it can be used, so an automation/send flow can trust it.
+  @IsOptional()
+  @IsIn(TEMPLATE_SCOPES)
+  scope?: string;
 
   @IsString()
   @MinLength(1)

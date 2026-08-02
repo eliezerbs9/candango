@@ -316,6 +316,8 @@ function AutomationModal({
   const create = useCreateEmailAutomation();
   const update = useUpdateEmailAutomation();
   const { data: templates = [] } = useEmailTemplates();
+  // Deal automations run in a deal's context — only deal-scoped templates can render there.
+  const dealTemplates = useMemo(() => templates.filter((t) => t.scope === 'deal'), [templates]);
   const { data: stages = [] } = useAllStages();
   const { data: google } = useGoogleStatus();
 
@@ -481,12 +483,13 @@ function AutomationModal({
           <Select
             label="Send this template"
             required
-            placeholder={templates.length === 0 ? 'Create a template first' : 'Pick a template'}
-            data={templates.map((t) => ({ value: t.id, label: t.name }))}
+            description="Deal email templates only"
+            placeholder={dealTemplates.length === 0 ? 'Create a deal template first' : 'Pick a template'}
+            data={dealTemplates.map((t) => ({ value: t.id, label: t.name }))}
             value={templateId}
             onChange={setTemplateId}
             renderOption={({ option }) => {
-              const t = templates.find((x) => x.id === option.value);
+              const t = dealTemplates.find((x) => x.id === option.value);
               return (
                 <Group gap={6} wrap="wrap" align="center">
                   <Text size="sm">{option.label}</Text>

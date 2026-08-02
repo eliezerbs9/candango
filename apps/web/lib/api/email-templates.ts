@@ -3,12 +3,20 @@ import { apiFetch } from './client';
 /** Reusable email template. `subject`/`body` may contain {{variables}}. */
 export type TemplateBodyFormat = 'richtext' | 'html';
 
+/** Which variable context a template renders against + where it can be used. */
+export type TemplateScope = 'deal' | 'marketing';
+
 export interface EmailTemplate {
   id: string;
   name: string;
   subject: string;
   body: string;
   bodyFormat: TemplateBodyFormat;
+  scope: TemplateScope;
+  /** Non-null for protected built-ins (Send estimate/invoice). */
+  systemKey: string | null;
+  /** True when the template is a protected system template (cannot be deleted). */
+  system: boolean;
   tags: string[];
   updatedAt: string;
 }
@@ -18,6 +26,8 @@ export interface EmailTemplateBody {
   subject?: string;
   body?: string;
   bodyFormat?: TemplateBodyFormat;
+  /** Only honoured on create — scope is immutable afterwards. */
+  scope?: TemplateScope;
   tags?: string[];
 }
 
@@ -27,6 +37,8 @@ export interface TemplateVariable {
   label: string;
   group: string;
   example: string;
+  /** Scopes this variable is available in (absent = available everywhere). */
+  scopes?: TemplateScope[];
   /** Valid for rendering but hidden from the click-to-insert palette (e.g. image URLs). */
   hidden?: boolean;
 }

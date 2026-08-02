@@ -42,7 +42,9 @@ import {
   useUpdateEmailTemplate,
   useUpdateOrganization,
 } from '@/lib/api/hooks';
-import type { EmailTemplate, TemplateBodyFormat, TemplateVariable } from '@/lib/api/email-templates';
+import type { EmailTemplate, TemplateBodyFormat, TemplateScope, TemplateVariable } from '@/lib/api/email-templates';
+
+const SCOPE_LABEL: Record<TemplateScope, string> = { deal: 'Deal', marketing: 'Marketing' };
 import type { Organization } from '@/lib/api/organization';
 import {
   DEFAULT_SIGNATURE_HTML,
@@ -183,6 +185,16 @@ export default function EmailTemplatesSettingsPage() {
                     <Text fw={600} lineClamp={1}>
                       {t.name}
                     </Text>
+                    {t.scope === 'marketing' && (
+                      <Badge size="xs" variant="light" color="grape" style={{ textTransform: 'none' }}>
+                        Marketing
+                      </Badge>
+                    )}
+                    {t.system && (
+                      <Badge size="xs" variant="light" color="blue" style={{ textTransform: 'none' }}>
+                        System
+                      </Badge>
+                    )}
                     {t.bodyFormat === 'html' && (
                       <Badge size="xs" variant="light" color="gray" style={{ textTransform: 'none' }}>
                         HTML
@@ -209,9 +221,15 @@ export default function EmailTemplatesSettingsPage() {
                       <Menu.Item leftSection={<IconPencil size={14} />} onClick={() => openEdit(t)}>
                         Edit
                       </Menu.Item>
-                      <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => remove(t)}>
-                        Delete
-                      </Menu.Item>
+                      {t.system ? (
+                        <Menu.Item leftSection={<IconTrash size={14} />} disabled>
+                          System template (can’t delete)
+                        </Menu.Item>
+                      ) : (
+                        <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => remove(t)}>
+                          Delete
+                        </Menu.Item>
+                      )}
                     </Menu.Dropdown>
                   </Menu>
                 )}
@@ -388,6 +406,7 @@ function TemplateModal({
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [bodyFormat, setBodyFormat] = useState<TemplateBodyFormat>('richtext');
+  const [scope, setScope] = useState<TemplateScope>('deal');
   const [tags, setTags] = useState<string[]>([]);
 
   const subjectRef = useRef<HTMLInputElement>(null);
@@ -401,6 +420,7 @@ function TemplateModal({
     setSubject(editing?.subject ?? '');
     setBody(editing?.body ?? '');
     setBodyFormat(editing?.bodyFormat ?? 'richtext');
+    setScope(editing?.scope ?? 'deal');
     setTags(editing?.tags ?? []);
     active.current = 'body';
   }, [opened, editing]);
@@ -439,15 +459,20 @@ function TemplateModal({
     }
   };
 
+  // Only offer variables valid for this template's scope (a marketing template has no deal/sender vars).
+  const scopedVariables = useMemo(
+    () => variables.filter((v) => !v.scopes || v.scopes.includes(scope)),
+    [variables, scope],
+  );
   const groups = useMemo(() => {
     const map = new Map<string, TemplateVariable[]>();
-    for (const v of variables) {
+    for (const v of scopedVariables) {
       const list = map.get(v.group) ?? [];
       list.push(v);
       map.set(v.group, list);
     }
     return [...map.entries()];
-  }, [variables]);
+  }, [scopedVariables]);
 
   const bodyIsEmpty =
     bodyFormat === 'html'
@@ -459,7 +484,6 @@ function TemplateModal({
       notifications.show({ message: 'Name, subject and body are all required', color: 'red' });
       return;
     }
-    const payload = { name: name.trim(), subject, body, bodyFormat, tags };
     const done = {
       onSuccess: () => {
         notifications.show({ message: editing ? 'Template saved' : 'Template created', color: 'green' });
@@ -467,8 +491,12 @@ function TemplateModal({
       },
       onError: fail,
     };
-    if (editing) update.mutate({ id: editing.id, body: payload }, done);
-    else create.mutate(payload, done);
+    if (editing) {
+      // Scope is immutable — never sent on update.
+      update.mutate({ id: editing.id, body: { name: name.trim(), subject, body, bodyFormat, tags } }, done);
+    } else {
+      create.mutate({ name: name.trim(), subject, body, bodyFormat, tags, scope }, done);
+    }
   };
 
   return (
@@ -485,6 +513,29 @@ function TemplateModal({
               onChange={(e) => setName(e.currentTarget.value)}
               data-autofocus
             />
+            <div>
+              <Group justify="space-between" align="center" mb={4}>
+                <Text size="sm" fw={500}>
+                  Template type
+                </Text>
+                <SegmentedControl
+                  size="xs"
+                  value={scope}
+                  onChange={(v) => setScope(v as TemplateScope)}
+                  disabled={!!editing}
+                  data={[
+                    { label: 'Deal email', value: 'deal' },
+                    { label: 'Marketing email', value: 'marketing' },
+                  ]}
+                />
+              </Group>
+              <Text size="xs" c="dimmed">
+                {scope === 'deal'
+                  ? 'Sent from a deal — can use contact, company, deal and your (sender) details. Available in the deal send box and deal automations.'
+                  : 'Broadcast to an audience of contacts — can use contact, company and workspace details only (no deal or sender). Available in marketing automations.'}
+                {editing ? ' The type can’t be changed after creation.' : ''}
+              </Text>
+            </div>
             <TextInput
               ref={subjectRef}
               label="Subject"

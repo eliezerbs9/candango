@@ -63,7 +63,9 @@ export function ComposeEmail({
 }) {
   const { data: deals = [] } = useDeals();
   const { data: persons = [] } = usePersons();
-  const { data: templates = [] } = useEmailTemplates();
+  const { data: allTemplates = [] } = useEmailTemplates();
+  // This composer sends in a deal's context, so only deal-scoped templates apply.
+  const templates = useMemo(() => allTemplates.filter((t) => t.scope === 'deal'), [allTemplates]);
   const { data: profile } = useProfile();
   const { data: org } = useOrganization();
   const { data: google } = useGoogleStatus();
