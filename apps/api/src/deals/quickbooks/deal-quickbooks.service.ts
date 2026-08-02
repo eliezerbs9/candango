@@ -405,10 +405,12 @@ export class DealQuickbooksService {
         include: { lines: lineSelect },
       });
       await this.recomputeDealValue(orgId, dealId);
+      if (status === 'sent') this.emitDocSent(orgId, dealId, 'estimate');
       return shapeDoc(row);
     }
     const row = await this.prisma.dealEstimate.update({ where: { id: estimateId }, data: { status }, include: { lines: lineSelect } });
     await this.recomputeDealValue(orgId, dealId);
+    if (status === 'sent') this.emitDocSent(orgId, dealId, 'estimate');
     return shapeDoc(row);
   }
 
@@ -534,7 +536,13 @@ export class DealQuickbooksService {
     await this.requireQboWritable(orgId, inv.source);
     const row = await this.prisma.dealInvoice.update({ where: { id: invoiceId }, data: { status }, include: { lines: lineSelect } });
     await this.recomputeDealValue(orgId, dealId); // void invoices drop out of the value
+    if (status === 'sent') this.emitDocSent(orgId, dealId, 'invoice');
     return shapeDoc(row);
+  }
+
+  /** Fire the `deal.doc_sent` event that email automations (FR-16.3) subscribe to. */
+  private emitDocSent(orgId: string, dealId: string, docKind: 'estimate' | 'invoice') {
+    this.events.emit('webhook.event', { orgId, type: 'deal.doc_sent', data: { deal: { id: dealId }, docKind } });
   }
 
   /** Keep the QBO sub-customer in sync when a linked deal's name/addresses change. Non-blocking. */

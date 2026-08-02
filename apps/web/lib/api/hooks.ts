@@ -89,6 +89,14 @@ import {
   renderEmailTemplate,
   type EmailTemplateBody,
 } from './email-templates';
+import {
+  getEmailAutomations,
+  getAutomationTriggers,
+  createEmailAutomation,
+  updateEmailAutomation,
+  deleteEmailAutomation,
+  type EmailAutomationBody,
+} from './email-automations';
 import { getOnboarding, setOnboardingCompleted } from './onboarding';
 import { createApiKey, getApiKeys, revokeApiKey } from './apikeys';
 import {
@@ -821,6 +829,50 @@ export function useRenderEmailTemplate() {
   const token = useToken();
   return useMutation({
     mutationFn: ({ id, dealId }: { id: string; dealId?: string }) => renderEmailTemplate(token!, id, dealId),
+  });
+}
+
+// --- Email automations ---
+
+export function useEmailAutomations() {
+  const token = useToken();
+  return useQuery({ queryKey: ['email-automations'], queryFn: () => getEmailAutomations(token!), enabled: !!token });
+}
+
+export function useAutomationTriggers() {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['automation-triggers'],
+    queryFn: () => getAutomationTriggers(token!),
+    enabled: !!token,
+    staleTime: Infinity,
+  });
+}
+
+export function useCreateEmailAutomation() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: EmailAutomationBody) => createEmailAutomation(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['email-automations'] }),
+  });
+}
+
+export function useUpdateEmailAutomation() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: EmailAutomationBody }) => updateEmailAutomation(token!, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['email-automations'] }),
+  });
+}
+
+export function useDeleteEmailAutomation() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteEmailAutomation(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['email-automations'] }),
   });
 }
 

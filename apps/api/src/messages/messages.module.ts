@@ -9,5 +9,6 @@ import { InboundEmailService } from './inbound-email.service';
   imports: [AuthModule],
   controllers: [MessagesController, InboundEmailController],
   providers: [MessagesService, InboundEmailService],
+  exports: [MessagesService],
 })
 export class MessagesModule {}
