@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser, type AuthContext } from '../auth/current-user.decorator';
@@ -26,6 +26,12 @@ export class EmailTemplatesController {
   @Get(':id')
   getOne(@CurrentUser() u: AuthContext, @Param('id') id: string) {
     return this.svc.get(u.orgId, id);
+  }
+
+  /** Render a template's subject + body for a deal (to pre-fill the send composer). */
+  @Get(':id/render')
+  render(@CurrentUser() u: AuthContext, @Param('id') id: string, @Query('dealId') dealId?: string) {
+    return this.svc.renderForDeal(u.orgId, u.userId, id, dealId);
   }
 
   @Post()

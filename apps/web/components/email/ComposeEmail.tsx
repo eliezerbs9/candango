@@ -1,13 +1,22 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, FileButton, Group, Modal, Pill, Select, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Button, FileButton, Group, Modal, Paper, Pill, Select, Stack, Text, TextInput } from '@mantine/core';
 import { IconBulb, IconPaperclip } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { ApiError } from '@/lib/api/client';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
 import { RichTextBody } from '@/components/common/RichTextBody';
-import { useDeals, usePersons, useSendMessage } from '@/lib/api/hooks';
+import {
+  useDeals,
+  useEmailTemplates,
+  useOrganization,
+  usePersons,
+  useProfile,
+  useRenderEmailTemplate,
+  useSendMessage,
+} from '@/lib/api/hooks';
+import { buildSignatureValues, renderSignatureHtml } from '@/lib/email-signature';
 import type { EmailAttachment } from '@/lib/api/messages';
 
 export interface ReplyContext {
@@ -48,13 +57,33 @@ export function ComposeEmail({
 }) {
   const { data: deals = [] } = useDeals();
   const { data: persons = [] } = usePersons();
+  const { data: templates = [] } = useEmailTemplates();
+  const { data: profile } = useProfile();
+  const { data: org } = useOrganization();
   const send = useSendMessage();
+  const renderTpl = useRenderEmailTemplate();
 
   const [dealId, setDealId] = useState<string | null>(null);
   const [to, setTo] = useState<string[]>([]);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  const [templateId, setTemplateId] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
+
+  // The workspace signature, resolved with the current sender + workspace, added to every send.
+  const signatureHtml = useMemo(
+    () =>
+      org
+        ? renderSignatureHtml(
+            org.emailSignature,
+            buildSignatureValues(
+              { name: profile?.name, email: profile?.email, phone: profile?.phone, avatarUrl: profile?.avatarUrl },
+              { name: org.name, logoUrl: org.logoUrl },
+            ),
+          )
+        : '',
+    [org, profile],
+  );
 
   // The deal's people: its primary contact + everyone at the deal's company.
   const dealPeopleOf = (id: string | null) => {
@@ -80,13 +109,32 @@ export function ComposeEmail({
     setTo(reply ? reply.to : dealEmails(defaultDealId ?? null));
     setSubject(reply ? reply.subject : defaultSubject ?? '');
     setBody('');
+    setTemplateId(null);
     setAttachments(initialAttachments ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened]);
 
+  // Load a template, resolving its variables against the current deal.
+  const applyTemplate = (id: string | null, forDealId: string | null) => {
+    setTemplateId(id);
+    if (!id) return;
+    renderTpl.mutate(
+      { id, dealId: forDealId ?? undefined },
+      {
+        onSuccess: ({ subject: s, body: b }) => {
+          setSubject(s);
+          setBody(b);
+        },
+        onError: (e) =>
+          notifications.show({ message: e instanceof ApiError ? e.message : 'Could not load template', color: 'red' }),
+      },
+    );
+  };
+
   const onDealChange = (id: string | null) => {
     setDealId(id);
     if (!reply) setTo(dealEmails(id)); // prefill recipients from the deal's people
+    if (templateId) applyTemplate(templateId, id); // re-resolve the chosen template for the new deal
   };
 
   // Smart suggest (FR-5.8): if a typed recipient is a known contact on an open deal and no deal is
@@ -129,7 +177,7 @@ export function ComposeEmail({
       {
         to,
         subject: subject.trim(),
-        body,
+        body: body + signatureHtml, // append the workspace signature (kept out of the editor)
         html: true,
         attachments,
         dealId: dealId ?? undefined,
@@ -195,12 +243,32 @@ export function ComposeEmail({
             </Group>
           </Alert>
         ) : null}
+        {templates.length > 0 && (
+          <Select
+            label="Template"
+            placeholder="Start from a template (optional)"
+            data={templates.map((t) => ({ value: t.id, label: t.name }))}
+            value={templateId}
+            onChange={(id) => applyTemplate(id, dealId)}
+            disabled={renderTpl.isPending}
+            clearable
+            searchable
+          />
+        )}
         <TextInput label="Subject" value={subject} onChange={(e) => setSubject(e.currentTarget.value)} />
         <div>
           <Text size="sm" fw={500} mb={4}>
             Message
           </Text>
           <RichTextBody value={body} onChange={setBody} />
+          {signatureHtml && (
+            <Paper withBorder mt={6} p="xs" radius="sm" bg="var(--mantine-color-gray-0)">
+              <Text size="xs" c="dimmed" mb={2}>
+                Signature (added automatically)
+              </Text>
+              <div style={{ fontSize: 13, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: signatureHtml }} />
+            </Paper>
+          )}
         </div>
 
         <Group justify="space-between" align="center">

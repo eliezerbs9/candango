@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEmailTemplateDto, UpdateEmailTemplateDto } from './dto/email-template.dto';
-import { DEFAULT_TEMPLATES } from './template-vars';
+import { DEFAULT_TEMPLATES, buildTemplateContext, renderTemplate } from './template-vars';
 
 const shape = (t: { id: string; name: string; subject: string; body: string; updatedAt: Date }) => ({
   id: t.id,
@@ -61,6 +61,39 @@ export class EmailTemplatesService {
     const existing = await this.prisma.emailTemplate.findFirst({ where: { id, orgId, archivedAt: null } });
     if (!existing) throw new NotFoundException('Template not found');
     await this.prisma.emailTemplate.update({ where: { id }, data: { archivedAt: new Date() } });
+  }
+
+  /**
+   * Resolve a template's subject + body against a deal's context (contact/company/deal) plus the
+   * current sender + workspace — used to pre-fill the send composer. `dealId` is optional
+   * (without it, deal/contact/company variables resolve to empty).
+   */
+  async renderForDeal(orgId: string, userId: string, id: string, dealId?: string) {
+    const t = await this.get(orgId, id);
+    const deal = dealId
+      ? await this.prisma.deal.findFirst({
+          where: { id: dealId, orgId },
+          select: {
+            title: true,
+            value: true,
+            currency: true,
+            primaryPerson: { select: { firstName: true, lastName: true, name: true, emails: true, phones: true } },
+            company: { select: { name: true } },
+          },
+        })
+      : null;
+    const [user, org] = await Promise.all([
+      this.prisma.user.findFirst({ where: { id: userId, orgId }, select: { name: true, email: true, phone: true } }),
+      this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true } }),
+    ]);
+    const ctx = buildTemplateContext({
+      person: deal?.primaryPerson ?? null,
+      company: deal?.company ?? null,
+      deal: deal ? { title: deal.title, value: deal.value, currency: deal.currency } : null,
+      sender: user,
+      workspace: org,
+    });
+    return { subject: renderTemplate(t.subject, ctx), body: renderTemplate(t.body, ctx) };
   }
 
   /**

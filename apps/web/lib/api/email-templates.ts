@@ -49,3 +49,9 @@ export function deleteEmailTemplate(token: string, id: string) {
 export function seedDefaultTemplates(token: string) {
   return apiFetch<EmailTemplate[]>('/email-templates/seed-defaults', { method: 'POST', token });
 }
+
+/** Resolve a template's subject + body against a deal (for the send composer). */
+export function renderEmailTemplate(token: string, id: string, dealId?: string) {
+  const q = dealId ? `?dealId=${encodeURIComponent(dealId)}` : '';
+  return apiFetch<{ subject: string; body: string }>(`/email-templates/${id}/render${q}`, { token });
+}

@@ -85,6 +85,7 @@ import {
   updateEmailTemplate,
   deleteEmailTemplate,
   seedDefaultTemplates,
+  renderEmailTemplate,
   type EmailTemplateBody,
 } from './email-templates';
 import { getOnboarding, setOnboardingCompleted } from './onboarding';
@@ -803,6 +804,13 @@ export function useSeedDefaultTemplates() {
   return useMutation({
     mutationFn: () => seedDefaultTemplates(token!),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['email-templates'] }),
+  });
+}
+
+export function useRenderEmailTemplate() {
+  const token = useToken();
+  return useMutation({
+    mutationFn: ({ id, dealId }: { id: string; dealId?: string }) => renderEmailTemplate(token!, id, dealId),
   });
 }
 
