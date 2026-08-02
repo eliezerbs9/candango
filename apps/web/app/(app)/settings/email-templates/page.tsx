@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Accordion,
   ActionIcon,
   Badge,
   Button,
   Card,
   Center,
   Divider,
+  Grid,
   Group,
   Loader,
   Menu,
@@ -39,7 +39,6 @@ import {
 } from '@/lib/api/hooks';
 import type { EmailTemplate, TemplateVariable } from '@/lib/api/email-templates';
 import type { Organization } from '@/lib/api/organization';
-import type { Profile } from '@/lib/api/profile';
 import {
   DEFAULT_SIGNATURE_HTML,
   SIGNATURE_VARIABLES,
@@ -89,6 +88,7 @@ export default function EmailTemplatesSettingsPage() {
 
   const [editing, setEditing] = useState<EmailTemplate | null>(null);
   const [opened, ctl] = useDisclosure(false);
+  const [sigOpened, sigCtl] = useDisclosure(false);
 
   const openCreate = () => {
     setEditing(null);
@@ -132,6 +132,9 @@ export default function EmailTemplatesSettingsPage() {
         </div>
         {isAdmin && (
           <Group gap="xs">
+            <Button variant="default" leftSection={<IconSignature size={16} />} onClick={sigCtl.open}>
+              Email signature
+            </Button>
             <Button variant="default" leftSection={<IconSparkles size={16} />} onClick={addStarters} loading={seed.isPending}>
               Add starter templates
             </Button>
@@ -214,7 +217,9 @@ export default function EmailTemplatesSettingsPage() {
         </SimpleGrid>
       )}
 
-      {org && <SignatureAccordion org={org} profile={profile} sigValues={sigValues} isAdmin={isAdmin} />}
+      {org && (
+        <SignatureModal opened={sigOpened} onClose={sigCtl.close} org={org} sigValues={sigValues} isAdmin={isAdmin} />
+      )}
 
       <TemplateModal
         opened={opened}
@@ -228,15 +233,17 @@ export default function EmailTemplatesSettingsPage() {
   );
 }
 
-/** Compact, secondary signature editor — same rich-text editor as the body, signature vars only. */
-function SignatureAccordion({
+/** Signature editor — same rich-text editor as the body, signature vars only, with a live preview. */
+function SignatureModal({
+  opened,
+  onClose,
   org,
-  profile,
   sigValues,
   isAdmin,
 }: {
+  opened: boolean;
+  onClose: () => void;
   org: Organization;
-  profile: Profile | undefined;
   sigValues: Record<string, string>;
   isAdmin: boolean;
 }) {
@@ -245,8 +252,8 @@ function SignatureAccordion({
   const editorRef = useRef<Editor | null>(null);
 
   useEffect(() => {
-    setHtml(org.emailSignature ?? DEFAULT_SIGNATURE_HTML);
-  }, [org.emailSignature]);
+    if (opened) setHtml(org.emailSignature ?? DEFAULT_SIGNATURE_HTML);
+  }, [opened, org.emailSignature]);
 
   const insertVar = (key: string) => editorRef.current?.chain().focus().insertContent(`{{${key}}}`).run();
 
@@ -254,7 +261,10 @@ function SignatureAccordion({
     update.mutate(
       { emailSignature: html },
       {
-        onSuccess: () => notifications.show({ message: 'Signature saved', color: 'green' }),
+        onSuccess: () => {
+          notifications.show({ message: 'Signature saved', color: 'green' });
+          onClose();
+        },
         onError: fail,
       },
     );
@@ -262,67 +272,64 @@ function SignatureAccordion({
   const preview = renderSignatureHtml(html, sigValues);
 
   return (
-    <Accordion variant="contained">
-      <Accordion.Item value="signature">
-        <Accordion.Control icon={<IconSignature size={18} />}>
-          <Text fw={600} size="sm">
-            Email signature
+    <Modal opened={opened} onClose={onClose} title="Email signature" size="lg" centered>
+      <Stack gap="sm">
+        <Text size="sm" c="dimmed">
+          Added to the bottom of every email. Each sender&apos;s own photo, name, email and phone fill in
+          automatically. Clear it to send with no signature.
+        </Text>
+        {isAdmin ? (
+          <>
+            <RichTextBody value={html} onChange={setHtml} onReady={(e) => (editorRef.current = e)} minHeight={140} />
+            <Group gap={6} wrap="wrap">
+              <Text size="xs" c="dimmed">
+                Insert:
+              </Text>
+              {SIGNATURE_VARIABLES.map((v) => (
+                <Badge
+                  key={v.key}
+                  variant="light"
+                  color="candango"
+                  style={{ cursor: 'pointer', textTransform: 'none' }}
+                  onClick={() => insertVar(v.key)}
+                >
+                  {v.label}
+                </Badge>
+              ))}
+            </Group>
+          </>
+        ) : null}
+        <div>
+          <Text size="xs" c="dimmed" mb={4}>
+            Preview
           </Text>
-          <Text size="xs" c="dimmed">
-            Added to the bottom of every email — click to edit (leave empty for none)
-          </Text>
-        </Accordion.Control>
-        <Accordion.Panel>
-          {isAdmin ? (
-            <Stack gap="sm">
-              <RichTextBody value={html} onChange={setHtml} onReady={(e) => (editorRef.current = e)} minHeight={130} />
-              <Group gap={6} wrap="wrap">
-                <Text size="xs" c="dimmed">
-                  Insert:
-                </Text>
-                {SIGNATURE_VARIABLES.map((v) => (
-                  <Badge
-                    key={v.key}
-                    variant="light"
-                    color="candango"
-                    style={{ cursor: 'pointer', textTransform: 'none' }}
-                    onClick={() => insertVar(v.key)}
-                  >
-                    {v.label}
-                  </Badge>
-                ))}
-              </Group>
-              <div>
-                <Text size="xs" c="dimmed" mb={4}>
-                  Preview
-                </Text>
-                <Paper withBorder p="sm" radius="md" bg="var(--mantine-color-gray-0)">
-                  {preview ? (
-                    <div style={{ fontSize: 14, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: preview }} />
-                  ) : (
-                    <Text size="sm" c="dimmed">
-                      No signature.
-                    </Text>
-                  )}
-                </Paper>
-              </div>
-              <Group gap="xs">
-                <Button size="xs" onClick={save} loading={update.isPending}>
-                  Save signature
-                </Button>
-                <Button size="xs" variant="subtle" onClick={() => setHtml(DEFAULT_SIGNATURE_HTML)}>
-                  Reset to default
-                </Button>
-              </Group>
-            </Stack>
-          ) : (
-            <Paper withBorder p="sm" radius="md" bg="var(--mantine-color-gray-0)">
+          <Paper withBorder p="sm" radius="md" bg="var(--mantine-color-gray-0)">
+            {preview ? (
               <div style={{ fontSize: 14, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: preview }} />
-            </Paper>
-          )}
-        </Accordion.Panel>
-      </Accordion.Item>
-    </Accordion>
+            ) : (
+              <Text size="sm" c="dimmed">
+                No signature.
+              </Text>
+            )}
+          </Paper>
+        </div>
+        {isAdmin && (
+          <Group justify="space-between">
+            <Button variant="subtle" onClick={() => setHtml(DEFAULT_SIGNATURE_HTML)}>
+              Reset to default
+            </Button>
+            <Group gap="xs">
+              <Button variant="default" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button onClick={save} loading={update.isPending}>
+                Save signature
+              </Button>
+            </Group>
+          </Group>
+        )}
+      </Stack>
+    </Modal>
   );
 }
 
@@ -347,7 +354,6 @@ function TemplateModal({
   const [name, setName] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
-  const [showPreview, setShowPreview] = useState(false);
 
   const subjectRef = useRef<HTMLInputElement>(null);
   const bodyEditor = useRef<Editor | null>(null);
@@ -358,7 +364,6 @@ function TemplateModal({
     setName(editing?.name ?? '');
     setSubject(editing?.subject ?? '');
     setBody(editing?.body ?? '');
-    setShowPreview(false);
     active.current = 'body';
   }, [opened, editing]);
 
@@ -415,92 +420,97 @@ function TemplateModal({
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title={editing ? 'Edit template' : 'New template'} size="lg" centered>
-      <Stack gap="sm">
-        <TextInput
-          label="Template name"
-          placeholder="e.g. Estimate follow-up"
-          required
-          value={name}
-          onChange={(e) => setName(e.currentTarget.value)}
-          data-autofocus
-        />
-        <TextInput
-          ref={subjectRef}
-          label="Subject"
-          required
-          value={subject}
-          onChange={(e) => setSubject(e.currentTarget.value)}
-          onFocus={() => (active.current = 'subject')}
-        />
-        <div>
-          <Text size="sm" fw={500} mb={4}>
-            Body
-          </Text>
-          <RichTextBody value={body} onChange={setBody} onReady={onBodyReady} minHeight={200} />
-          <Text size="xs" c="dimmed" mt={4}>
-            Your signature is added automatically below the body — manage it under &ldquo;Email signature&rdquo;.
-          </Text>
-        </div>
-
-        <div>
-          <Text size="xs" fw={600} c="dimmed" mb={4}>
-            Insert a variable (click to add it where you were typing)
-          </Text>
-          <Stack gap={6}>
-            {groups.map(([group, vars]) => (
-              <Group key={group} gap={6} wrap="wrap">
-                <Text size="xs" c="dimmed" w={72}>
-                  {group}
-                </Text>
-                {vars.map((v) => (
-                  <Badge
-                    key={v.key}
-                    variant="light"
-                    color="candango"
-                    style={{ cursor: 'pointer', textTransform: 'none' }}
-                    onClick={() => insertVar(v.key)}
-                    title={`${v.label} — e.g. ${v.example}`}
-                  >
-                    {v.label}
-                  </Badge>
-                ))}
-              </Group>
-            ))}
-          </Stack>
-        </div>
-
-        <Button variant="subtle" size="xs" w="fit-content" onClick={() => setShowPreview((s) => !s)}>
-          {showPreview ? 'Hide preview' : 'Show preview (with signature)'}
-        </Button>
-        {showPreview && (
-          <Paper withBorder p="sm" radius="md" bg="var(--mantine-color-gray-0)">
-            <Text size="xs" c="dimmed">
-              Subject
-            </Text>
-            <Text size="sm" fw={500} mb="xs">
-              {renderVars(subject, values) || '—'}
-            </Text>
-            <Divider mb="xs" />
-            <Text size="xs" c="dimmed" mb={4}>
-              Body
-            </Text>
-            <div
-              style={{ fontSize: 14, lineHeight: 1.5 }}
-              dangerouslySetInnerHTML={{ __html: renderVars(body, values) + signatureHtml }}
+    <Modal opened={opened} onClose={onClose} title={editing ? 'Edit template' : 'New template'} size="xl" centered>
+      <Grid gutter="lg">
+        {/* Left: the form */}
+        <Grid.Col span={{ base: 12, md: 7 }}>
+          <Stack gap="sm">
+            <TextInput
+              label="Template name"
+              placeholder="e.g. Estimate follow-up"
+              required
+              value={name}
+              onChange={(e) => setName(e.currentTarget.value)}
+              data-autofocus
             />
-          </Paper>
-        )}
+            <TextInput
+              ref={subjectRef}
+              label="Subject"
+              required
+              value={subject}
+              onChange={(e) => setSubject(e.currentTarget.value)}
+              onFocus={() => (active.current = 'subject')}
+            />
+            <div>
+              <Text size="sm" fw={500} mb={4}>
+                Body
+              </Text>
+              <RichTextBody value={body} onChange={setBody} onReady={onBodyReady} minHeight={200} />
+              <Text size="xs" c="dimmed" mt={4}>
+                Your signature is added automatically below the body — edit it via &ldquo;Email signature&rdquo;.
+              </Text>
+            </div>
 
-        <Group justify="flex-end" mt="xs">
-          <Button variant="default" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={submit} loading={create.isPending || update.isPending}>
-            {editing ? 'Save' : 'Create'}
-          </Button>
-        </Group>
-      </Stack>
+            <div>
+              <Text size="xs" fw={600} c="dimmed" mb={4}>
+                Insert a variable (click to add it where you were typing)
+              </Text>
+              <Stack gap={6}>
+                {groups.map(([group, vars]) => (
+                  <Group key={group} gap={6} wrap="wrap">
+                    <Text size="xs" c="dimmed" w={72}>
+                      {group}
+                    </Text>
+                    {vars.map((v) => (
+                      <Badge
+                        key={v.key}
+                        variant="light"
+                        color="candango"
+                        style={{ cursor: 'pointer', textTransform: 'none' }}
+                        onClick={() => insertVar(v.key)}
+                        title={`${v.label} — e.g. ${v.example}`}
+                      >
+                        {v.label}
+                      </Badge>
+                    ))}
+                  </Group>
+                ))}
+              </Stack>
+            </div>
+          </Stack>
+        </Grid.Col>
+
+        {/* Right: live preview, always visible (sticky on desktop) */}
+        <Grid.Col span={{ base: 12, md: 5 }}>
+          <div style={{ position: 'sticky', top: 0 }}>
+            <Text size="xs" fw={600} c="dimmed" mb={4}>
+              Preview
+            </Text>
+            <Paper withBorder p="sm" radius="md" bg="var(--mantine-color-gray-0)">
+              <Text size="xs" c="dimmed">
+                Subject
+              </Text>
+              <Text size="sm" fw={500} mb="xs">
+                {renderVars(subject, values) || '—'}
+              </Text>
+              <Divider mb="xs" />
+              <div
+                style={{ fontSize: 14, lineHeight: 1.5 }}
+                dangerouslySetInnerHTML={{ __html: renderVars(body, values) + signatureHtml }}
+              />
+            </Paper>
+          </div>
+        </Grid.Col>
+      </Grid>
+
+      <Group justify="flex-end" mt="md">
+        <Button variant="default" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button onClick={submit} loading={create.isPending || update.isPending}>
+          {editing ? 'Save' : 'Create'}
+        </Button>
+      </Group>
     </Modal>
   );
 }
