@@ -43,8 +43,9 @@ import {
   DEFAULT_SIGNATURE_HTML,
   SIGNATURE_VARIABLES,
   buildSignatureValues,
+  renderPreview,
+  renderPreviewText,
   renderSignatureHtml,
-  renderVars,
 } from '@/lib/email-signature';
 
 const fail = (e: unknown) =>
@@ -60,17 +61,17 @@ export default function EmailTemplatesSettingsPage() {
   const del = useDeleteEmailTemplate();
   const seed = useSeedDefaultTemplates();
 
-  // Values used to preview a body: catalog examples, overridden with the real sender/workspace.
-  const values = useMemo(() => {
-    const base: Record<string, string> = Object.fromEntries(variables.map((v) => [v.key, v.example]));
-    return {
-      ...base,
-      'sender.name': profile?.name || base['sender.name'] || '',
-      'sender.email': profile?.email || base['sender.email'] || '',
-      'sender.phone': profile?.phone || base['sender.phone'] || '',
-      'workspace.name': org?.name || base['workspace.name'] || '',
-    };
-  }, [variables, profile, org]);
+  // Preview substitution: only the values we truly know (the real sender + workspace);
+  // every other variable renders as its label chip, never a fake value.
+  const realValues = useMemo(() => {
+    const r: Record<string, string> = {};
+    if (profile?.name) r['sender.name'] = profile.name;
+    if (profile?.email) r['sender.email'] = profile.email;
+    if (profile?.phone) r['sender.phone'] = profile.phone;
+    if (org?.name) r['workspace.name'] = org.name;
+    return r;
+  }, [profile, org]);
+  const labelByKey = useMemo(() => Object.fromEntries(variables.map((v) => [v.key, v.label])), [variables]);
 
   const sigValues = useMemo(
     () =>
@@ -168,7 +169,7 @@ export default function EmailTemplatesSettingsPage() {
                     {t.name}
                   </Text>
                   <Text size="xs" c="dimmed" lineClamp={1}>
-                    {renderVars(t.subject, values)}
+                    {renderPreviewText(t.subject, realValues, labelByKey)}
                   </Text>
                 </div>
                 {isAdmin && (
@@ -199,7 +200,7 @@ export default function EmailTemplatesSettingsPage() {
               >
                 <div
                   style={{ fontSize: 11, lineHeight: 1.4, pointerEvents: 'none' }}
-                  dangerouslySetInnerHTML={{ __html: renderVars(t.body, values) + signatureHtml }}
+                  dangerouslySetInnerHTML={{ __html: renderPreview(t.body, realValues, labelByKey) + signatureHtml }}
                 />
                 <div
                   style={{
@@ -226,7 +227,8 @@ export default function EmailTemplatesSettingsPage() {
         onClose={ctl.close}
         editing={editing}
         variables={variables}
-        values={values}
+        realValues={realValues}
+        labelByKey={labelByKey}
         signatureHtml={signatureHtml}
       />
     </Stack>
@@ -338,14 +340,16 @@ function TemplateModal({
   onClose,
   editing,
   variables,
-  values,
+  realValues,
+  labelByKey,
   signatureHtml,
 }: {
   opened: boolean;
   onClose: () => void;
   editing: EmailTemplate | null;
   variables: TemplateVariable[];
-  values: Record<string, string>;
+  realValues: Record<string, string>;
+  labelByKey: Record<string, string>;
   signatureHtml: string;
 }) {
   const create = useCreateEmailTemplate();
@@ -490,13 +494,14 @@ function TemplateModal({
               <Text size="xs" c="dimmed">
                 Subject
               </Text>
-              <Text size="sm" fw={500} mb="xs">
-                {renderVars(subject, values) || '—'}
-              </Text>
+              <div
+                style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}
+                dangerouslySetInnerHTML={{ __html: renderPreview(subject, realValues, labelByKey) || '—' }}
+              />
               <Divider mb="xs" />
               <div
                 style={{ fontSize: 14, lineHeight: 1.5 }}
-                dangerouslySetInnerHTML={{ __html: renderVars(body, values) + signatureHtml }}
+                dangerouslySetInnerHTML={{ __html: renderPreview(body, realValues, labelByKey) + signatureHtml }}
               />
             </Paper>
           </div>

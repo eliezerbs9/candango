@@ -77,3 +77,32 @@ export function renderSignatureHtml(html: string, values: Record<string, string>
 export function renderVars(html: string, values: Record<string, string>): string {
   return html.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, k: string) => values[k] ?? '');
 }
+
+const CHIP_STYLE =
+  'background:var(--mantine-color-gray-2);color:var(--mantine-color-gray-7);border-radius:4px;padding:0 5px;font-size:0.9em';
+
+/**
+ * Preview a template (HTML): substitute the real sender/workspace value when we have one,
+ * otherwise show the variable's **label as a placeholder chip** (e.g. "Deal Title") — never a
+ * fake value, which would distort the email's meaning.
+ */
+export function renderPreview(
+  html: string,
+  realValues: Record<string, string>,
+  labelByKey: Record<string, string>,
+): string {
+  return html.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key: string) => {
+    const real = realValues[key];
+    if (real) return escapeHtml(real);
+    return `<span style="${CHIP_STYLE}">${escapeHtml(labelByKey[key] ?? key)}</span>`;
+  });
+}
+
+/** Same as renderPreview but plain text (real value, else the label) — for non-HTML spots. */
+export function renderPreviewText(
+  text: string,
+  realValues: Record<string, string>,
+  labelByKey: Record<string, string>,
+): string {
+  return text.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key: string) => realValues[key] ?? labelByKey[key] ?? key);
+}
