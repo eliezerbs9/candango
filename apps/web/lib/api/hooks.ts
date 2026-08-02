@@ -84,6 +84,7 @@ import {
   createEmailTemplate,
   updateEmailTemplate,
   deleteEmailTemplate,
+  seedDefaultTemplates,
   type EmailTemplateBody,
 } from './email-templates';
 import { getOnboarding, setOnboardingCompleted } from './onboarding';
@@ -792,6 +793,15 @@ export function useDeleteEmailTemplate() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteEmailTemplate(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['email-templates'] }),
+  });
+}
+
+export function useSeedDefaultTemplates() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => seedDefaultTemplates(token!),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['email-templates'] }),
   });
 }

@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { TokensService } from '../tokens/tokens.service';
 import { slugify } from '../common/slug';
+import { DEFAULT_TEMPLATES } from '../email-templates/template-vars';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import {
@@ -135,6 +136,18 @@ export class AuthService {
         { orgId: org.id, pipelineId: pipeline.id, name: 'Negotiation', position: 3, probability: 75 },
       ],
     });
+
+    // Seed the starter email templates (Send estimate / Send invoice / Follow-up).
+    await tx.emailTemplate.createMany({
+      data: DEFAULT_TEMPLATES.map((t) => ({
+        orgId: org.id,
+        createdByUserId: user.id,
+        name: t.name,
+        subject: t.subject,
+        body: t.body,
+      })),
+    });
+
     return { org, user };
   }
 

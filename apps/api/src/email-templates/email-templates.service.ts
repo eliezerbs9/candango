@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEmailTemplateDto, UpdateEmailTemplateDto } from './dto/email-template.dto';
+import { DEFAULT_TEMPLATES } from './template-vars';
 
 const shape = (t: { id: string; name: string; subject: string; body: string; updatedAt: Date }) => ({
   id: t.id,
@@ -60,5 +61,24 @@ export class EmailTemplatesService {
     const existing = await this.prisma.emailTemplate.findFirst({ where: { id, orgId, archivedAt: null } });
     if (!existing) throw new NotFoundException('Template not found');
     await this.prisma.emailTemplate.update({ where: { id }, data: { archivedAt: new Date() } });
+  }
+
+  /**
+   * Create any of the starter templates this org is missing (matched by name). Idempotent —
+   * safe to call more than once. Used to backfill existing workspaces (new ones are seeded at signup).
+   */
+  async seedDefaults(orgId: string, userId?: string) {
+    const existing = await this.prisma.emailTemplate.findMany({
+      where: { orgId, archivedAt: null },
+      select: { name: true },
+    });
+    const have = new Set(existing.map((t) => t.name));
+    const missing = DEFAULT_TEMPLATES.filter((t) => !have.has(t.name));
+    if (missing.length > 0) {
+      await this.prisma.emailTemplate.createMany({
+        data: missing.map((t) => ({ orgId, createdByUserId: userId ?? null, name: t.name, subject: t.subject, body: t.body })),
+      });
+    }
+    return this.list(orgId);
   }
 }

@@ -34,6 +34,13 @@ export class EmailTemplatesController {
     return this.svc.create(u.orgId, u.userId, dto);
   }
 
+  /** Backfill this workspace's missing starter templates (idempotent). */
+  @Post('seed-defaults')
+  @UseGuards(AdminGuard)
+  seedDefaults(@CurrentUser() u: AuthContext) {
+    return this.svc.seedDefaults(u.orgId, u.userId);
+  }
+
   @Patch(':id')
   @UseGuards(AdminGuard)
   update(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() dto: UpdateEmailTemplateDto) {

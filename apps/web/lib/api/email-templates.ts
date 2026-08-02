@@ -21,6 +21,8 @@ export interface TemplateVariable {
   label: string;
   group: string;
   example: string;
+  /** Valid for rendering but hidden from the click-to-insert palette (e.g. image URLs). */
+  hidden?: boolean;
 }
 
 export function getEmailTemplates(token: string) {
@@ -41,4 +43,9 @@ export function updateEmailTemplate(token: string, id: string, body: EmailTempla
 
 export function deleteEmailTemplate(token: string, id: string) {
   return apiFetch<void>(`/email-templates/${id}`, { method: 'DELETE', token });
+}
+
+/** Backfill any missing starter templates (Send estimate / Send invoice / Follow-up). */
+export function seedDefaultTemplates(token: string) {
+  return apiFetch<EmailTemplate[]>('/email-templates/seed-defaults', { method: 'POST', token });
 }

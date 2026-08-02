@@ -16,21 +16,26 @@ import {
   Stack,
   Text,
   TextInput,
-  Textarea,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconDots, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconDots, IconPencil, IconPlus, IconSparkles, IconTrash } from '@tabler/icons-react';
+import type { Editor } from '@tiptap/react';
 import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/useAuth';
+import { RichTextBody } from '@/components/common/RichTextBody';
 import {
   useCreateEmailTemplate,
   useDeleteEmailTemplate,
   useEmailTemplates,
+  useOrganization,
+  useProfile,
+  useSeedDefaultTemplates,
   useTemplateVariables,
   useUpdateEmailTemplate,
 } from '@/lib/api/hooks';
 import type { EmailTemplate, TemplateVariable } from '@/lib/api/email-templates';
+import { SIGNATURE_HTML, renderWithVars } from '@/lib/email-signature';
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
@@ -41,6 +46,7 @@ export default function EmailTemplatesSettingsPage() {
   const { data: templates = [], isLoading } = useEmailTemplates();
   const { data: variables = [] } = useTemplateVariables();
   const del = useDeleteEmailTemplate();
+  const seed = useSeedDefaultTemplates();
 
   const [editing, setEditing] = useState<EmailTemplate | null>(null);
   const [opened, ctl] = useDisclosure(false);
@@ -60,6 +66,11 @@ export default function EmailTemplatesSettingsPage() {
       onError: fail,
     });
   };
+  const addStarters = () =>
+    seed.mutate(undefined, {
+      onSuccess: () => notifications.show({ message: 'Starter templates added', color: 'green' }),
+      onError: fail,
+    });
 
   if (isLoading) {
     return (
@@ -77,20 +88,34 @@ export default function EmailTemplatesSettingsPage() {
           <Text size="sm" c="dimmed">
             Reusable subject + body for emails you send from deals. Use{' '}
             <Text span ff="monospace">{'{{variables}}'}</Text> to auto-fill the contact&apos;s name, email, phone and
-            more when you send.
+            more, and a <b>signature</b> (your photo, name, phone + the workspace logo) is added automatically.
           </Text>
         </div>
         {isAdmin && (
-          <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
-            New template
-          </Button>
+          <Group gap="xs">
+            <Button variant="default" leftSection={<IconSparkles size={16} />} onClick={addStarters} loading={seed.isPending}>
+              Add starter templates
+            </Button>
+            <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
+              New template
+            </Button>
+          </Group>
         )}
       </Group>
 
       {templates.length === 0 ? (
-        <Text size="sm" c="dimmed">
-          No templates yet. {isAdmin ? 'Create one to speed up sending estimates and invoices.' : 'Ask an admin to add one.'}
-        </Text>
+        <Card withBorder radius="md" padding="lg">
+          <Stack gap="sm" align="flex-start">
+            <Text size="sm" c="dimmed">
+              No templates yet. {isAdmin ? 'Add the 3 starter templates (Send estimate · Send invoice · Follow-up) to get going.' : 'Ask an admin to add one.'}
+            </Text>
+            {isAdmin && (
+              <Button leftSection={<IconSparkles size={16} />} onClick={addStarters} loading={seed.isPending}>
+                Add starter templates
+              </Button>
+            )}
+          </Stack>
+        </Card>
       ) : (
         <Stack gap="sm">
           {templates.map((t) => (
@@ -100,9 +125,6 @@ export default function EmailTemplatesSettingsPage() {
                   <Text fw={500}>{t.name}</Text>
                   <Text size="sm" c="dimmed" lineClamp={1}>
                     {t.subject}
-                  </Text>
-                  <Text size="xs" c="dimmed" lineClamp={2} mt={4}>
-                    {t.body}
                   </Text>
                 </div>
                 {isAdmin && (
@@ -146,14 +168,17 @@ function TemplateModal({
 }) {
   const create = useCreateEmailTemplate();
   const update = useUpdateEmailTemplate();
+  const { data: profile } = useProfile();
+  const { data: org } = useOrganization();
+
   const [name, setName] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [showPreview, setShowPreview] = useState(false);
 
   const subjectRef = useRef<HTMLInputElement>(null);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
-  // Which field a variable click should insert into (the last one the user touched).
+  const bodyEditor = useRef<Editor | null>(null);
+  // Which field a variable click inserts into (the last one the user touched).
   const active = useRef<'subject' | 'body'>('body');
 
   useEffect(() => {
@@ -164,6 +189,11 @@ function TemplateModal({
     setShowPreview(false);
     active.current = 'body';
   }, [opened, editing]);
+
+  const onBodyReady = (editor: Editor | null) => {
+    bodyEditor.current = editor;
+    if (editor) editor.on('focus', () => (active.current = 'body'));
+  };
 
   const insertVar = (key: string) => {
     const token = `{{${key}}}`;
@@ -179,29 +209,29 @@ function TemplateModal({
         el?.setSelectionRange(pos, pos);
       });
     } else {
-      const el = bodyRef.current;
-      const start = el?.selectionStart ?? body.length;
-      const end = el?.selectionEnd ?? body.length;
-      const next = body.slice(0, start) + token + body.slice(end);
-      setBody(next);
-      requestAnimationFrame(() => {
-        el?.focus();
-        const pos = start + token.length;
-        el?.setSelectionRange(pos, pos);
-      });
+      bodyEditor.current?.chain().focus().insertContent(token).run();
     }
   };
 
-  const exampleMap = useMemo(
-    () => Object.fromEntries(variables.map((v) => [v.key, v.example])),
-    [variables],
-  );
-  const preview = (text: string) =>
-    text.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, k: string) => exampleMap[k] ?? '');
+  // Real sender/workspace values so the preview (and its signature) look like the real thing;
+  // everything else uses the catalog's example values.
+  const values = useMemo(() => {
+    const base: Record<string, string> = Object.fromEntries(variables.map((v) => [v.key, v.example]));
+    return {
+      ...base,
+      'sender.name': profile?.name || base['sender.name'] || '',
+      'sender.email': profile?.email || base['sender.email'] || '',
+      'sender.phone': profile?.phone || base['sender.phone'] || '',
+      'sender.avatar_url': profile?.avatarUrl || '',
+      'workspace.name': org?.name || base['workspace.name'] || '',
+      'workspace.logo_url': org?.logoUrl || '',
+    };
+  }, [variables, profile, org]);
 
   const groups = useMemo(() => {
     const map = new Map<string, TemplateVariable[]>();
     for (const v of variables) {
+      if (v.hidden) continue; // image-URL vars aren't text badges
       const list = map.get(v.group) ?? [];
       list.push(v);
       map.set(v.group, list);
@@ -209,8 +239,10 @@ function TemplateModal({
     return [...map.entries()];
   }, [variables]);
 
+  const bodyIsEmpty = body.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, '').trim() === '';
+
   const submit = () => {
-    if (!name.trim() || !subject.trim() || !body.trim()) {
+    if (!name.trim() || !subject.trim() || bodyIsEmpty) {
       notifications.show({ message: 'Name, subject and body are all required', color: 'red' });
       return;
     }
@@ -245,16 +277,16 @@ function TemplateModal({
           onChange={(e) => setSubject(e.currentTarget.value)}
           onFocus={() => (active.current = 'subject')}
         />
-        <Textarea
-          ref={bodyRef}
-          label="Body"
-          required
-          autosize
-          minRows={6}
-          value={body}
-          onChange={(e) => setBody(e.currentTarget.value)}
-          onFocus={() => (active.current = 'body')}
-        />
+        <div>
+          <Text size="sm" fw={500} mb={4}>
+            Body
+          </Text>
+          <RichTextBody value={body} onChange={setBody} onReady={onBodyReady} minHeight={200} />
+          <Text size="xs" c="dimmed" mt={4}>
+            A signature with your profile photo, name, email, phone and the workspace logo is added automatically —
+            no need to type it here.
+          </Text>
+        </div>
 
         <div>
           <Text size="xs" fw={600} c="dimmed" mb={4}>
@@ -284,7 +316,7 @@ function TemplateModal({
         </div>
 
         <Button variant="subtle" size="xs" w="fit-content" onClick={() => setShowPreview((s) => !s)}>
-          {showPreview ? 'Hide preview' : 'Show preview with example values'}
+          {showPreview ? 'Hide preview' : 'Show preview (with signature)'}
         </Button>
         {showPreview && (
           <Paper withBorder p="sm" radius="md" bg="var(--mantine-color-gray-0)">
@@ -292,15 +324,17 @@ function TemplateModal({
               Subject
             </Text>
             <Text size="sm" fw={500} mb="xs">
-              {preview(subject) || '—'}
+              {renderWithVars(subject, values) || '—'}
             </Text>
             <Divider mb="xs" />
-            <Text size="xs" c="dimmed">
+            <Text size="xs" c="dimmed" mb={4}>
               Body
             </Text>
-            <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-              {preview(body) || '—'}
-            </Text>
+            <div
+              style={{ fontSize: 14, lineHeight: 1.5 }}
+              // Admin-authored HTML shown to the same admin; variables resolved to example/real values.
+              dangerouslySetInnerHTML={{ __html: renderWithVars(body, values) + renderWithVars(SIGNATURE_HTML, values) }}
+            />
           </Paper>
         )}
 

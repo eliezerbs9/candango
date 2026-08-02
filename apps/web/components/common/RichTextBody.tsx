@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { RichTextEditor, Link } from '@mantine/tiptap';
-import { useEditor } from '@tiptap/react';
+import { useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 
 /** A Mantine + Tiptap rich-text editor that emits HTML — used for composing emails. */
@@ -10,10 +10,13 @@ export function RichTextBody({
   value,
   onChange,
   minHeight = 220,
+  onReady,
 }: {
   value: string;
   onChange: (html: string) => void;
   minHeight?: number;
+  /** Receives the editor instance (e.g. to insert content at the caret). */
+  onReady?: (editor: Editor | null) => void;
 }) {
   const editor = useEditor({
     extensions: [StarterKit, Link],
@@ -21,6 +24,11 @@ export function RichTextBody({
     immediatelyRender: false,
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
   });
+
+  useEffect(() => {
+    onReady?.(editor);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor]);
 
   // Keep the editor in sync when the value is reset externally (e.g. modal reopened).
   useEffect(() => {
