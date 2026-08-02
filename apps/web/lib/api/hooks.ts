@@ -98,7 +98,12 @@ import {
   createEmailAutomation,
   updateEmailAutomation,
   deleteEmailAutomation,
+  createMarketingAutomation,
+  updateMarketingAutomation,
+  previewAudience,
   type EmailAutomationBody,
+  type MarketingAutomationBody,
+  type MarketingAudience,
 } from './email-automations';
 import { getOnboarding, setOnboardingCompleted } from './onboarding';
 import { createApiKey, getApiKeys, revokeApiKey } from './apikeys';
@@ -911,6 +916,30 @@ export function useDeleteEmailAutomation() {
     mutationFn: (id: string) => deleteEmailAutomation(token!, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['email-automations'] }),
   });
+}
+
+export function useCreateMarketingAutomation() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: MarketingAutomationBody) => createMarketingAutomation(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['email-automations'] }),
+  });
+}
+
+export function useUpdateMarketingAutomation() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: MarketingAutomationBody }) =>
+      updateMarketingAutomation(token!, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['email-automations'] }),
+  });
+}
+
+export function usePreviewAudience() {
+  const token = useToken();
+  return useMutation({ mutationFn: (audience: MarketingAudience) => previewAudience(token!, audience) });
 }
 
 // --- Onboarding ---

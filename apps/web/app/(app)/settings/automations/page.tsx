@@ -10,6 +10,7 @@ import {
   Button,
   Card,
   Center,
+  Divider,
   Group,
   Loader,
   Menu,
@@ -28,18 +29,29 @@ import { IconBolt, IconBrandGoogle, IconDots, IconPencil, IconPlus, IconTrash } 
 import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/useAuth';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
+import { ScheduleBuilder } from '@/components/automations/ScheduleBuilder';
+import { AudienceBuilder } from '@/components/automations/AudienceBuilder';
 import {
   useAllStages,
-  useAutomationCategories,
   useAutomationTriggers,
   useCreateEmailAutomation,
+  useCreateMarketingAutomation,
   useDeleteEmailAutomation,
   useEmailAutomations,
   useEmailTemplates,
   useGoogleStatus,
+  useOrganization,
   useUpdateEmailAutomation,
+  useUpdateMarketingAutomation,
 } from '@/lib/api/hooks';
-import type { AutomationCategory, AutomationTrigger, EmailAutomation } from '@/lib/api/email-automations';
+import type {
+  AutomationKind,
+  AutomationTrigger,
+  EmailAutomation,
+  MarketingAudience,
+  MarketingSchedule,
+} from '@/lib/api/email-automations';
+import { describeSchedule } from '@/lib/marketing-format';
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
@@ -49,30 +61,28 @@ export default function AutomationsSettingsPage() {
   const isAdmin = user?.role === 'Admin';
   const { data: automations = [], isLoading } = useEmailAutomations();
   const { data: triggers = [] } = useAutomationTriggers();
-  const { data: categories = [] } = useAutomationCategories();
   const { data: templates = [] } = useEmailTemplates();
   const { data: google } = useGoogleStatus();
   const del = useDeleteEmailAutomation();
   const update = useUpdateEmailAutomation();
+  const updateMkt = useUpdateMarketingAutomation();
 
   const triggerLabel = useMemo(() => Object.fromEntries(triggers.map((t) => [t.key, t.label])), [triggers]);
-  const categoryLabel = useMemo(() => Object.fromEntries(categories.map((c) => [c.key, c.label])), [categories]);
   const allTags = useMemo(
     () => [...new Set(automations.flatMap((a) => a.tags ?? []))].sort((a, b) => a.localeCompare(b)),
     [automations],
   );
 
-  // Category + tag filters for the list.
-  const [filterCategory, setFilterCategory] = useState<string | null>(null);
+  // Type (deal/marketing) + tag filters for the list.
+  const [filterKind, setFilterKind] = useState<string | null>(null);
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const visible = useMemo(
     () =>
       automations.filter(
         (a) =>
-          (!filterCategory || a.category === filterCategory) &&
-          (!filterTag || (a.tags ?? []).includes(filterTag)),
+          (!filterKind || (a.kind ?? 'deal') === filterKind) && (!filterTag || (a.tags ?? []).includes(filterTag)),
       ),
-    [automations, filterCategory, filterTag],
+    [automations, filterKind, filterTag],
   );
   const { data: stages = [] } = useAllStages();
   const stageName = (id: unknown) => (typeof id === 'string' ? stages.find((s) => s.id === id)?.name : null);
@@ -125,14 +135,44 @@ export default function AutomationsSettingsPage() {
     );
   };
 
+  // Full "when/then" (deal) or "what/schedule/audience" (marketing) summary shown on each card.
+  const summary = (a: EmailAutomation) => {
+    if (a.kind === 'marketing') {
+      const cfg = a.config as { schedule?: MarketingSchedule; audience?: MarketingAudience };
+      const sched = cfg.schedule ? describeSchedule(cfg.schedule) : 'on a schedule';
+      const aud =
+        cfg.audience?.type === 'label'
+          ? `contacts labelled ${(cfg.audience.tags ?? []).join(', ')}`
+          : cfg.audience?.type === 'deal_stage'
+            ? 'contacts with a deal in a stage'
+            : cfg.audience?.type === 'filter'
+              ? 'a filtered set of contacts'
+              : 'all subscribed contacts';
+      return (
+        <>
+          <b>Send</b> {a.templateName ?? 'a template'} to {aud}, <b>{sched}</b>.
+        </>
+      );
+    }
+    return (
+      <>
+        <b>When</b> {triggerText(a)}, <b>then</b> {actionText(a)}.
+      </>
+    );
+  };
+
   const [editing, setEditing] = useState<EmailAutomation | null>(null);
   const [opened, ctl] = useDisclosure(false);
 
-  const toggle = (a: EmailAutomation, enabled: boolean) =>
-    update.mutate(
-      { id: a.id, body: { enabled } },
-      { onSuccess: () => notifications.show({ message: enabled ? 'Automation on' : 'Automation off', color: 'green' }), onError: fail },
-    );
+  const toggle = (a: EmailAutomation, enabled: boolean) => {
+    const opts = {
+      onSuccess: () => notifications.show({ message: enabled ? 'Automation on' : 'Automation off', color: 'green' }),
+      onError: fail,
+    };
+    // Marketing rows must go through the marketing endpoint so nextRunAt is recomputed on enable.
+    if (a.kind === 'marketing') updateMkt.mutate({ id: a.id, body: { enabled } }, opts);
+    else update.mutate({ id: a.id, body: { enabled } }, opts);
+  };
   const remove = (a: EmailAutomation) => {
     if (!window.confirm(`Delete automation "${a.name}"?`)) return;
     del.mutate(a.id, { onSuccess: () => notifications.show({ message: 'Automation deleted', color: 'green' }), onError: fail });
@@ -184,12 +224,15 @@ export default function AutomationsSettingsPage() {
         <Group gap="sm">
           <Select
             size="xs"
-            placeholder="All categories"
+            placeholder="All types"
             clearable
             w={180}
-            data={categories.map((c) => ({ value: c.key, label: c.label }))}
-            value={filterCategory}
-            onChange={setFilterCategory}
+            data={[
+              { value: 'deal', label: 'Deal — triggered' },
+              { value: 'marketing', label: 'Marketing — scheduled' },
+            ]}
+            value={filterKind}
+            onChange={setFilterKind}
           />
           <Select
             size="xs"
@@ -201,7 +244,7 @@ export default function AutomationsSettingsPage() {
             value={filterTag}
             onChange={setFilterTag}
           />
-          {(filterCategory || filterTag) && (
+          {(filterKind || filterTag) && (
             <Text size="xs" c="dimmed">
               {visible.length} of {automations.length}
             </Text>
@@ -224,8 +267,8 @@ export default function AutomationsSettingsPage() {
               <Group justify="space-between" wrap="nowrap">
                 <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
                   <Tooltip
-                    label="Connect Google to enable email automations"
-                    disabled={!(a.action === 'send_email' && !google?.mailbox)}
+                    label="Connect Google to enable deal email automations"
+                    disabled={!(a.kind !== 'marketing' && a.action === 'send_email' && !google?.mailbox)}
                     withArrow
                     multiline
                     w={220}
@@ -234,16 +277,16 @@ export default function AutomationsSettingsPage() {
                       <Switch
                         checked={a.enabled}
                         onChange={(e) => toggle(a, e.currentTarget.checked)}
-                        disabled={!isAdmin || (a.action === 'send_email' && !google?.mailbox)}
+                        disabled={!isAdmin || (a.kind !== 'marketing' && a.action === 'send_email' && !google?.mailbox)}
                       />
                     </div>
                   </Tooltip>
                   <div style={{ minWidth: 0 }}>
                     <Group gap={6} wrap="wrap" align="center">
                       <Text fw={500}>{a.name}</Text>
-                      {a.category !== 'general' && (
+                      {a.kind === 'marketing' && (
                         <Badge size="xs" variant="light" color="grape" style={{ textTransform: 'none' }}>
-                          {categoryLabel[a.category] ?? a.category}
+                          Marketing
                         </Badge>
                       )}
                       {(a.tags ?? []).map((tag) => (
@@ -253,7 +296,7 @@ export default function AutomationsSettingsPage() {
                       ))}
                     </Group>
                     <Text size="sm" c="dimmed" lineClamp={2}>
-                      <b>When</b> {triggerText(a)}, <b>then</b> {actionText(a)}.
+                      {summary(a)}
                     </Text>
                   </div>
                 </Group>
@@ -286,68 +329,107 @@ export default function AutomationsSettingsPage() {
         </Stack>
       )}
 
-      <AutomationModal
-        opened={opened}
-        onClose={ctl.close}
-        editing={editing}
-        triggers={triggers}
-        categories={categories}
-        allTags={allTags}
-      />
+      <AutomationModal opened={opened} onClose={ctl.close} editing={editing} triggers={triggers} allTags={allTags} />
     </Stack>
   );
 }
+
+const DEFAULT_SCHEDULE: MarketingSchedule = { type: 'daily', atTime: '09:00', everyDays: 1 };
+const DEFAULT_AUDIENCE: MarketingAudience = { type: 'all' };
+const browserTz = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+};
 
 function AutomationModal({
   opened,
   onClose,
   editing,
   triggers,
-  categories,
   allTags,
 }: {
   opened: boolean;
   onClose: () => void;
   editing: EmailAutomation | null;
   triggers: AutomationTrigger[];
-  categories: AutomationCategory[];
   allTags: string[];
 }) {
   const create = useCreateEmailAutomation();
   const update = useUpdateEmailAutomation();
+  const createMkt = useCreateMarketingAutomation();
+  const updateMkt = useUpdateMarketingAutomation();
   const { data: templates = [] } = useEmailTemplates();
-  // Deal automations run in a deal's context — only deal-scoped templates can render there.
   const dealTemplates = useMemo(() => templates.filter((t) => t.scope === 'deal'), [templates]);
+  const marketingTemplates = useMemo(() => templates.filter((t) => t.scope === 'marketing'), [templates]);
   const { data: stages = [] } = useAllStages();
   const { data: google } = useGoogleStatus();
+  const { data: org } = useOrganization();
 
   const [name, setName] = useState('');
-  const [category, setCategory] = useState('general');
   const [tags, setTags] = useState<string[]>([]);
-  const [trigger, setTrigger] = useState<string | null>(null);
   const [action, setAction] = useState<'send_email' | 'create_activity'>('send_email');
+  // The Deal/Marketing "type" applies only to a Send-email action (an activity is always deal-side).
+  const [kind, setKind] = useState<AutomationKind>('deal');
+  const [trigger, setTrigger] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [config, setConfig] = useState<Record<string, unknown>>({});
   const [enabled, setEnabled] = useState(true);
+  // Marketing-only:
+  const [schedule, setSchedule] = useState<MarketingSchedule>(DEFAULT_SCHEDULE);
+  const [audience, setAudience] = useState<MarketingAudience>(DEFAULT_AUDIENCE);
+  const [timezone, setTimezone] = useState('UTC');
 
   useEffect(() => {
     if (!opened) return;
     setName(editing?.name ?? '');
-    setCategory(editing?.category ?? 'general');
     setTags(editing?.tags ?? []);
-    setTrigger(editing?.trigger ?? null);
     setAction(editing?.action ?? 'send_email');
+    setKind(editing?.kind ?? 'deal');
+    setTrigger(editing?.trigger || null);
     setTemplateId(editing?.templateId ?? null);
     setConfig(editing?.config ?? {});
     setEnabled(editing?.enabled ?? true);
-  }, [opened, editing]);
+    const cfg = (editing?.config ?? {}) as { schedule?: MarketingSchedule; audience?: MarketingAudience };
+    setSchedule(editing?.kind === 'marketing' && cfg.schedule ? cfg.schedule : DEFAULT_SCHEDULE);
+    setAudience(editing?.kind === 'marketing' && cfg.audience ? cfg.audience : DEFAULT_AUDIENCE);
+    setTimezone(editing?.timezone || org?.timezone || browserTz());
+  }, [opened, editing, org?.timezone]);
 
+  // The effective kind: create_activity is inherently deal-side.
+  const isMarketing = action === 'send_email' && kind === 'marketing';
   const def = triggers.find((t) => t.key === trigger);
   const setCfg = (key: string, value: unknown) => setConfig((c) => ({ ...c, [key]: value }));
+  const pending = create.isPending || update.isPending || createMkt.isPending || updateMkt.isPending;
+
+  const done = {
+    onSuccess: () => {
+      notifications.show({ message: editing ? 'Automation saved' : 'Automation created', color: 'green' });
+      onClose();
+    },
+    onError: fail,
+  };
 
   const submit = () => {
-    if (!name.trim() || !trigger) {
-      notifications.show({ message: 'Name and trigger are required', color: 'red' });
+    if (!name.trim()) {
+      notifications.show({ message: 'Give the automation a name', color: 'red' });
+      return;
+    }
+    if (isMarketing) {
+      if (!templateId) {
+        notifications.show({ message: 'Pick a marketing template to send', color: 'red' });
+        return;
+      }
+      const body = { name: name.trim(), tags, templateId, timezone, schedule, audience, enabled };
+      if (editing) updateMkt.mutate({ id: editing.id, body }, done);
+      else createMkt.mutate(body, done);
+      return;
+    }
+    // Deal automation (trigger-based email, or an activity)
+    if (!trigger) {
+      notifications.show({ message: 'Pick a trigger', color: 'red' });
       return;
     }
     if (action === 'send_email' && !templateId) {
@@ -360,45 +442,219 @@ function AutomationModal({
     }
     const body = {
       name: name.trim(),
-      category,
       tags,
       trigger,
       action,
       templateId: action === 'send_email' ? templateId ?? undefined : undefined,
       config,
-      // Email automations can't start on without a mailbox — the server enforces this too.
       enabled: action === 'send_email' && !google?.mailbox ? false : enabled,
-    };
-    const done = {
-      onSuccess: () => {
-        notifications.show({ message: editing ? 'Automation saved' : 'Automation created', color: 'green' });
-        onClose();
-      },
-      onError: fail,
     };
     if (editing) update.mutate({ id: editing.id, body }, done);
     else create.mutate(body, done);
   };
 
+  // Enabled gating: only deal email automations need a Gmail connection (marketing sends via Brevo).
+  const emailBlocked = action === 'send_email' && kind === 'deal' && !google?.mailbox;
+
   return (
-    <Modal opened={opened} onClose={onClose} title={editing ? 'Edit automation' : 'New automation'} centered>
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={editing ? 'Edit automation' : 'New automation'}
+      size={isMarketing ? 'lg' : 'md'}
+      centered
+    >
       <Stack gap="sm">
         <TextInput
           label="Name"
-          placeholder="e.g. Thank-you after invoice sent"
+          placeholder={isMarketing ? 'e.g. Monthly newsletter' : 'e.g. Thank-you after invoice sent'}
           required
           value={name}
           onChange={(e) => setName(e.currentTarget.value)}
           data-autofocus
         />
+
+        {/* Do this (action) comes first */}
         <Select
-          label="Category"
-          description="A fixed, system-defined bucket — pick the closest one."
-          data={categories.map((c) => ({ value: c.key, label: c.label }))}
-          value={category}
-          onChange={(v) => setCategory(v ?? 'general')}
+          label="Do this"
+          required
+          data={[
+            { value: 'send_email', label: 'Send an email' },
+            { value: 'create_activity', label: 'Create an activity' },
+          ]}
+          value={action}
+          onChange={(v) => setAction((v as 'send_email' | 'create_activity') ?? 'send_email')}
           allowDeselect={false}
         />
+
+        {/* Deal vs Marketing — only relevant when sending an email */}
+        {action === 'send_email' && (
+          <Select
+            label="Type"
+            description={
+              kind === 'deal'
+                ? 'Triggered by an event on a deal — sends to that deal’s contact.'
+                : 'A scheduled broadcast to an audience of contacts (sent from the workspace).'
+            }
+            data={[
+              { value: 'deal', label: 'Deal — triggered' },
+              { value: 'marketing', label: 'Marketing — scheduled' },
+            ]}
+            value={kind}
+            onChange={(v) => setKind((v as AutomationKind) ?? 'deal')}
+            allowDeselect={false}
+            disabled={!!editing}
+          />
+        )}
+
+        {isMarketing ? (
+          <>
+            <Select
+              label="Send this template"
+              required
+              description="Marketing email templates only"
+              placeholder={marketingTemplates.length === 0 ? 'Create a marketing template first' : 'Pick a template'}
+              data={marketingTemplates.map((t) => ({ value: t.id, label: t.name }))}
+              value={templateId}
+              onChange={setTemplateId}
+              renderOption={({ option }) => {
+                const t = marketingTemplates.find((x) => x.id === option.value);
+                return (
+                  <Group gap={6} wrap="wrap" align="center">
+                    <Text size="sm">{option.label}</Text>
+                    {(t?.tags ?? []).map((tag) => (
+                      <Badge key={tag} size="xs" variant="light" color="candango" style={{ textTransform: 'none' }}>
+                        {tag}
+                      </Badge>
+                    ))}
+                  </Group>
+                );
+              }}
+            />
+            <Divider label="Schedule" labelPosition="left" />
+            <ScheduleBuilder value={schedule} onChange={setSchedule} timezone={timezone} onTimezoneChange={setTimezone} />
+            <Divider label="Audience" labelPosition="left" />
+            <AudienceBuilder value={audience} onChange={setAudience} />
+          </>
+        ) : (
+          <>
+            {/* When (trigger) */}
+            <Select
+              label="When this happens"
+              required
+              data={triggers.map((t) => ({
+                value: t.key,
+                label: t.comingSoon ? `${t.label} (coming soon)` : t.label,
+                disabled: t.comingSoon,
+              }))}
+              value={trigger}
+              onChange={(v) => {
+                setTrigger(v);
+                setConfig({});
+              }}
+            />
+            {def && (
+              <Text size="xs" c="dimmed">
+                {def.description}
+              </Text>
+            )}
+            {def?.fields.map((f) => {
+              if (f.type === 'stage') {
+                return (
+                  <Select
+                    key={f.key}
+                    label={f.label}
+                    placeholder="Any stage"
+                    clearable
+                    data={stages.map((s) => ({ value: s.id, label: s.name }))}
+                    value={(config[f.key] as string) ?? null}
+                    onChange={(v) => setConfig((c) => ({ ...c, [f.key]: v ?? undefined }))}
+                  />
+                );
+              }
+              if (f.type === 'docKind') {
+                return (
+                  <Select
+                    key={f.key}
+                    label={f.label}
+                    placeholder="Estimate or invoice"
+                    clearable
+                    data={[
+                      { value: 'estimate', label: 'Estimate' },
+                      { value: 'invoice', label: 'Invoice' },
+                    ]}
+                    value={(config[f.key] as string) ?? null}
+                    onChange={(v) => setConfig((c) => ({ ...c, [f.key]: v ?? undefined }))}
+                  />
+                );
+              }
+              return (
+                <NumberInput
+                  key={f.key}
+                  label={f.label}
+                  required={f.required}
+                  min={0}
+                  value={(config[f.key] as number) ?? ''}
+                  onChange={(v) => setConfig((c) => ({ ...c, [f.key]: v === '' ? undefined : Number(v) }))}
+                />
+              );
+            })}
+
+            {action === 'send_email' ? (
+              <Select
+                label="Send this template"
+                required
+                description="Deal email templates only"
+                placeholder={dealTemplates.length === 0 ? 'Create a deal template first' : 'Pick a template'}
+                data={dealTemplates.map((t) => ({ value: t.id, label: t.name }))}
+                value={templateId}
+                onChange={setTemplateId}
+                renderOption={({ option }) => {
+                  const t = dealTemplates.find((x) => x.id === option.value);
+                  return (
+                    <Group gap={6} wrap="wrap" align="center">
+                      <Text size="sm">{option.label}</Text>
+                      {(t?.tags ?? []).map((tag) => (
+                        <Badge key={tag} size="xs" variant="light" color="candango" style={{ textTransform: 'none' }}>
+                          {tag}
+                        </Badge>
+                      ))}
+                    </Group>
+                  );
+                }}
+              />
+            ) : (
+              <>
+                <Select
+                  label="Activity type"
+                  description="Same activity types as the deal's New activity form"
+                  data={[
+                    { value: 'task', label: 'Task' },
+                    { value: 'call', label: 'Call' },
+                    { value: 'meeting', label: 'Meeting' },
+                  ]}
+                  value={(config.activityType as string) ?? 'task'}
+                  onChange={(v) => setCfg('activityType', v ?? 'task')}
+                />
+                <TextInput
+                  label="Activity subject"
+                  required
+                  placeholder="e.g. Follow up with the client"
+                  value={(config.activitySubject as string) ?? ''}
+                  onChange={(e) => setCfg('activitySubject', e.currentTarget.value)}
+                />
+                <NumberInput
+                  label="Due in (days)"
+                  description="0 = same day"
+                  min={0}
+                  value={(config.dueInDays as number) ?? 0}
+                  onChange={(v) => setCfg('dueInDays', v === '' ? 0 : Number(v))}
+                />
+              </>
+            )}
+          </>
+        )}
+
         <CreatableMultiSelect
           label="Tags"
           placeholder="e.g. Q3, VIP"
@@ -409,145 +665,24 @@ function AutomationModal({
           createVerb="Add"
           emptyText="Type to add a tag"
         />
-        <Select
-          label="When this happens (trigger)"
-          required
-          data={triggers.map((t) => ({
-            value: t.key,
-            label: t.comingSoon ? `${t.label} (coming soon)` : t.label,
-            disabled: t.comingSoon,
-          }))}
-          value={trigger}
-          onChange={(v) => {
-            setTrigger(v);
-            setConfig({}); // reset config when the trigger changes
-          }}
-        />
-        {def && <Text size="xs" c="dimmed">{def.description}</Text>}
 
-        {/* Trigger-specific config */}
-        {def?.fields.map((f) => {
-          if (f.type === 'stage') {
-            return (
-              <Select
-                key={f.key}
-                label={f.label}
-                placeholder="Any stage"
-                clearable
-                data={stages.map((s) => ({ value: s.id, label: s.name }))}
-                value={(config[f.key] as string) ?? null}
-                onChange={(v) => setConfig((c) => ({ ...c, [f.key]: v ?? undefined }))}
-              />
-            );
-          }
-          if (f.type === 'docKind') {
-            return (
-              <Select
-                key={f.key}
-                label={f.label}
-                placeholder="Estimate or invoice"
-                clearable
-                data={[
-                  { value: 'estimate', label: 'Estimate' },
-                  { value: 'invoice', label: 'Invoice' },
-                ]}
-                value={(config[f.key] as string) ?? null}
-                onChange={(v) => setConfig((c) => ({ ...c, [f.key]: v ?? undefined }))}
-              />
-            );
-          }
-          return (
-            <NumberInput
-              key={f.key}
-              label={f.label}
-              required={f.required}
-              min={0}
-              value={(config[f.key] as number) ?? ''}
-              onChange={(v) => setConfig((c) => ({ ...c, [f.key]: v === '' ? undefined : Number(v) }))}
-            />
-          );
-        })}
-
-        <Select
-          label="Then do this (action)"
-          required
-          data={[
-            { value: 'send_email', label: 'Send an email' },
-            { value: 'create_activity', label: 'Create an activity' },
-          ]}
-          value={action}
-          onChange={(v) => setAction((v as 'send_email' | 'create_activity') ?? 'send_email')}
-        />
-
-        {action === 'send_email' ? (
-          <Select
-            label="Send this template"
-            required
-            description="Deal email templates only"
-            placeholder={dealTemplates.length === 0 ? 'Create a deal template first' : 'Pick a template'}
-            data={dealTemplates.map((t) => ({ value: t.id, label: t.name }))}
-            value={templateId}
-            onChange={setTemplateId}
-            renderOption={({ option }) => {
-              const t = dealTemplates.find((x) => x.id === option.value);
-              return (
-                <Group gap={6} wrap="wrap" align="center">
-                  <Text size="sm">{option.label}</Text>
-                  {(t?.tags ?? []).map((tag) => (
-                    <Badge key={tag} size="xs" variant="light" color="candango" style={{ textTransform: 'none' }}>
-                      {tag}
-                    </Badge>
-                  ))}
-                </Group>
-              );
-            }}
-          />
-        ) : (
-          <>
-            <Select
-              label="Activity type"
-              description="Same activity types as the deal's New activity form"
-              data={[
-                { value: 'task', label: 'Task' },
-                { value: 'call', label: 'Call' },
-                { value: 'meeting', label: 'Meeting' },
-              ]}
-              value={(config.activityType as string) ?? 'task'}
-              onChange={(v) => setCfg('activityType', v ?? 'task')}
-            />
-            <TextInput
-              label="Activity subject"
-              required
-              placeholder="e.g. Follow up with the client"
-              value={(config.activitySubject as string) ?? ''}
-              onChange={(e) => setCfg('activitySubject', e.currentTarget.value)}
-            />
-            <NumberInput
-              label="Due in (days)"
-              description="0 = same day"
-              min={0}
-              value={(config.dueInDays as number) ?? 0}
-              onChange={(v) => setCfg('dueInDays', v === '' ? 0 : Number(v))}
-            />
-          </>
-        )}
         <Switch
           label="Enabled"
           description={
-            action === 'send_email' && !google?.mailbox
-              ? 'Connect Google to enable email automations — it will be created but stay off until then.'
+            emailBlocked
+              ? 'Connect Google to enable deal email automations — it will be created but stay off until then.'
               : undefined
           }
-          checked={enabled && !(action === 'send_email' && !google?.mailbox)}
+          checked={enabled && !emailBlocked}
           onChange={(e) => setEnabled(e.currentTarget.checked)}
-          disabled={action === 'send_email' && !google?.mailbox}
+          disabled={emailBlocked}
         />
 
         <Group justify="flex-end" mt="xs">
           <Button variant="default" onClick={onClose}>
             Cancel
           </Button>
-          <Button leftSection={<IconBolt size={16} />} onClick={submit} loading={create.isPending || update.isPending}>
+          <Button leftSection={<IconBolt size={16} />} onClick={submit} loading={pending}>
             {editing ? 'Save' : 'Create'}
           </Button>
         </Group>
