@@ -25,7 +25,8 @@ export default function ProfilePage() {
   const update = useUpdateProfile();
   const changePw = useChangePassword();
 
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [avatar, setAvatar] = useState<string | null>(null);
   const [cur, setCur] = useState('');
@@ -34,7 +35,9 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (me) {
-      setName(me.name ?? '');
+      const parts = (me.name ?? '').trim().split(/\s+/);
+      setFirstName(me.firstName || parts[0] || '');
+      setLastName(me.lastName || parts.slice(1).join(' ') || '');
       setPhone(me.phone ?? '');
       setAvatar(me.avatarUrl ?? null);
     }
@@ -57,11 +60,16 @@ export default function ProfilePage() {
     }
   };
 
-  const saveProfile = () =>
+  const saveProfile = () => {
+    if (!firstName.trim()) {
+      notifications.show({ message: 'First name is required', color: 'red' });
+      return;
+    }
     update.mutate(
-      { name, phone },
+      { firstName: firstName.trim(), lastName: lastName.trim(), phone },
       { onSuccess: () => notifications.show({ message: 'Profile saved', color: 'green' }), onError: fail },
     );
+  };
 
   const savePassword = () => {
     if (nw !== cf) {
@@ -99,7 +107,7 @@ export default function ProfilePage() {
       <Paper withBorder radius="md" p="md">
         <Group>
           <Avatar src={avatar ?? undefined} size="lg" radius="xl" color="candango">
-            {(name || me?.email || '?').slice(0, 1).toUpperCase()}
+            {(firstName || me?.email || '?').slice(0, 1).toUpperCase()}
           </Avatar>
           <div>
             <Text fw={500}>Photo</Text>
@@ -117,7 +125,15 @@ export default function ProfilePage() {
         </Group>
       </Paper>
 
-      <TextInput label="Name" value={name} onChange={(e) => setName(e.currentTarget.value)} />
+      <Group grow>
+        <TextInput
+          label="First name"
+          required
+          value={firstName}
+          onChange={(e) => setFirstName(e.currentTarget.value)}
+        />
+        <TextInput label="Last name" value={lastName} onChange={(e) => setLastName(e.currentTarget.value)} />
+      </Group>
       <TextInput
         label="Phone"
         placeholder="+1 555-0100"

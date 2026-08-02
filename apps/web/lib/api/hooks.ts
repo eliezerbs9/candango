@@ -412,7 +412,7 @@ export function useUpdateProfile() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<Pick<Profile, 'name' | 'phone' | 'avatarUrl'>>) =>
+    mutationFn: (body: Partial<Pick<Profile, 'firstName' | 'lastName' | 'name' | 'phone' | 'avatarUrl'>>) =>
       updateProfile(token!, body),
     onSuccess: (data) => qc.setQueryData(['me'], data),
   });

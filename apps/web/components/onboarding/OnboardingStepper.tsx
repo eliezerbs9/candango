@@ -86,7 +86,8 @@ export function OnboardingStepper() {
   const [tz, setTz] = useState<string | null>(DETECTED || null);
   const [logo, setLogo] = useState<string | null>(null);
   // Profile
-  const [pName, setPName] = useState('');
+  const [pFirst, setPFirst] = useState('');
+  const [pLast, setPLast] = useState('');
   const [pPhone, setPPhone] = useState('');
   const [avatar, setAvatar] = useState<string | null>(null);
 
@@ -99,7 +100,9 @@ export function OnboardingStepper() {
   }, [org]);
   useEffect(() => {
     if (profile) {
-      setPName(profile.name ?? '');
+      const parts = (profile.name ?? '').trim().split(/\s+/);
+      setPFirst(profile.firstName || parts[0] || '');
+      setPLast(profile.lastName || parts.slice(1).join(' ') || '');
       setPPhone(profile.phone ?? '');
       setAvatar(profile.avatarUrl);
     }
@@ -117,9 +120,14 @@ export function OnboardingStepper() {
     }
   };
   const saveProfile = async () => {
-    if (!pName.trim()) return notifications.show({ message: 'Your name is required', color: 'red' }), false;
+    if (!pFirst.trim()) return notifications.show({ message: 'Your first name is required', color: 'red' }), false;
     try {
-      await updateProfile.mutateAsync({ name: pName.trim(), phone: pPhone.trim(), ...(avatar ? { avatarUrl: avatar } : {}) });
+      await updateProfile.mutateAsync({
+        firstName: pFirst.trim(),
+        lastName: pLast.trim(),
+        phone: pPhone.trim(),
+        ...(avatar ? { avatarUrl: avatar } : {}),
+      });
       return true;
     } catch (e) {
       fail(e);
@@ -217,7 +225,7 @@ export function OnboardingStepper() {
             </Text>
             <Group>
               <Avatar src={avatar ?? undefined} radius="xl" size="lg" color="candango">
-                {pName.slice(0, 1).toUpperCase() || profile?.email?.slice(0, 1).toUpperCase() || 'U'}
+                {pFirst.slice(0, 1).toUpperCase() || profile?.email?.slice(0, 1).toUpperCase() || 'U'}
               </Avatar>
               <FileButton onChange={pickAvatar} accept="image/png,image/jpeg,image/webp">
                 {(props) => (
@@ -227,7 +235,10 @@ export function OnboardingStepper() {
                 )}
               </FileButton>
             </Group>
-            <TextInput label="Your name" required value={pName} onChange={(e) => setPName(e.currentTarget.value)} />
+            <Group grow>
+              <TextInput label="First name" required value={pFirst} onChange={(e) => setPFirst(e.currentTarget.value)} />
+              <TextInput label="Last name" value={pLast} onChange={(e) => setPLast(e.currentTarget.value)} />
+            </Group>
             <TextInput
               label="Phone"
               description="Optional"

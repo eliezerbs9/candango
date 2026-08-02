@@ -3,6 +3,8 @@ import { apiFetch } from './client';
 export interface Profile {
   id: string;
   email: string;
+  firstName: string;
+  lastName: string;
   name: string | null;
   phone: string | null;
   avatarUrl: string | null;
@@ -17,7 +19,7 @@ export function getMe(token: string) {
 
 export function updateProfile(
   token: string,
-  body: Partial<Pick<Profile, 'name' | 'phone' | 'avatarUrl'>>,
+  body: Partial<Pick<Profile, 'firstName' | 'lastName' | 'name' | 'phone' | 'avatarUrl'>>,
 ) {
   return apiFetch<Profile>('/me', { method: 'PATCH', token, body: JSON.stringify(body) });
 }

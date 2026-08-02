@@ -126,10 +126,13 @@ export class AuthService {
         },
       ],
     });
+    const [firstName = '', ...rest] = (opts.name ?? '').trim().replace(/\s+/g, ' ').split(' ');
     const user = await tx.user.create({
       data: {
         orgId: org.id,
         email: opts.email,
+        firstName,
+        lastName: rest.join(' '),
         name: opts.name,
         passwordHash: opts.passwordHash,
         roleId: adminRole.id,

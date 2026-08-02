@@ -5,6 +5,32 @@ import { ChangePasswordDto, UpdateProfileDto } from './dto/profile.dto';
 
 const SALT_ROUNDS = 10;
 
+function splitFullName(full: string): { firstName: string; lastName: string } {
+  const t = full.trim().replace(/\s+/g, ' ');
+  const i = t.indexOf(' ');
+  return i === -1 ? { firstName: t, lastName: '' } : { firstName: t.slice(0, i), lastName: t.slice(i + 1) };
+}
+
+/** Prefer explicit first/last; else split `name`; else null (name-unrelated update). */
+function resolveName(
+  dto: { firstName?: string; lastName?: string; name?: string },
+  existing: { firstName: string; lastName: string },
+): { firstName: string; lastName: string; name: string } | null {
+  let firstName: string;
+  let lastName: string;
+  if (dto.firstName !== undefined || dto.lastName !== undefined) {
+    firstName = (dto.firstName ?? existing.firstName).trim();
+    lastName = (dto.lastName ?? existing.lastName).trim();
+  } else if (dto.name !== undefined) {
+    const s = splitFullName(dto.name);
+    firstName = s.firstName;
+    lastName = s.lastName;
+  } else {
+    return null;
+  }
+  return { firstName, lastName, name: [firstName, lastName].filter(Boolean).join(' ').trim() };
+}
+
 @Injectable()
 export class ProfileService {
   constructor(private readonly prisma: PrismaService) {}
@@ -19,10 +45,15 @@ export class ProfileService {
   }
 
   async update(userId: string, orgId: string, dto: UpdateProfileDto) {
-    await this.ensure(userId, orgId);
+    const existing = await this.ensure(userId, orgId);
+    const resolved = resolveName(dto, { firstName: existing.firstName, lastName: existing.lastName });
     const user = await this.prisma.user.update({
       where: { id: userId },
-      data: { name: dto.name, phone: dto.phone, avatarUrl: dto.avatarUrl },
+      data: {
+        ...(resolved ? { firstName: resolved.firstName, lastName: resolved.lastName, name: resolved.name || null } : {}),
+        phone: dto.phone,
+        avatarUrl: dto.avatarUrl,
+      },
       include: { organization: true, role: true },
     });
     return this.shape(user);
@@ -47,6 +78,8 @@ export class ProfileService {
   private shape(user: {
     id: string;
     email: string;
+    firstName: string;
+    lastName: string;
     name: string | null;
     phone: string | null;
     avatarUrl: string | null;
@@ -57,6 +90,8 @@ export class ProfileService {
     return {
       id: user.id,
       email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
       name: user.name,
       phone: user.phone,
       avatarUrl: user.avatarUrl,

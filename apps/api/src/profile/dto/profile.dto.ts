@@ -3,7 +3,18 @@ import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 export class UpdateProfileDto {
   @IsOptional()
   @IsString()
-  @MaxLength(120)
+  @MaxLength(80)
+  firstName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  lastName?: string;
+
+  /** Legacy single-field name; split into first/last server-side when first/last aren't given. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
   name?: string;
 
   @IsOptional()
