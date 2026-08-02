@@ -807,6 +807,8 @@ model EmailTemplate {
   name            String
   subject         String
   body            String
+  bodyFormat      String    @default("richtext") // richtext | html (raw pasted HTML)
+  tags            String[]  @default([])
   createdByUserId String?
   archivedAt      DateTime?
   createdAt       DateTime  @default(now())

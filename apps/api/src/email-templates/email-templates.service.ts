@@ -3,13 +3,26 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateEmailTemplateDto, UpdateEmailTemplateDto } from './dto/email-template.dto';
 import { DEFAULT_TEMPLATES, buildTemplateContext, renderTemplate } from './template-vars';
 
-const shape = (t: { id: string; name: string; subject: string; body: string; updatedAt: Date }) => ({
+const shape = (t: {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+  bodyFormat: string;
+  tags: string[];
+  updatedAt: Date;
+}) => ({
   id: t.id,
   name: t.name,
   subject: t.subject,
   body: t.body,
+  bodyFormat: t.bodyFormat,
+  tags: t.tags,
   updatedAt: t.updatedAt.toISOString(),
 });
+
+const cleanTags = (tags?: string[]) =>
+  tags ? [...new Set(tags.map((t) => t.trim()).filter(Boolean))].slice(0, 20) : undefined;
 
 @Injectable()
 export class EmailTemplatesService {
@@ -38,6 +51,8 @@ export class EmailTemplatesService {
         name: dto.name.trim(),
         subject: dto.subject,
         body: dto.body,
+        bodyFormat: dto.bodyFormat ?? 'richtext',
+        tags: cleanTags(dto.tags) ?? [],
       },
     });
     return shape(row);
@@ -52,6 +67,8 @@ export class EmailTemplatesService {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
         ...(dto.subject !== undefined ? { subject: dto.subject } : {}),
         ...(dto.body !== undefined ? { body: dto.body } : {}),
+        ...(dto.bodyFormat !== undefined ? { bodyFormat: dto.bodyFormat } : {}),
+        ...(dto.tags !== undefined ? { tags: cleanTags(dto.tags) } : {}),
       },
     });
     return shape(row);

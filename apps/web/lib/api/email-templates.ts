@@ -1,11 +1,15 @@
 import { apiFetch } from './client';
 
 /** Reusable email template. `subject`/`body` may contain {{variables}}. */
+export type TemplateBodyFormat = 'richtext' | 'html';
+
 export interface EmailTemplate {
   id: string;
   name: string;
   subject: string;
   body: string;
+  bodyFormat: TemplateBodyFormat;
+  tags: string[];
   updatedAt: string;
 }
 
@@ -13,6 +17,8 @@ export interface EmailTemplateBody {
   name?: string;
   subject?: string;
   body?: string;
+  bodyFormat?: TemplateBodyFormat;
+  tags?: string[];
 }
 
 /** A placeholder the user can insert into a template subject/body. */

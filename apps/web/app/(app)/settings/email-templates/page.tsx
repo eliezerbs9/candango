@@ -14,9 +14,11 @@ import {
   Menu,
   Modal,
   Paper,
+  SegmentedControl,
   SimpleGrid,
   Stack,
   Text,
+  Textarea,
   TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -25,6 +27,7 @@ import { IconDots, IconPencil, IconPlus, IconSignature, IconSparkles, IconTrash 
 import type { Editor } from '@tiptap/react';
 import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/useAuth';
+import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
 import { RichTextBody } from '@/components/common/RichTextBody';
 import { ConnectGoogleNotice } from '@/components/email/ConnectGoogleNotice';
 import {
@@ -39,7 +42,7 @@ import {
   useUpdateEmailTemplate,
   useUpdateOrganization,
 } from '@/lib/api/hooks';
-import type { EmailTemplate, TemplateVariable } from '@/lib/api/email-templates';
+import type { EmailTemplate, TemplateBodyFormat, TemplateVariable } from '@/lib/api/email-templates';
 import type { Organization } from '@/lib/api/organization';
 import {
   DEFAULT_SIGNATURE_HTML,
@@ -75,6 +78,11 @@ export default function EmailTemplatesSettingsPage() {
     return r;
   }, [profile, org]);
   const labelByKey = useMemo(() => Object.fromEntries(variables.map((v) => [v.key, v.label])), [variables]);
+  // Every tag already in use — feeds the tag picker's suggestions.
+  const allTags = useMemo(
+    () => [...new Set(templates.flatMap((t) => t.tags ?? []))].sort((a, b) => a.localeCompare(b)),
+    [templates],
+  );
 
   const sigValues = useMemo(
     () =>
@@ -171,9 +179,21 @@ export default function EmailTemplatesSettingsPage() {
             <Card key={t.id} withBorder radius="md" padding="md">
               <Group justify="space-between" wrap="nowrap" align="flex-start" mb={6}>
                 <div style={{ minWidth: 0 }}>
-                  <Text fw={600} lineClamp={1}>
-                    {t.name}
-                  </Text>
+                  <Group gap={6} wrap="wrap" align="center">
+                    <Text fw={600} lineClamp={1}>
+                      {t.name}
+                    </Text>
+                    {t.bodyFormat === 'html' && (
+                      <Badge size="xs" variant="light" color="gray" style={{ textTransform: 'none' }}>
+                        HTML
+                      </Badge>
+                    )}
+                    {(t.tags ?? []).map((tag) => (
+                      <Badge key={tag} size="xs" variant="light" color="candango" style={{ textTransform: 'none' }}>
+                        {tag}
+                      </Badge>
+                    ))}
+                  </Group>
                   <Text size="xs" c="dimmed" lineClamp={1}>
                     {renderPreviewText(t.subject, realValues, labelByKey)}
                   </Text>
@@ -236,6 +256,7 @@ export default function EmailTemplatesSettingsPage() {
         realValues={realValues}
         labelByKey={labelByKey}
         signatureHtml={signatureHtml}
+        allTags={allTags}
       />
     </Stack>
   );
@@ -349,6 +370,7 @@ function TemplateModal({
   realValues,
   labelByKey,
   signatureHtml,
+  allTags,
 }: {
   opened: boolean;
   onClose: () => void;
@@ -357,6 +379,7 @@ function TemplateModal({
   realValues: Record<string, string>;
   labelByKey: Record<string, string>;
   signatureHtml: string;
+  allTags: string[];
 }) {
   const create = useCreateEmailTemplate();
   const update = useUpdateEmailTemplate();
@@ -364,9 +387,12 @@ function TemplateModal({
   const [name, setName] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  const [bodyFormat, setBodyFormat] = useState<TemplateBodyFormat>('richtext');
+  const [tags, setTags] = useState<string[]>([]);
 
   const subjectRef = useRef<HTMLInputElement>(null);
   const bodyEditor = useRef<Editor | null>(null);
+  const htmlBodyRef = useRef<HTMLTextAreaElement>(null);
   const active = useRef<'subject' | 'body'>('body');
 
   useEffect(() => {
@@ -374,6 +400,8 @@ function TemplateModal({
     setName(editing?.name ?? '');
     setSubject(editing?.subject ?? '');
     setBody(editing?.body ?? '');
+    setBodyFormat(editing?.bodyFormat ?? 'richtext');
+    setTags(editing?.tags ?? []);
     active.current = 'body';
   }, [opened, editing]);
 
@@ -395,6 +423,17 @@ function TemplateModal({
         const pos = start + token.length;
         el?.setSelectionRange(pos, pos);
       });
+    } else if (bodyFormat === 'html') {
+      const el = htmlBodyRef.current;
+      const start = el?.selectionStart ?? body.length;
+      const end = el?.selectionEnd ?? body.length;
+      const next = body.slice(0, start) + token + body.slice(end);
+      setBody(next);
+      requestAnimationFrame(() => {
+        el?.focus();
+        const pos = start + token.length;
+        el?.setSelectionRange(pos, pos);
+      });
     } else {
       bodyEditor.current?.chain().focus().insertContent(token).run();
     }
@@ -410,14 +449,17 @@ function TemplateModal({
     return [...map.entries()];
   }, [variables]);
 
-  const bodyIsEmpty = body.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, '').trim() === '';
+  const bodyIsEmpty =
+    bodyFormat === 'html'
+      ? body.trim() === ''
+      : body.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, '').trim() === '';
 
   const submit = () => {
     if (!name.trim() || !subject.trim() || bodyIsEmpty) {
       notifications.show({ message: 'Name, subject and body are all required', color: 'red' });
       return;
     }
-    const payload = { name: name.trim(), subject, body };
+    const payload = { name: name.trim(), subject, body, bodyFormat, tags };
     const done = {
       onSuccess: () => {
         notifications.show({ message: editing ? 'Template saved' : 'Template created', color: 'green' });
@@ -451,11 +493,46 @@ function TemplateModal({
               onChange={(e) => setSubject(e.currentTarget.value)}
               onFocus={() => (active.current = 'subject')}
             />
+            <CreatableMultiSelect
+              label="Tags"
+              placeholder="e.g. Marketing, Onboarding"
+              options={allTags.map((t) => ({ value: t, label: t }))}
+              value={tags}
+              onChange={setTags}
+              onCreate={async (t) => ({ value: t.trim(), label: t.trim() })}
+              createVerb="Add"
+              emptyText="Type to add a tag"
+            />
             <div>
-              <Text size="sm" fw={500} mb={4}>
-                Body
-              </Text>
-              <RichTextBody value={body} onChange={setBody} onReady={onBodyReady} minHeight={200} />
+              <Group justify="space-between" align="center" mb={4}>
+                <Text size="sm" fw={500}>
+                  Body
+                </Text>
+                <SegmentedControl
+                  size="xs"
+                  value={bodyFormat}
+                  onChange={(v) => setBodyFormat(v as TemplateBodyFormat)}
+                  data={[
+                    { label: 'Rich text', value: 'richtext' },
+                    { label: 'HTML', value: 'html' },
+                  ]}
+                />
+              </Group>
+              {bodyFormat === 'html' ? (
+                <Textarea
+                  ref={htmlBodyRef}
+                  value={body}
+                  onChange={(e) => setBody(e.currentTarget.value)}
+                  onFocus={() => (active.current = 'body')}
+                  autosize
+                  minRows={10}
+                  maxRows={20}
+                  placeholder="Paste raw HTML here. {{variables}} still work anywhere in it."
+                  styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)', fontSize: 12 } }}
+                />
+              ) : (
+                <RichTextBody value={body} onChange={setBody} onReady={onBodyReady} minHeight={200} />
+              )}
               <Text size="xs" c="dimmed" mt={4}>
                 Your signature is added automatically below the body — edit it via &ldquo;Email signature&rdquo;.
               </Text>

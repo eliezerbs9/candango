@@ -1,4 +1,6 @@
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+
+const BODY_FORMATS = ['richtext', 'html'];
 
 export class CreateEmailTemplateDto {
   @IsString()
@@ -13,8 +15,18 @@ export class CreateEmailTemplateDto {
 
   @IsString()
   @MinLength(1)
-  @MaxLength(20000)
+  @MaxLength(50000)
   body!: string;
+
+  @IsOptional()
+  @IsIn(BODY_FORMATS)
+  bodyFormat?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(20)
+  tags?: string[];
 }
 
 export class UpdateEmailTemplateDto {
@@ -33,6 +45,16 @@ export class UpdateEmailTemplateDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
-  @MaxLength(20000)
+  @MaxLength(50000)
   body?: string;
+
+  @IsOptional()
+  @IsIn(BODY_FORMATS)
+  bodyFormat?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(20)
+  tags?: string[];
 }

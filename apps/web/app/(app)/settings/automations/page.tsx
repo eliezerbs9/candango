@@ -384,6 +384,19 @@ function AutomationModal({
             data={templates.map((t) => ({ value: t.id, label: t.name }))}
             value={templateId}
             onChange={setTemplateId}
+            renderOption={({ option }) => {
+              const t = templates.find((x) => x.id === option.value);
+              return (
+                <Group gap={6} wrap="wrap" align="center">
+                  <Text size="sm">{option.label}</Text>
+                  {(t?.tags ?? []).map((tag) => (
+                    <Badge key={tag} size="xs" variant="light" color="candango" style={{ textTransform: 'none' }}>
+                      {tag}
+                    </Badge>
+                  ))}
+                </Group>
+              );
+            }}
           />
         ) : (
           <>
