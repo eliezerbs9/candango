@@ -124,12 +124,14 @@ export function AudienceBuilder({
             Define the audience to preview its size.
           </Text>
         ) : (
-          <Text size="sm">
+          <>
             <Badge variant="light" color="candango">
               {count}
-            </Badge>{' '}
-            subscribed contact{count === 1 ? '' : 's'} will receive this.
-          </Text>
+            </Badge>
+            <Text size="sm">
+              subscribed contact{count === 1 ? '' : 's'} will receive this.
+            </Text>
+          </>
         )}
       </Group>
     </Stack>

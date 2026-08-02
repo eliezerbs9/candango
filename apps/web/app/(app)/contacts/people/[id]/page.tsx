@@ -195,7 +195,9 @@ function DetailRow({ icon, label, children }: { icon: React.ReactNode; label: st
         <Text size="xs" c="dimmed">
           {label}
         </Text>
-        <Text size="sm">{children}</Text>
+        <Text size="sm" component="div">
+          {children}
+        </Text>
       </div>
     </Group>
   );

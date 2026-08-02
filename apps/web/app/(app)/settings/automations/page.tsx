@@ -399,8 +399,8 @@ function AutomationModal({
     setTimezone(editing?.timezone || org?.timezone || browserTz());
   }, [opened, editing, org?.timezone]);
 
-  // The effective kind: create_activity is inherently deal-side.
-  const isMarketing = action === 'send_email' && kind === 'marketing';
+  // Type drives the form: a marketing automation is always a scheduled email broadcast.
+  const isMarketing = kind === 'marketing';
   const def = triggers.find((t) => t.key === trigger);
   const setCfg = (key: string, value: unknown) => setConfig((c) => ({ ...c, [key]: value }));
   const pending = create.isPending || update.isPending || createMkt.isPending || updateMkt.isPending;
@@ -475,38 +475,23 @@ function AutomationModal({
           data-autofocus
         />
 
-        {/* Do this (action) comes first */}
+        {/* Type drives the whole form — everything below depends on it */}
         <Select
-          label="Do this"
-          required
+          label="Type"
+          description={
+            kind === 'deal'
+              ? 'Triggered by an event on a deal — sends to that deal’s contact, or creates an activity.'
+              : 'A scheduled broadcast to an audience of contacts (sent from the workspace).'
+          }
           data={[
-            { value: 'send_email', label: 'Send an email' },
-            { value: 'create_activity', label: 'Create an activity' },
+            { value: 'deal', label: 'Deal — triggered' },
+            { value: 'marketing', label: 'Marketing — scheduled' },
           ]}
-          value={action}
-          onChange={(v) => setAction((v as 'send_email' | 'create_activity') ?? 'send_email')}
+          value={kind}
+          onChange={(v) => setKind((v as AutomationKind) ?? 'deal')}
           allowDeselect={false}
+          disabled={!!editing}
         />
-
-        {/* Deal vs Marketing — only relevant when sending an email */}
-        {action === 'send_email' && (
-          <Select
-            label="Type"
-            description={
-              kind === 'deal'
-                ? 'Triggered by an event on a deal — sends to that deal’s contact.'
-                : 'A scheduled broadcast to an audience of contacts (sent from the workspace).'
-            }
-            data={[
-              { value: 'deal', label: 'Deal — triggered' },
-              { value: 'marketing', label: 'Marketing — scheduled' },
-            ]}
-            value={kind}
-            onChange={(v) => setKind((v as AutomationKind) ?? 'deal')}
-            allowDeselect={false}
-            disabled={!!editing}
-          />
-        )}
 
         {isMarketing ? (
           <>
@@ -539,6 +524,18 @@ function AutomationModal({
           </>
         ) : (
           <>
+            {/* Do this (action) */}
+            <Select
+              label="Do this"
+              required
+              data={[
+                { value: 'send_email', label: 'Send an email' },
+                { value: 'create_activity', label: 'Create an activity' },
+              ]}
+              value={action}
+              onChange={(v) => setAction((v as 'send_email' | 'create_activity') ?? 'send_email')}
+              allowDeselect={false}
+            />
             {/* When (trigger) */}
             <Select
               label="When this happens"
