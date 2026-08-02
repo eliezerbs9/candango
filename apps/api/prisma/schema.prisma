@@ -56,6 +56,7 @@ model Organization {
   eventOutbox   EventOutbox[]
   estimateItems EstimateItem[]
   emailTemplates EmailTemplate[]
+  emailAutomations EmailAutomation[]
   messages     Message[]
   subscription Subscription?
   invoices     Invoice[]
@@ -808,7 +809,31 @@ model EmailTemplate {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  organization Organization @relation(fields: [orgId], references: [id])
+  organization Organization      @relation(fields: [orgId], references: [id])
+  automations  EmailAutomation[]
+
+  @@index([orgId])
+}
+
+/// A rule that auto-sends an email template when a trigger fires (FR-16.3).
+/// `trigger` is one of the keys in email-automations/triggers.ts; `config` holds trigger-specific
+/// settings (e.g. which stage, how many days). Event-driven triggers run via an @OnEvent listener;
+/// time-based ones (overdue / follow-up) run from a scheduled worker.
+model EmailAutomation {
+  id              String    @id @default(cuid())
+  orgId           String
+  name            String
+  enabled         Boolean   @default(true)
+  trigger         String
+  config          Json      @default("{}")
+  templateId      String
+  createdByUserId String?
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization  @relation(fields: [orgId], references: [id])
+  template     EmailTemplate @relation(fields: [templateId], references: [id])
 
   @@index([orgId])
 }
