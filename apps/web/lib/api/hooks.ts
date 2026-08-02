@@ -109,6 +109,9 @@ import {
   getQbItems,
   getQbCatalog,
   createQbItem,
+  updateQbItem,
+  deleteQbItem,
+  type QbItemBody,
   getQbLinkStatus,
   linkQuickbooks,
   searchQbParents,
@@ -1001,7 +1004,25 @@ export function useCreateQbItem() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { name: string; description?: string; unitPrice?: number }) => createQbItem(token!, body),
+    mutationFn: (body: QbItemBody) => createQbItem(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['qb-catalog'] }),
+  });
+}
+
+export function useUpdateQbItem() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: QbItemBody }) => updateQbItem(token!, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['qb-catalog'] }),
+  });
+}
+
+export function useDeleteQbItem() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteQbItem(token!, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['qb-catalog'] }),
   });
 }

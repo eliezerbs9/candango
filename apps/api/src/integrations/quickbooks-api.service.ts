@@ -186,17 +186,53 @@ export class QuickbooksApiService {
   // --- Items (Products / Services) ---
   // QuickBooks Items carry a UnitPrice (auto-filled on the estimate) but no unit
   // of measure in the standard API, so `unit` isn't available for QBO items.
-  async listItems(orgId: string): Promise<{ id: string; name: string; description: string | null; unitPrice: number | null }[]> {
+  async listItems(
+    orgId: string,
+  ): Promise<{ id: string; name: string; description: string | null; unitPrice: number | null; taxable: boolean }[]> {
     const r = await this.query(
       orgId,
-      "select Id, Name, Description, UnitPrice from Item where Active = true and Type in ('Service','Inventory','NonInventory') MAXRESULTS 200",
+      "select Id, Name, Description, UnitPrice, Taxable from Item where Active = true and Type in ('Service','Inventory','NonInventory') MAXRESULTS 200",
     );
     return (r?.QueryResponse?.Item ?? []).map((i: any) => ({
       id: i.Id,
       name: i.Name,
       description: i.Description ?? null,
       unitPrice: i.UnitPrice != null ? fromQbAmount(i.UnitPrice) : null,
+      taxable: !!i.Taxable,
     }));
+  }
+
+  /** Sparse-update a QuickBooks item (re-reads its SyncToken first). */
+  async updateItem(
+    orgId: string,
+    id: string,
+    patch: { name?: string; description?: string; unitPrice?: number; taxable?: boolean },
+  ): Promise<{ id: string; name: string; description: string | null; unitPrice: number | null; taxable: boolean }> {
+    const cur = await this.query(orgId, `select * from Item where Id = '${id.replace(/'/g, '')}'`);
+    const item = cur?.QueryResponse?.Item?.[0];
+    if (!item) throw new BadRequestException('QuickBooks item not found');
+    const body: Record<string, unknown> = { Id: id, SyncToken: item.SyncToken, sparse: true };
+    if (patch.name !== undefined) body.Name = patch.name;
+    if (patch.description !== undefined) body.Description = patch.description;
+    if (patch.unitPrice !== undefined) body.UnitPrice = toQbAmount(patch.unitPrice);
+    if (patch.taxable !== undefined) body.Taxable = patch.taxable;
+    const r = await this.request(orgId, 'POST', 'item', body);
+    const it = r.Item;
+    return {
+      id: it.Id,
+      name: it.Name,
+      description: it.Description ?? null,
+      unitPrice: it.UnitPrice != null ? fromQbAmount(it.UnitPrice) : null,
+      taxable: !!it.Taxable,
+    };
+  }
+
+  /** QuickBooks items aren't hard-deleted — deactivate them (Active = false). */
+  async deactivateItem(orgId: string, id: string): Promise<void> {
+    const cur = await this.query(orgId, `select * from Item where Id = '${id.replace(/'/g, '')}'`);
+    const item = cur?.QueryResponse?.Item?.[0];
+    if (!item) return;
+    await this.request(orgId, 'POST', 'item', { Id: id, SyncToken: item.SyncToken, sparse: true, Active: false });
   }
 
   private incomeAccountCache = new Map<string, string>(); // realmId → default Income account id
@@ -213,8 +249,8 @@ export class QuickbooksApiService {
   /** Create a Service item in QuickBooks (needs an income account). */
   async createItem(
     orgId: string,
-    input: { name: string; description?: string; unitPrice?: number },
-  ): Promise<{ id: string; name: string; description: string | null; unitPrice: number | null }> {
+    input: { name: string; description?: string; unitPrice?: number; taxable?: boolean },
+  ): Promise<{ id: string; name: string; description: string | null; unitPrice: number | null; taxable: boolean }> {
     const { realmId } = await this.authContext(orgId);
     const body: Record<string, unknown> = {
       Name: input.name,
@@ -223,6 +259,7 @@ export class QuickbooksApiService {
     };
     if (input.description) body.Description = input.description;
     if (input.unitPrice != null) body.UnitPrice = toQbAmount(input.unitPrice);
+    if (input.taxable !== undefined) body.Taxable = input.taxable;
     const r = await this.request(orgId, 'POST', 'item', body);
     const it = r.Item;
     return {
@@ -230,6 +267,7 @@ export class QuickbooksApiService {
       name: it.Name,
       description: it.Description ?? null,
       unitPrice: it.UnitPrice != null ? fromQbAmount(it.UnitPrice) : null,
+      taxable: !!it.Taxable,
     };
   }
 

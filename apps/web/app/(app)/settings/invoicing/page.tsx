@@ -30,17 +30,26 @@ import {
   useCreateEstimateItem,
   useCreateQbItem,
   useDeleteEstimateItem,
+  useDeleteQbItem,
   useEstimateItems,
   useOrganization,
   useQbCatalog,
   useQuickbooksStatus,
   useUpdateEstimateItem,
+  useUpdateQbItem,
   useUpdateOrganization,
 } from '@/lib/api/hooks';
 import { POPULAR_UNITS } from '@/lib/units';
 import type { EstimateItem } from '@/lib/api/estimate-items';
 
-type CatalogItem = { id: string; name: string; description?: string | null; unit?: string | null; unitPrice?: number | null };
+type CatalogItem = {
+  id: string;
+  name: string;
+  description?: string | null;
+  unit?: string | null;
+  unitPrice?: number | null;
+  taxable?: boolean;
+};
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
@@ -72,24 +81,41 @@ export default function EstimatesSettingsPage() {
       { onSuccess: () => notifications.show({ message: 'Tax settings saved', color: 'green' }), onError: fail },
     );
 
-  const [editing, setEditing] = useState<EstimateItem | null>(null);
+  const [editing, setEditing] = useState<CatalogItem | null>(null);
   const [opened, ctl] = useDisclosure(false);
   const del = useDeleteEstimateItem();
+  const deleteQb = useDeleteQbItem();
+  const updateQb = useUpdateQbItem();
 
   const openCreate = () => {
     setEditing(null);
     ctl.open();
   };
-  const openEdit = (it: EstimateItem) => {
+  const openEdit = (it: CatalogItem) => {
     setEditing(it);
     ctl.open();
   };
-  const remove = (it: EstimateItem) => {
-    if (!window.confirm(`Delete "${it.name}"?`)) return;
-    del.mutate(it.id, {
-      onSuccess: () => notifications.show({ message: 'Item deleted', color: 'green' }),
+  const remove = (it: CatalogItem) => {
+    const msg = connected
+      ? `Deactivate "${it.name}" in QuickBooks? It won't be deleted, just made inactive.`
+      : `Delete "${it.name}"?`;
+    if (!window.confirm(msg)) return;
+    const done = {
+      onSuccess: () => notifications.show({ message: connected ? 'Item deactivated' : 'Item deleted', color: 'green' }),
       onError: fail,
-    });
+    };
+    if (connected) deleteQb.mutate(it.id, done);
+    else del.mutate(it.id, done);
+  };
+  // Auto-save the taxable flag on a QuickBooks item when the checkbox is toggled.
+  const toggleTaxable = (it: CatalogItem, taxable: boolean) => {
+    updateQb.mutate(
+      { id: it.id, body: { taxable } },
+      {
+        onSuccess: () => notifications.show({ message: `Marked ${taxable ? 'taxable' : 'non-taxable'}`, color: 'green' }),
+        onError: fail,
+      },
+    );
   };
 
   if (isLoading) {
@@ -162,7 +188,8 @@ export default function EstimatesSettingsPage() {
         </Group>
         {connected && (
           <Text size="xs" c="dimmed">
-            These are your QuickBooks products/services. New items are created in QuickBooks; edit or remove them there.
+            These are your QuickBooks products/services. Changes here sync straight to QuickBooks. Toggle{' '}
+            <b>Taxable</b> to control whether QuickBooks charges sales tax on a line.
           </Text>
         )}
       </div>
@@ -178,7 +205,7 @@ export default function EstimatesSettingsPage() {
               <Table.Tr>
                 <Table.Th>Name</Table.Th>
                 <Table.Th>Description</Table.Th>
-                <Table.Th>Unit</Table.Th>
+                {connected ? <Table.Th ta="center">Taxable</Table.Th> : <Table.Th>Unit</Table.Th>}
                 <Table.Th ta="right">Price</Table.Th>
                 <Table.Th w={44} />
               </Table.Tr>
@@ -194,16 +221,28 @@ export default function EstimatesSettingsPage() {
                       {it.description || '—'}
                     </Text>
                   </Table.Td>
-                  <Table.Td>
-                    <Text size="sm" c="dimmed">
-                      {it.unit || '—'}
-                    </Text>
-                  </Table.Td>
+                  {connected ? (
+                    <Table.Td ta="center">
+                      <Checkbox
+                        checked={!!it.taxable}
+                        onChange={(e) => toggleTaxable(it, e.currentTarget.checked)}
+                        disabled={!isAdmin || updateQb.isPending}
+                        aria-label={`Taxable: ${it.name}`}
+                        style={{ display: 'inline-block' }}
+                      />
+                    </Table.Td>
+                  ) : (
+                    <Table.Td>
+                      <Text size="sm" c="dimmed">
+                        {it.unit || '—'}
+                      </Text>
+                    </Table.Td>
+                  )}
                   <Table.Td ta="right">
                     {it.unitPrice != null ? <Money value={it.unitPrice} currency="USD" /> : <Text c="dimmed">—</Text>}
                   </Table.Td>
                   <Table.Td>
-                    {isAdmin && !connected && (
+                    {isAdmin && (
                       <Menu position="bottom-end" withinPortal shadow="sm">
                         <Menu.Target>
                           <ActionIcon variant="subtle" color="gray" aria-label="Actions">
@@ -211,11 +250,11 @@ export default function EstimatesSettingsPage() {
                           </ActionIcon>
                         </Menu.Target>
                         <Menu.Dropdown>
-                          <Menu.Item leftSection={<IconPencil size={14} />} onClick={() => openEdit(it as EstimateItem)}>
+                          <Menu.Item leftSection={<IconPencil size={14} />} onClick={() => openEdit(it)}>
                             Edit
                           </Menu.Item>
-                          <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => remove(it as EstimateItem)}>
-                            Delete
+                          <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => remove(it)}>
+                            {connected ? 'Deactivate' : 'Delete'}
                           </Menu.Item>
                         </Menu.Dropdown>
                       </Menu>
@@ -241,16 +280,18 @@ function ItemModal({
 }: {
   opened: boolean;
   onClose: () => void;
-  editing: EstimateItem | null;
+  editing: CatalogItem | null;
   qbo: boolean;
 }) {
   const create = useCreateEstimateItem();
   const update = useUpdateEstimateItem();
   const createQb = useCreateQbItem();
+  const updateQb = useUpdateQbItem();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [unit, setUnit] = useState('');
   const [price, setPrice] = useState<number | string>('');
+  const [taxable, setTaxable] = useState(false);
 
   useEffect(() => {
     if (!opened) return;
@@ -258,6 +299,7 @@ function ItemModal({
     setDescription(editing?.description ?? '');
     setUnit(editing?.unit ?? '');
     setPrice(editing?.unitPrice != null ? editing.unitPrice / 100 : '');
+    setTaxable(!!editing?.taxable);
   }, [opened, editing]);
 
   const submit = () => {
@@ -274,8 +316,10 @@ function ItemModal({
       onError: fail,
     };
     if (qbo) {
-      // QuickBooks items have no unit of measure.
-      createQb.mutate({ name: name.trim(), description: description.trim() || undefined, unitPrice }, done);
+      // QuickBooks items have no unit of measure; taxability is set per item.
+      const qbBody = { name: name.trim(), description: description.trim() || undefined, unitPrice, taxable };
+      if (editing) updateQb.mutate({ id: editing.id, body: qbBody }, done);
+      else createQb.mutate(qbBody, done);
       return;
     }
     const body = { name: name.trim(), description: description.trim() || undefined, unit: unit.trim() || undefined, unitPrice };
@@ -287,7 +331,7 @@ function ItemModal({
     <Modal
       opened={opened}
       onClose={onClose}
-      title={qbo ? 'New QuickBooks item' : editing ? 'Edit item' : 'New item'}
+      title={qbo ? (editing ? 'Edit QuickBooks item' : 'New QuickBooks item') : editing ? 'Edit item' : 'New item'}
       centered
     >
       <Stack gap="sm">
@@ -320,11 +364,22 @@ function ItemModal({
           value={price}
           onChange={setPrice}
         />
+        {qbo && (
+          <Checkbox
+            label="Taxable"
+            description="QuickBooks charges sales tax on lines that use this item."
+            checked={taxable}
+            onChange={(e) => setTaxable(e.currentTarget.checked)}
+          />
+        )}
         <Group justify="flex-end" mt="xs">
           <Button variant="default" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={submit} loading={create.isPending || update.isPending || createQb.isPending}>
+          <Button
+            onClick={submit}
+            loading={create.isPending || update.isPending || createQb.isPending || updateQb.isPending}
+          >
             {editing ? 'Save' : 'Add'}
           </Button>
         </Group>

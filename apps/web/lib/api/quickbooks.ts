@@ -36,8 +36,23 @@ export function getQbCatalog(token: string) {
   return apiFetch<QbItem[]>('/integrations/quickbooks/items', { token });
 }
 
-export function createQbItem(token: string, body: { name: string; description?: string; unitPrice?: number }) {
+export interface QbItemBody {
+  name?: string;
+  description?: string;
+  unitPrice?: number;
+  taxable?: boolean;
+}
+
+export function createQbItem(token: string, body: QbItemBody) {
   return apiFetch<QbItem>('/integrations/quickbooks/items', { method: 'POST', token, body: JSON.stringify(body) });
+}
+
+export function updateQbItem(token: string, id: string, body: QbItemBody) {
+  return apiFetch<QbItem>(`/integrations/quickbooks/items/${id}`, { method: 'PATCH', token, body: JSON.stringify(body) });
+}
+
+export function deleteQbItem(token: string, id: string) {
+  return apiFetch<void>(`/integrations/quickbooks/items/${id}`, { method: 'DELETE', token });
 }
 
 export function getDealEstimates(token: string, dealId: string) {

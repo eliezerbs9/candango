@@ -116,7 +116,14 @@ export interface Address {
   country?: string;
 }
 
-export type QbItem = { id: string; name: string; description?: string | null; unit?: string | null; unitPrice?: number | null };
+export type QbItem = {
+  id: string;
+  name: string;
+  description?: string | null;
+  unit?: string | null;
+  unitPrice?: number | null;
+  taxable?: boolean;
+};
 
 export interface QbLinkStatus {
   linked: boolean;

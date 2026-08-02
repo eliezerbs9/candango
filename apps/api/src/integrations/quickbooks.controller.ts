@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -6,7 +6,7 @@ import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser, type AuthContext } from '../auth/current-user.decorator';
 import { QuickbooksOAuthService } from './quickbooks-oauth.service';
 import { QuickbooksApiService } from './quickbooks-api.service';
-import { CreateQbItemDto } from './dto/qb-item.dto';
+import { CreateQbItemDto, UpdateQbItemDto } from './dto/qb-item.dto';
 
 @Controller('integrations/quickbooks')
 export class QuickbooksController {
@@ -67,5 +67,18 @@ export class QuickbooksController {
   @Post('items')
   createItem(@CurrentUser() u: AuthContext, @Body() dto: CreateQbItemDto) {
     return this.api.createItem(u.orgId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Patch('items/:id')
+  updateItem(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() dto: UpdateQbItemDto) {
+    return this.api.updateItem(u.orgId, id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Delete('items/:id')
+  @HttpCode(204)
+  deleteItem(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.api.deactivateItem(u.orgId, id);
   }
 }
