@@ -24,6 +24,7 @@ import { MessagesModule } from './messages/messages.module';
 import { BillingModule } from './billing/billing.module';
 import { ContactModule } from './contact/contact.module';
 import { EstimateItemsModule } from './estimate-items/estimate-items.module';
+import { EmailTemplatesModule } from './email-templates/email-templates.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -68,6 +69,7 @@ import { HealthController } from './health.controller';
     MessagesModule,
     BillingModule,
     EstimateItemsModule,
+    EmailTemplatesModule,
   ],
   controllers: [HealthController],
 })

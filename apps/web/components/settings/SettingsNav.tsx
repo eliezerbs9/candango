@@ -11,6 +11,7 @@ const SECTIONS = [
   { label: 'Roles', href: '/settings/roles' },
   { label: 'Custom Fields', href: '/settings/custom-fields' },
   { label: 'Invoicing', href: '/settings/invoicing' },
+  { label: 'Email Templates', href: '/settings/email-templates' },
   { label: 'Billing', href: '/settings/billing' },
   { label: 'API Keys', href: '/settings/api-keys' },
   { label: 'Webhooks', href: '/settings/webhooks' },

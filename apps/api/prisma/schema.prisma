@@ -54,6 +54,7 @@ model Organization {
   auditLogs     AuditLog[]
   eventOutbox   EventOutbox[]
   estimateItems EstimateItem[]
+  emailTemplates EmailTemplate[]
   messages     Message[]
   subscription Subscription?
   invoices     Invoice[]
@@ -786,6 +787,25 @@ model EstimateItem {
   archivedAt  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@index([orgId])
+}
+
+/// Reusable email templates for sending estimates/invoices and (later) automations.
+/// `subject` and `body` may contain {{variables}} that are resolved against a deal's
+/// contact/company/deal/sender/workspace context at send time (see email-templates/template-vars.ts).
+model EmailTemplate {
+  id              String    @id @default(cuid())
+  orgId           String
+  name            String
+  subject         String
+  body            String
+  createdByUserId String?
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id])
 

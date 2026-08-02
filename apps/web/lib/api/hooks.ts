@@ -78,6 +78,14 @@ import {
   deleteEstimateItem,
   type EstimateItemBody,
 } from './estimate-items';
+import {
+  getEmailTemplates,
+  getTemplateVariables,
+  createEmailTemplate,
+  updateEmailTemplate,
+  deleteEmailTemplate,
+  type EmailTemplateBody,
+} from './email-templates';
 import { getOnboarding, setOnboardingCompleted } from './onboarding';
 import { createApiKey, getApiKeys, revokeApiKey } from './apikeys';
 import {
@@ -741,6 +749,50 @@ export function useDeleteEstimateItem() {
   return useMutation({
     mutationFn: (id: string) => deleteEstimateItem(token!, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['estimate-items'] }),
+  });
+}
+
+// --- Email templates ---
+
+export function useEmailTemplates() {
+  const token = useToken();
+  return useQuery({ queryKey: ['email-templates'], queryFn: () => getEmailTemplates(token!), enabled: !!token });
+}
+
+export function useTemplateVariables() {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['template-variables'],
+    queryFn: () => getTemplateVariables(token!),
+    enabled: !!token,
+    staleTime: Infinity, // the catalog is static
+  });
+}
+
+export function useCreateEmailTemplate() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: EmailTemplateBody) => createEmailTemplate(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['email-templates'] }),
+  });
+}
+
+export function useUpdateEmailTemplate() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: EmailTemplateBody }) => updateEmailTemplate(token!, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['email-templates'] }),
+  });
+}
+
+export function useDeleteEmailTemplate() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteEmailTemplate(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['email-templates'] }),
   });
 }
 

@@ -1,0 +1,44 @@
+import { apiFetch } from './client';
+
+/** Reusable email template. `subject`/`body` may contain {{variables}}. */
+export interface EmailTemplate {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+  updatedAt: string;
+}
+
+export interface EmailTemplateBody {
+  name?: string;
+  subject?: string;
+  body?: string;
+}
+
+/** A placeholder the user can insert into a template subject/body. */
+export interface TemplateVariable {
+  key: string;
+  label: string;
+  group: string;
+  example: string;
+}
+
+export function getEmailTemplates(token: string) {
+  return apiFetch<EmailTemplate[]>('/email-templates', { token });
+}
+
+export function getTemplateVariables(token: string) {
+  return apiFetch<TemplateVariable[]>('/email-templates/variables', { token });
+}
+
+export function createEmailTemplate(token: string, body: EmailTemplateBody) {
+  return apiFetch<EmailTemplate>('/email-templates', { method: 'POST', token, body: JSON.stringify(body) });
+}
+
+export function updateEmailTemplate(token: string, id: string, body: EmailTemplateBody) {
+  return apiFetch<EmailTemplate>(`/email-templates/${id}`, { method: 'PATCH', token, body: JSON.stringify(body) });
+}
+
+export function deleteEmailTemplate(token: string, id: string) {
+  return apiFetch<void>(`/email-templates/${id}`, { method: 'DELETE', token });
+}
