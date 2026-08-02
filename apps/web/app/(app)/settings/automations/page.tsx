@@ -362,7 +362,8 @@ function AutomationModal({
   const createMkt = useCreateMarketingAutomation();
   const updateMkt = useUpdateMarketingAutomation();
   const { data: templates = [] } = useEmailTemplates();
-  const dealTemplates = useMemo(() => templates.filter((t) => t.scope === 'deal'), [templates]);
+  // A missing/legacy scope defaults to 'deal' (matches the DB default) so pre-scope templates still show.
+  const dealTemplates = useMemo(() => templates.filter((t) => t.scope !== 'marketing'), [templates]);
   const marketingTemplates = useMemo(() => templates.filter((t) => t.scope === 'marketing'), [templates]);
   const { data: stages = [] } = useAllStages();
   const { data: google } = useGoogleStatus();
