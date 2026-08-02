@@ -14,6 +14,7 @@ import {
   Select,
   Stack,
   Stepper,
+  Table,
   Text,
   TextInput,
   ThemeIcon,
@@ -23,10 +24,12 @@ import { useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { IconBrandGoogle, IconCheck, IconGift, IconUpload } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
+import { useAuth } from '@/lib/auth/useAuth';
 import { fileToContainedDataUrl, fileToResizedDataUrl } from '@/lib/image';
 import {
   useCompleteOnboarding,
   useConnectGoogle,
+  useGoogleStatus,
   useInviteUser,
   useOrganization,
   useProfile,
@@ -37,6 +40,7 @@ import {
 } from '@/lib/api/hooks';
 
 const STEP_COUNT = 5;
+const STEP_KEY = 'candango.onboarding.step'; // survive the Google OAuth round-trip (full page reload)
 
 const TZ_LIST: string[] = (() => {
   try {
@@ -63,9 +67,19 @@ export function OnboardingStepper() {
 
   const { data: org } = useOrganization();
   const { data: profile } = useProfile();
+  const { data: google } = useGoogleStatus();
   const updateOrg = useUpdateOrganization();
   const updateProfile = useUpdateProfile();
   const complete = useCompleteOnboarding();
+
+  // Restore the step after the Google connect redirect brings us back to a fresh page.
+  useEffect(() => {
+    const saved = sessionStorage.getItem(STEP_KEY);
+    if (saved !== null) {
+      setActive(Math.min(Number(saved) || 0, STEP_COUNT - 1));
+      sessionStorage.removeItem(STEP_KEY);
+    }
+  }, []);
 
   // Workspace
   const [wsName, setWsName] = useState('');
@@ -142,6 +156,7 @@ export function OnboardingStepper() {
   const onConnectGoogle = async () => {
     try {
       const { url } = await connectGoogle.mutateAsync();
+      sessionStorage.setItem(STEP_KEY, '3'); // come back to the Connect Google step
       window.location.href = url;
     } catch (e) {
       fail(e);
@@ -228,36 +243,51 @@ export function OnboardingStepper() {
         </Stepper.Step>
 
         {/* 4 — Connect Google */}
-        <Stepper.Step label="Connect Google" description="Recommended">
-          <Stack mt="md" gap="sm">
-            <Group gap="xs">
-              <ThemeIcon variant="light" color="candango" radius="xl">
-                <IconBrandGoogle size={18} />
-              </ThemeIcon>
-              <Title order={5}>Connect Google to unlock the full app</Title>
-            </Group>
-            <Text size="sm">
-              Candango works best connected to Google. <b>Without it, email features are unavailable</b> — you won&apos;t
-              be able to:
-            </Text>
-            <List size="sm" spacing={4}>
-              <List.Item>Send estimates &amp; invoices by email, or use email templates &amp; automations</List.Item>
-              <List.Item>See client replies logged automatically on the deal timeline</List.Item>
-              <List.Item>Sync your calendar &amp; meetings</List.Item>
-            </List>
-            <Text size="sm" c="dimmed">
-              We recommend connecting now to get 100% of the features. You can also do it later under Settings →
-              Integrations (per user).
-            </Text>
-            <Button
-              leftSection={<IconBrandGoogle size={16} />}
-              onClick={onConnectGoogle}
-              loading={connectGoogle.isPending}
-              w="fit-content"
-            >
-              Connect Google
-            </Button>
-          </Stack>
+        <Stepper.Step label="Connect Google" description={google?.connected ? 'Connected' : 'Recommended'}>
+          {google?.connected ? (
+            <Card withBorder radius="md" padding="lg" mt="md" bg="var(--mantine-color-teal-0)">
+              <Group gap="sm" mb="xs">
+                <ThemeIcon variant="light" color="teal" radius="xl" size="lg">
+                  <IconCheck size={20} />
+                </ThemeIcon>
+                <Title order={4}>Nice — Google is connected! 🎉</Title>
+              </Group>
+              <Text size="sm" c="dimmed">
+                Email &amp; calendar features are now fully available — you can send estimates/invoices, use templates
+                &amp; automations, and see replies on the timeline. Manage it anytime under Settings → Integrations.
+              </Text>
+            </Card>
+          ) : (
+            <Stack mt="md" gap="sm">
+              <Group gap="xs">
+                <ThemeIcon variant="light" color="candango" radius="xl">
+                  <IconBrandGoogle size={18} />
+                </ThemeIcon>
+                <Title order={5}>Connect Google to unlock the full app</Title>
+              </Group>
+              <Text size="sm">
+                Candango works best connected to Google. <b>Without it, email features are unavailable</b> — you
+                won&apos;t be able to:
+              </Text>
+              <List size="sm" spacing={4}>
+                <List.Item>Send estimates &amp; invoices by email, or use email templates &amp; automations</List.Item>
+                <List.Item>See client replies logged automatically on the deal timeline</List.Item>
+                <List.Item>Sync your calendar &amp; meetings</List.Item>
+              </List>
+              <Text size="sm" c="dimmed">
+                We recommend connecting now to get 100% of the features. You can also do it later under Settings →
+                Integrations (per user).
+              </Text>
+              <Button
+                leftSection={<IconBrandGoogle size={16} />}
+                onClick={onConnectGoogle}
+                loading={connectGoogle.isPending}
+                w="fit-content"
+              >
+                Connect Google
+              </Button>
+            </Stack>
+          )}
         </Stepper.Step>
 
         {/* 5 — Trial & billing */}
@@ -304,6 +334,7 @@ export function OnboardingStepper() {
 }
 
 function InviteStep() {
+  const { user } = useAuth();
   const { data: roles = [] } = useRoles();
   const { data: members = [] } = useUsers();
   const invite = useInviteUser();
@@ -352,16 +383,43 @@ function InviteStep() {
           Invite
         </Button>
       </Group>
-      <Stack gap={4} mt="xs">
-        {members.map((m) => (
-          <Group key={m.id} gap="xs">
-            <Text size="sm">{m.email}</Text>
-            <Badge size="xs" variant="light" color={m.status === 'active' ? 'green' : 'yellow'}>
-              {m.status}
-            </Badge>
-          </Group>
-        ))}
-      </Stack>
+      {members.length > 0 && (
+        <Table verticalSpacing="xs" mt="xs" horizontalSpacing="md">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Member</Table.Th>
+              <Table.Th>Role</Table.Th>
+              <Table.Th>Status</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {members.map((m) => (
+              <Table.Tr key={m.id}>
+                <Table.Td>
+                  <Group gap="xs" wrap="nowrap">
+                    <Text size="sm">{m.email}</Text>
+                    {m.id === user?.id && (
+                      <Badge size="xs" variant="light" color="candango">
+                        You
+                      </Badge>
+                    )}
+                  </Group>
+                </Table.Td>
+                <Table.Td>
+                  <Text size="sm" c="dimmed">
+                    {m.role}
+                  </Text>
+                </Table.Td>
+                <Table.Td>
+                  <Badge size="xs" variant="light" color={m.status === 'active' ? 'green' : 'yellow'}>
+                    {m.status}
+                  </Badge>
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      )}
     </Stack>
   );
 }
