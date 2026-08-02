@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Avatar,
   Badge,
   Button,
   Card,
+  Checkbox,
   FileButton,
   Group,
   Image,
@@ -90,6 +91,8 @@ export function OnboardingStepper() {
   const [pLast, setPLast] = useState('');
   const [pPhone, setPPhone] = useState('');
   const [avatar, setAvatar] = useState<string | null>(null);
+  // After-onboarding: jump to email signature/templates setup (opt-in, one-time).
+  const [goToTemplates, setGoToTemplates] = useState(true);
 
   useEffect(() => {
     if (org) {
@@ -135,13 +138,24 @@ export function OnboardingStepper() {
     }
   };
 
-  const next = async () => {
-    if (active === 0 && !(await saveWorkspace())) return;
-    if (active === 1 && !(await saveProfile())) return;
-    setActive((c) => Math.min(c + 1, STEP_COUNT - 1));
+  // Navigate to a step, but never advance PAST an incomplete required step (Workspace, Profile).
+  // Going back is always allowed; going forward saves + validates the required steps in between.
+  const goTo = async (target: number) => {
+    if (target > active) {
+      if (target > 0 && !(await saveWorkspace())) return setActive(0);
+      if (target > 1 && !(await saveProfile())) return setActive(1);
+    }
+    setActive(Math.max(0, Math.min(target, STEP_COUNT - 1)));
   };
   const back = () => setActive((c) => Math.max(c - 1, 0));
-  const finish = () => complete.mutate(true, { onSuccess: () => router.push('/dashboard'), onError: fail });
+  const finish = async () => {
+    if (!(await saveWorkspace())) return setActive(0);
+    if (!(await saveProfile())) return setActive(1);
+    complete.mutate(true, {
+      onSuccess: () => router.push(goToTemplates ? '/settings/email-templates' : '/dashboard'),
+      onError: fail,
+    });
+  };
 
   const pickLogo = async (file: File | null) => {
     if (!file) return;
@@ -175,11 +189,11 @@ export function OnboardingStepper() {
 
   return (
     <>
-      <Stepper active={active} onStepClick={setActive} orientation={isMobile ? 'vertical' : 'horizontal'}>
+      <Stepper active={active} onStepClick={goTo} orientation={isMobile ? 'vertical' : 'horizontal'}>
         {/* 1 — Workspace */}
         <Stepper.Step label="Workspace" description="Name & timezone">
           <Stack mt="md" gap="sm">
-            <Text c="dimmed" size="sm">
+            <Text size="sm">
               Confirm your workspace basics. The timezone keeps due dates, reminders and automations on your local
               clock.
             </Text>
@@ -220,9 +234,7 @@ export function OnboardingStepper() {
         {/* 2 — Your profile */}
         <Stepper.Step label="Your profile" description="Name & photo">
           <Stack mt="md" gap="sm">
-            <Text c="dimmed" size="sm">
-              This is how you&apos;ll appear to teammates and on the emails you send.
-            </Text>
+            <Text size="sm">This is how you&apos;ll appear to teammates and on the emails you send.</Text>
             <Group>
               <Avatar src={avatar ?? undefined} radius="xl" size="lg" color="candango">
                 {pFirst.slice(0, 1).toUpperCase() || profile?.email?.slice(0, 1).toUpperCase() || 'U'}
@@ -303,26 +315,42 @@ export function OnboardingStepper() {
 
         {/* 5 — Trial & billing */}
         <Stepper.Step label="You're all set" description="Free trial">
-          <Card withBorder radius="md" padding="lg" mt="md" bg="var(--mantine-color-candango-0)">
-            <Group gap="sm" mb="xs">
-              <ThemeIcon variant="light" color="candango" radius="xl" size="lg">
-                <IconGift size={20} />
-              </ThemeIcon>
-              <div>
+          <Stack mt="md" gap="md">
+            <Card withBorder radius="md" padding="lg" bg="var(--mantine-color-candango-0)">
+              <Group gap="sm" mb="xs">
+                <ThemeIcon variant="light" color="candango" radius="xl" size="lg">
+                  <IconGift size={20} />
+                </ThemeIcon>
                 <Badge color="candango" variant="filled">
                   7-day free trial
                 </Badge>
-              </div>
-            </Group>
-            <Title order={4} mb={4}>
-              Full access, free for 7 days — no card required.
-            </Title>
-            <Text size="sm" c="dimmed">
-              Explore everything with zero commitment. <b>You won&apos;t be asked for payment now</b>, and you won&apos;t
-              be charged until your trial ends. Add a card whenever you&apos;re ready under Settings → Billing — cancel
-              anytime.
-            </Text>
-          </Card>
+              </Group>
+              <Title order={4} mb={4}>
+                Full access, free for 7 days — no card required.
+              </Title>
+              <Text size="sm">
+                Explore everything with zero commitment. <b>You won&apos;t be asked for payment now</b>, and you
+                won&apos;t be charged until your trial ends. Add a card whenever you&apos;re ready under Settings →
+                Billing — cancel anytime.
+              </Text>
+            </Card>
+
+            <Card withBorder radius="md" padding="md">
+              <Text fw={600} mb={4}>
+                One more thing: set up your email
+              </Text>
+              <Text size="sm">
+                Add your <b>email signature</b> and create reusable <b>templates</b> so sending estimates, invoices and
+                follow-ups is one click. You can do it anytime under Settings → Email Templates.
+              </Text>
+              <Checkbox
+                mt="sm"
+                label="Take me there after this"
+                checked={goToTemplates}
+                onChange={(e) => setGoToTemplates(e.currentTarget.checked)}
+              />
+            </Card>
+          </Stack>
         </Stepper.Step>
       </Stepper>
 
@@ -331,7 +359,7 @@ export function OnboardingStepper() {
           Back
         </Button>
         {active < STEP_COUNT - 1 ? (
-          <Button onClick={next} loading={busy}>
+          <Button onClick={() => goTo(active + 1)} loading={busy}>
             {active <= 1 ? 'Save & continue' : 'Next'}
           </Button>
         ) : (
@@ -352,6 +380,17 @@ function InviteStep() {
   const [email, setEmail] = useState('');
   const [roleId, setRoleId] = useState<string | null>(null);
 
+  // Always include the current user (the members list can be empty/slow on first load), deduped.
+  const rows = useMemo(() => {
+    const list = members.map((m) => ({ id: m.id, email: m.email, role: m.role, status: String(m.status) }));
+    if (user && !list.some((r) => r.id === user.id)) {
+      list.unshift({ id: user.id, email: user.email, role: user.role ?? 'Member', status: 'active' });
+    }
+    return list;
+  }, [members, user]);
+  const activeSeats = rows.filter((r) => r.status === 'active').length;
+  const monthly = activeSeats * 30;
+
   const submit = () => {
     if (!email.trim()) {
       notifications.show({ message: 'Email is required', color: 'red' });
@@ -371,7 +410,7 @@ function InviteStep() {
 
   return (
     <Stack mt="md" gap="sm">
-      <Text c="dimmed" size="sm">
+      <Text size="sm">
         Invite teammates (optional). Each active user is a billable seat ($30/mo) — but not during your trial.
       </Text>
       <Group align="flex-end" wrap="nowrap">
@@ -394,7 +433,7 @@ function InviteStep() {
           Invite
         </Button>
       </Group>
-      {members.length > 0 && (
+      {rows.length > 0 && (
         <Table verticalSpacing="xs" mt="xs" horizontalSpacing="md">
           <Table.Thead>
             <Table.Tr>
@@ -404,7 +443,7 @@ function InviteStep() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {members.map((m) => (
+            {rows.map((m) => (
               <Table.Tr key={m.id}>
                 <Table.Td>
                   <Group gap="xs" wrap="nowrap">
@@ -431,6 +470,15 @@ function InviteStep() {
           </Table.Tbody>
         </Table>
       )}
+      <Text size="sm" mt={4}>
+        <b>
+          {activeSeats} active {activeSeats === 1 ? 'seat' : 'seats'}
+        </b>{' '}
+        → <b>${monthly}/mo</b> after your trial.{' '}
+        <Text span c="dimmed">
+          $0 while you&apos;re on the free trial.
+        </Text>
+      </Text>
     </Stack>
   );
 }
