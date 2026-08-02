@@ -169,9 +169,13 @@ export interface TemplateContextSources {
 }
 
 function firstJsonValue(v: unknown): string {
-  if (Array.isArray(v)) {
-    const first = v[0] as JsonContact | undefined;
-    return first?.value ?? '';
+  if (!Array.isArray(v) || v.length === 0) return '';
+  const first = v[0];
+  // Persons store emails/phones as a plain string array (["a@b.com"]); some sources use
+  // the richer [{ value, label }] shape. Support both.
+  if (typeof first === 'string') return first;
+  if (first && typeof first === 'object' && typeof (first as JsonContact).value === 'string') {
+    return (first as JsonContact).value ?? '';
   }
   return '';
 }
