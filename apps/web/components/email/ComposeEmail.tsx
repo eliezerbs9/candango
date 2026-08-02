@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, FileButton, Group, Modal, Pill, Select, Stack, TagsInput, Text, TextInput } from '@mantine/core';
+import { Alert, Button, FileButton, Group, Modal, Pill, Select, Stack, Text, TextInput } from '@mantine/core';
 import { IconBulb, IconPaperclip } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { ApiError } from '@/lib/api/client';
+import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
 import { RichTextBody } from '@/components/common/RichTextBody';
 import { useDeals, usePersons, useSendMessage } from '@/lib/api/hooks';
 import type { EmailAttachment } from '@/lib/api/messages';
@@ -158,41 +159,25 @@ export function ComposeEmail({
           searchable
           clearable
         />
-        <div>
-          <TagsInput
-            label="To"
-            placeholder="Type an email and press Enter"
-            value={to}
-            onChange={setTo}
-            data={dealPeople.map((p) => p.email).filter((e): e is string => !!e)}
-          />
-          {dealPeople.length > 0 && (
-            <Group gap={6} mt={6}>
-              <Text size="xs" c="dimmed">
-                Deal contacts:
-              </Text>
-              {dealPeople.map((p) => {
-                const on = !!p.email && to.includes(p.email);
-                return (
-                  <Button
-                    key={p.id}
-                    size="compact-xs"
-                    variant={on ? 'filled' : 'light'}
-                    color={p.email ? undefined : 'gray'}
-                    disabled={!p.email}
-                    onClick={() =>
-                      p.email && setTo(on ? to.filter((e) => e !== p.email) : [...new Set([...to, p.email])])
-                    }
-                    title={p.email ?? 'No email on file'}
-                  >
-                    {p.name || p.email}
-                    {!p.email ? ' (no email)' : ''}
-                  </Button>
-                );
-              })}
-            </Group>
-          )}
-        </div>
+        {/* Suggests the deal's people (primary contact + the deal company's
+            contacts) as you type; you can also type any email freely. */}
+        <CreatableMultiSelect
+          label="To"
+          placeholder="Type a name or email"
+          options={dealPeople
+            .filter((p) => p.email)
+            .map((p) => ({ value: p.email as string, label: p.name ? `${p.name} · ${p.email}` : (p.email as string) }))}
+          value={to}
+          onChange={setTo}
+          onCreate={async (typed) => {
+            const email = typed.trim();
+            if (!/^\S+@\S+\.\S+$/.test(email)) {
+              notifications.show({ message: 'Enter a valid email address', color: 'red' });
+              return null;
+            }
+            return { value: email, label: email };
+          }}
+        />
         {suggestion ? (
           <Alert variant="light" color="teal" icon={<IconBulb size={16} />} py="xs">
             <Group justify="space-between" wrap="nowrap" gap="sm">

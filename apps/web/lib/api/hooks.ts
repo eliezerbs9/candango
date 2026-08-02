@@ -949,7 +949,11 @@ export function useUpdateEstimate(dealId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: CreateDocInput }) => updateDealEstimate(token!, dealId, id, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['estimates', dealId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['estimates', dealId] });
+      qc.invalidateQueries({ queryKey: ['deal'] }); // editing lines changes the total → deal value if counted
+      qc.invalidateQueries({ queryKey: ['deals'] });
+    },
   });
 }
 
@@ -958,7 +962,11 @@ export function useUpdateInvoice(dealId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: CreateDocInput }) => updateDealInvoice(token!, dealId, id, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices', dealId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['invoices', dealId] });
+      qc.invalidateQueries({ queryKey: ['deal'] });
+      qc.invalidateQueries({ queryKey: ['deals'] });
+    },
   });
 }
 
@@ -967,7 +975,11 @@ export function useCreateEstimate(dealId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateDocInput) => createDealEstimate(token!, dealId, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['estimates', dealId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['estimates', dealId] });
+      qc.invalidateQueries({ queryKey: ['deal'] }); // a new estimate can set/add to the deal value
+      qc.invalidateQueries({ queryKey: ['deals'] }); // keep the board/list value in sync
+    },
   });
 }
 
