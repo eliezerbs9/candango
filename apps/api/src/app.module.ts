@@ -26,6 +26,7 @@ import { ContactModule } from './contact/contact.module';
 import { EstimateItemsModule } from './estimate-items/estimate-items.module';
 import { EmailTemplatesModule } from './email-templates/email-templates.module';
 import { EmailAutomationsModule } from './email-automations/email-automations.module';
+import { PublicEmailModule } from './public-email/public-email.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -72,6 +73,7 @@ import { HealthController } from './health.controller';
     EstimateItemsModule,
     EmailTemplatesModule,
     EmailAutomationsModule,
+    PublicEmailModule,
   ],
   controllers: [HealthController],
 })

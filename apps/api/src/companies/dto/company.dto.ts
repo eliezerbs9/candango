@@ -1,4 +1,4 @@
-import { IsArray, IsObject, IsOptional, IsString, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsObject, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class CreateCompanyDto {
   @IsString()
@@ -21,6 +21,12 @@ export class CreateCompanyDto {
   @IsArray()
   @IsString({ each: true })
   contactIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(30)
+  tags?: string[];
 
   @IsOptional()
   @IsObject()
@@ -49,6 +55,12 @@ export class UpdateCompanyDto {
   @IsArray()
   @IsString({ each: true })
   contactIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(30)
+  tags?: string[];
 
   @IsOptional()
   @IsObject()

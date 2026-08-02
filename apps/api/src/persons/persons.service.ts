@@ -16,6 +16,9 @@ type PersonRow = {
   emails: Prisma.JsonValue;
   phones: Prisma.JsonValue;
   address: Prisma.JsonValue;
+  tags: string[];
+  emailSubscribed: boolean;
+  emailUnsubscribedAt: Date | null;
   customFields: Prisma.JsonValue;
   companyLinks: { company: { id: string; name: string } }[];
 };
@@ -31,10 +34,16 @@ function shape(p: PersonRow) {
     email: emails[0] ?? null,
     phone: phones[0] ?? null,
     address: p.address ?? null,
+    tags: p.tags ?? [],
+    emailSubscribed: p.emailSubscribed,
+    emailUnsubscribedAt: p.emailUnsubscribedAt?.toISOString() ?? null,
     customFields: (p.customFields as Record<string, unknown>) ?? {},
     companies: p.companyLinks.map((l) => l.company),
   };
 }
+
+const cleanTags = (tags?: string[]) =>
+  tags ? [...new Set(tags.map((t) => t.trim()).filter(Boolean))].slice(0, 30) : undefined;
 
 /** Split a typed full name: first whitespace token → first, the rest → last. */
 function splitFullName(full: string): { firstName: string; lastName: string } {
@@ -106,6 +115,7 @@ export class PersonsService {
         emails: dto.email ? [dto.email] : [],
         phones: dto.phone ? [dto.phone] : [],
         address: (dto.address ?? undefined) as Prisma.InputJsonValue | undefined,
+        tags: cleanTags(dto.tags) ?? [],
         customFields: (dto.customFields ?? {}) as Prisma.InputJsonValue,
         companyLinks: { create: companyIds.map((companyId) => ({ companyId })) },
       },
@@ -125,6 +135,62 @@ export class PersonsService {
     return shape(row);
   }
 
+  /** Full profile for the person detail view: core fields + their deals + recent messages. */
+  async detail(orgId: string, id: string) {
+    const person = await this.get(orgId, id);
+    const [deals, messages] = await Promise.all([
+      this.prisma.deal.findMany({
+        where: { orgId, deletedAt: null, OR: [{ primaryPersonId: id }, { participants: { some: { personId: id } } }] },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          refNumber: true,
+          title: true,
+          value: true,
+          currency: true,
+          status: true,
+          stage: { select: { name: true } },
+        },
+      }),
+      this.prisma.message.findMany({
+        where: { orgId, personId: id },
+        orderBy: [{ sentAt: 'desc' }, { createdAt: 'desc' }],
+        take: 20,
+        select: {
+          id: true,
+          direction: true,
+          subject: true,
+          snippet: true,
+          fromAddress: true,
+          sentAt: true,
+          createdAt: true,
+          dealId: true,
+        },
+      }),
+    ]);
+    return {
+      ...person,
+      deals: deals.map((d) => ({
+        id: d.id,
+        refNumber: d.refNumber,
+        title: d.title,
+        value: d.value,
+        currency: d.currency,
+        status: d.status,
+        stageName: d.stage?.name ?? null,
+      })),
+      messages: messages.map((m) => ({
+        id: m.id,
+        direction: m.direction,
+        subject: m.subject,
+        snippet: m.snippet,
+        fromAddress: m.fromAddress,
+        at: (m.sentAt ?? m.createdAt).toISOString(),
+        dealId: m.dealId,
+      })),
+    };
+  }
+
   async update(orgId: string, id: string, dto: UpdatePersonDto) {
     const existing = await this.get(orgId, id);
 
@@ -139,6 +205,12 @@ export class PersonsService {
     if (dto.email !== undefined) data.emails = dto.email ? [dto.email] : [];
     if (dto.phone !== undefined) data.phones = dto.phone ? [dto.phone] : [];
     if (dto.address !== undefined) data.address = dto.address as Prisma.InputJsonValue;
+    if (dto.tags !== undefined) data.tags = cleanTags(dto.tags);
+    if (dto.emailSubscribed !== undefined) {
+      data.emailSubscribed = dto.emailSubscribed;
+      // Re-subscribing clears the opt-out stamp; opting out sets it.
+      data.emailUnsubscribedAt = dto.emailSubscribed ? null : new Date();
+    }
     if (dto.customFields !== undefined) data.customFields = dto.customFields as Prisma.InputJsonValue;
     await this.prisma.person.update({ where: { id }, data });
 

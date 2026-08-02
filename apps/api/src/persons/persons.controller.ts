@@ -38,6 +38,13 @@ export class PersonsController {
     return this.svc.get(u.orgId, id);
   }
 
+  /** Full profile (core fields + deals + recent messages) for the person detail view. */
+  @Get(':id/detail')
+  @Scopes('persons:read')
+  detail(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.detail(u.orgId, id);
+  }
+
   @Patch(':id')
   @Scopes('persons:write')
   update(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() dto: UpdatePersonDto) {

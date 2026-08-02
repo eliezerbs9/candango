@@ -1,4 +1,14 @@
-import { IsArray, IsEmail, IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsEmail,
+  IsObject,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreatePersonDto {
   // Preferred: firstName (+ optional lastName). `name` is still accepted for
@@ -37,6 +47,12 @@ export class CreatePersonDto {
   companyIds?: string[];
 
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(30)
+  tags?: string[];
+
+  @IsOptional()
   @IsObject()
   customFields?: Record<string, unknown>;
 }
@@ -73,6 +89,16 @@ export class UpdatePersonDto {
   @IsArray()
   @IsString({ each: true })
   companyIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(30)
+  tags?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  emailSubscribed?: boolean;
 
   @IsOptional()
   @IsObject()

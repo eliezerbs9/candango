@@ -254,6 +254,10 @@ model Person {
   phones       Json     @default("[]")
   address      Json?    // structured { line1, line2, city, state, postalCode, country }; used for QBO Bill To
   ownerUserId  String?
+  tags         String[] @default([]) // contact labels — used for filtering + marketing audiences
+  emailSubscribed     Boolean   @default(true) // marketing opt-in; transactional email ignores this
+  emailUnsubscribedAt DateTime? // when they opted out (via the public unsubscribe page or manually)
+  emailUnsubToken     String    @unique @default(cuid()) // opaque token for their public unsubscribe link
   customFields Json     @default("{}")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -280,6 +284,7 @@ model Company {
   address      Json?    // structured { line1, line2, city, state, postalCode, country }
   phone        String?
   ownerUserId  String?
+  tags         String[] @default([]) // company labels — used for filtering
   customFields Json     @default("{}")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

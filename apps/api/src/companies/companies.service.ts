@@ -14,6 +14,7 @@ type CompanyRow = {
   domain: string | null;
   address: Prisma.JsonValue;
   phone: string | null;
+  tags: string[];
   customFields: Prisma.JsonValue;
   contacts: { person: { id: string; name: string } }[];
 };
@@ -25,10 +26,14 @@ function shape(c: CompanyRow) {
     domain: c.domain,
     address: c.address,
     phone: c.phone,
+    tags: c.tags ?? [],
     customFields: (c.customFields as Record<string, unknown>) ?? {},
     contacts: c.contacts.map((l) => l.person),
   };
 }
+
+const cleanTags = (tags?: string[]) =>
+  tags ? [...new Set(tags.map((t) => t.trim()).filter(Boolean))].slice(0, 30) : undefined;
 
 @Injectable()
 export class CompaniesService {
@@ -62,6 +67,7 @@ export class CompaniesService {
         domain: dto.domain ?? null,
         address: (dto.address ?? undefined) as Prisma.InputJsonValue | undefined,
         phone: dto.phone ?? null,
+        tags: cleanTags(dto.tags) ?? [],
         customFields: (dto.customFields ?? {}) as Prisma.InputJsonValue,
         contacts: { create: contactIds.map((personId) => ({ personId })) },
       },
@@ -81,6 +87,62 @@ export class CompaniesService {
     return shape(row);
   }
 
+  /** Full profile for the company detail view: core fields + contacts + deals + recent messages. */
+  async detail(orgId: string, id: string) {
+    const company = await this.get(orgId, id);
+    const [deals, messages] = await Promise.all([
+      this.prisma.deal.findMany({
+        where: { orgId, deletedAt: null, companyId: id },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          refNumber: true,
+          title: true,
+          value: true,
+          currency: true,
+          status: true,
+          stage: { select: { name: true } },
+        },
+      }),
+      this.prisma.message.findMany({
+        where: { orgId, deal: { companyId: id } },
+        orderBy: [{ sentAt: 'desc' }, { createdAt: 'desc' }],
+        take: 20,
+        select: {
+          id: true,
+          direction: true,
+          subject: true,
+          snippet: true,
+          fromAddress: true,
+          sentAt: true,
+          createdAt: true,
+          dealId: true,
+        },
+      }),
+    ]);
+    return {
+      ...company,
+      deals: deals.map((d) => ({
+        id: d.id,
+        refNumber: d.refNumber,
+        title: d.title,
+        value: d.value,
+        currency: d.currency,
+        status: d.status,
+        stageName: d.stage?.name ?? null,
+      })),
+      messages: messages.map((m) => ({
+        id: m.id,
+        direction: m.direction,
+        subject: m.subject,
+        snippet: m.snippet,
+        fromAddress: m.fromAddress,
+        at: (m.sentAt ?? m.createdAt).toISOString(),
+        dealId: m.dealId,
+      })),
+    };
+  }
+
   async update(orgId: string, id: string, dto: UpdateCompanyDto) {
     await this.get(orgId, id);
 
@@ -89,6 +151,7 @@ export class CompaniesService {
     if (dto.domain !== undefined) data.domain = dto.domain;
     if (dto.address !== undefined) data.address = dto.address as Prisma.InputJsonValue;
     if (dto.phone !== undefined) data.phone = dto.phone;
+    if (dto.tags !== undefined) data.tags = cleanTags(dto.tags);
     if (dto.customFields !== undefined) data.customFields = dto.customFields as Prisma.InputJsonValue;
     await this.prisma.company.update({ where: { id }, data });
 
