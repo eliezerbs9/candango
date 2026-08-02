@@ -16,18 +16,18 @@ export interface TemplateVariable {
 }
 
 export const TEMPLATE_VARIABLES: TemplateVariable[] = [
-  { key: 'contact.first_name', label: 'Contact first name', group: 'Contact', example: 'Maria' },
-  { key: 'contact.last_name', label: 'Contact last name', group: 'Contact', example: 'Silva' },
-  { key: 'contact.name', label: 'Contact full name', group: 'Contact', example: 'Maria Silva' },
-  { key: 'contact.email', label: 'Contact email', group: 'Contact', example: 'maria@example.com' },
+  { key: 'contact.first_name', label: 'Contact first name', group: 'Contact', example: 'Alex' },
+  { key: 'contact.last_name', label: 'Contact last name', group: 'Contact', example: 'Taylor' },
+  { key: 'contact.name', label: 'Contact full name', group: 'Contact', example: 'Alex Taylor' },
+  { key: 'contact.email', label: 'Contact email', group: 'Contact', example: 'alex@example.com' },
   { key: 'contact.phone', label: 'Contact phone', group: 'Contact', example: '(555) 123-4567' },
-  { key: 'company.name', label: 'Company name', group: 'Company', example: 'Silva Construction' },
-  { key: 'deal.title', label: 'Deal title', group: 'Deal', example: 'Kitchen remodel' },
-  { key: 'deal.value', label: 'Deal value', group: 'Deal', example: '$12,500.00' },
-  { key: 'sender.name', label: 'Your name', group: 'Sender', example: 'John Carter' },
-  { key: 'sender.email', label: 'Your email', group: 'Sender', example: 'john@bsbtechub.com' },
+  { key: 'company.name', label: 'Company name', group: 'Company', example: 'Acme Inc.' },
+  { key: 'deal.title', label: 'Deal title', group: 'Deal', example: 'your project' },
+  { key: 'deal.value', label: 'Deal value', group: 'Deal', example: '$5,000.00' },
+  { key: 'sender.name', label: 'Your name', group: 'Sender', example: 'Jordan Lee' },
+  { key: 'sender.email', label: 'Your email', group: 'Sender', example: 'jordan@example.com' },
   { key: 'sender.phone', label: 'Your phone', group: 'Sender', example: '(555) 987-6543' },
-  { key: 'workspace.name', label: 'Workspace name', group: 'Workspace', example: 'BSB Tech Hub' },
+  { key: 'workspace.name', label: 'Workspace name', group: 'Workspace', example: 'Your Company' },
 ];
 
 const VALID_KEYS = new Set(TEMPLATE_VARIABLES.map((v) => v.key));
@@ -41,13 +41,13 @@ const VALID_KEYS = new Set(TEMPLATE_VARIABLES.map((v) => v.key));
 
 /** Variables offered when editing the signature (sender + company only). */
 export const SIGNATURE_VARIABLES: TemplateVariable[] = [
-  { key: 'sender.name', label: 'Full name', group: 'You', example: 'John Carter' },
-  { key: 'sender.first_name', label: 'First name', group: 'You', example: 'John' },
-  { key: 'sender.last_name', label: 'Last name', group: 'You', example: 'Carter' },
-  { key: 'sender.email', label: 'Email', group: 'You', example: 'john@bsbtechub.com' },
+  { key: 'sender.name', label: 'Full name', group: 'You', example: 'Jordan Lee' },
+  { key: 'sender.first_name', label: 'First name', group: 'You', example: 'Jordan' },
+  { key: 'sender.last_name', label: 'Last name', group: 'You', example: 'Lee' },
+  { key: 'sender.email', label: 'Email', group: 'You', example: 'jordan@example.com' },
   { key: 'sender.phone', label: 'Phone', group: 'You', example: '(555) 987-6543' },
   { key: 'sender.avatar_url', label: 'Profile photo', group: 'You', example: '' },
-  { key: 'workspace.name', label: 'Company name', group: 'Company', example: 'BSB Tech Hub' },
+  { key: 'workspace.name', label: 'Company name', group: 'Company', example: 'Your Company' },
   { key: 'workspace.logo_url', label: 'Company logo', group: 'Company', example: '' },
 ];
 
