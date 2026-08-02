@@ -34,6 +34,7 @@ model Organization {
   logoUrl         String?   // workspace logo (data URL for now; object storage in production)
   qboNameFormat   String   @default("first_last") // how to build a QuickBooks customer name from a person: first_last | last_first
   taxRateBps      Int      @default(0) // sales-tax rate for LOCAL estimates, in basis points (700 = 7.00%); 0 = no tax
+  taxDefaultOn    Boolean  @default(false) // pre-select "apply tax" when creating a new estimate/invoice
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   deletedAt       DateTime?
@@ -712,6 +713,7 @@ model DealEstimateLine {
   position    Int     @default(0)
   description String
   quantity    Int     @default(1)
+  unit        String? // unit of measure (e.g. "hour", "each")
   unitPrice   Int     @default(0) // minor units
   amount      Int     @default(0) // minor units (= quantity * unitPrice, server-computed)
   qbLineId    String?
@@ -760,6 +762,7 @@ model DealInvoiceLine {
   position    Int     @default(0)
   description String
   quantity    Int     @default(1)
+  unit        String? // unit of measure (e.g. "hour", "each")
   unitPrice   Int     @default(0)
   amount      Int     @default(0)
   qbLineId    String?
@@ -778,6 +781,7 @@ model EstimateItem {
   orgId       String
   name        String
   description String?
+  unit        String? // unit of measure (e.g. "hour", "each", "sq ft")
   unitPrice   Int? // minor units (cents); optional
   archivedAt  DateTime?
   createdAt   DateTime  @default(now())

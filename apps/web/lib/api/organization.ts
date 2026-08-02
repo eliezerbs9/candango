@@ -10,6 +10,7 @@ export interface Organization {
   logoUrl: string | null;
   qboNameFormat: QboNameFormat;
   taxRateBps: number;
+  taxDefaultOn: boolean;
   onboardingState: Record<string, unknown>;
   createdAt: string;
 }
@@ -19,6 +20,7 @@ export interface OrganizationBody {
   logoUrl?: string;
   qboNameFormat?: QboNameFormat;
   taxRateBps?: number;
+  taxDefaultOn?: boolean;
 }
 
 export function getOrganization(token: string) {

@@ -392,6 +392,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         currency={deal.currency}
         items={itemList}
         taxRatePct={taxRatePct}
+        taxDefaultOn={org?.taxDefaultOn}
         initial={estEditing}
         loading={createEstimate.isPending || updateEstimate.isPending}
         onSubmit={submitEstimate}
@@ -404,6 +405,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         currency={deal.currency}
         items={itemList}
         taxRatePct={taxRatePct}
+        taxDefaultOn={org?.taxDefaultOn}
         initial={invEditing}
         loading={updateInvoice.isPending}
         onSubmit={(input) => updateInvoice.mutateAsync({ id: invEditing!.id, body: input })}

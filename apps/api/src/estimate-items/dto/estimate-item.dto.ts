@@ -11,6 +11,12 @@ export class CreateEstimateItemDto {
   @MaxLength(2000)
   description?: string;
 
+  /** Unit of measure (e.g. "hour", "each"). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  unit?: string;
+
   /** Unit price in minor units (cents). Optional. */
   @IsOptional()
   @IsInt()
@@ -30,6 +36,11 @@ export class UpdateEstimateItemDto {
   @IsString()
   @MaxLength(2000)
   description?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  unit?: string;
 
   @IsOptional()
   @IsInt()

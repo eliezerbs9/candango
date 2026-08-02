@@ -10,6 +10,7 @@ const PUBLIC_FIELDS = {
   logoUrl: true,
   qboNameFormat: true,
   taxRateBps: true,
+  taxDefaultOn: true,
   onboardingState: true,
   createdAt: true,
 } as const;
@@ -41,7 +42,13 @@ export class OrganizationService {
     await this.get(orgId);
     return this.prisma.organization.update({
       where: { id: orgId },
-      data: { name: dto.name, logoUrl: dto.logoUrl, qboNameFormat: dto.qboNameFormat, taxRateBps: dto.taxRateBps },
+      data: {
+        name: dto.name,
+        logoUrl: dto.logoUrl,
+        qboNameFormat: dto.qboNameFormat,
+        taxRateBps: dto.taxRateBps,
+        taxDefaultOn: dto.taxDefaultOn,
+      },
       select: PUBLIC_FIELDS,
     });
   }

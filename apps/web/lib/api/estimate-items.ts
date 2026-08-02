@@ -5,12 +5,14 @@ export interface EstimateItem {
   id: string;
   name: string;
   description: string | null;
+  unit: string | null;
   unitPrice: number | null;
 }
 
 export interface EstimateItemBody {
   name?: string;
   description?: string;
+  unit?: string;
   unitPrice?: number;
 }
 

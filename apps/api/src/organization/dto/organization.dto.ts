@@ -1,4 +1,4 @@
-import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class UpdateOrganizationDto {
   @IsOptional()
@@ -22,4 +22,9 @@ export class UpdateOrganizationDto {
   @Min(0)
   @Max(5000)
   taxRateBps?: number;
+
+  /** Pre-select "apply tax" when creating a new estimate/invoice. */
+  @IsOptional()
+  @IsBoolean()
+  taxDefaultOn?: boolean;
 }

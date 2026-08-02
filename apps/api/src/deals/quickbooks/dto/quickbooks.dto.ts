@@ -10,6 +10,7 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
   MinLength,
   ValidateNested,
@@ -37,6 +38,11 @@ export class LineItemDto {
   @IsInt()
   @Min(1)
   quantity!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  unit?: string; // unit of measure (e.g. "hour", "each")
 
   @IsInt()
   @Min(0)

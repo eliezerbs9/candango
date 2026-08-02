@@ -6,8 +6,9 @@ const shape = (i: {
   id: string;
   name: string;
   description: string | null;
+  unit: string | null;
   unitPrice: number | null;
-}) => ({ id: i.id, name: i.name, description: i.description, unitPrice: i.unitPrice });
+}) => ({ id: i.id, name: i.name, description: i.description, unit: i.unit, unitPrice: i.unitPrice });
 
 @Injectable()
 export class EstimateItemsService {
@@ -24,7 +25,13 @@ export class EstimateItemsService {
 
   async create(orgId: string, dto: CreateEstimateItemDto) {
     const row = await this.prisma.estimateItem.create({
-      data: { orgId, name: dto.name.trim(), description: dto.description ?? null, unitPrice: dto.unitPrice ?? null },
+      data: {
+        orgId,
+        name: dto.name.trim(),
+        description: dto.description ?? null,
+        unit: dto.unit ?? null,
+        unitPrice: dto.unitPrice ?? null,
+      },
     });
     return shape(row);
   }
@@ -37,6 +44,7 @@ export class EstimateItemsService {
       data: {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
         ...(dto.description !== undefined ? { description: dto.description || null } : {}),
+        ...(dto.unit !== undefined ? { unit: dto.unit || null } : {}),
         ...(dto.unitPrice !== undefined ? { unitPrice: dto.unitPrice } : {}),
       },
     });

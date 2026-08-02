@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { useDeal, useDealEstimates, useDealInvoices } from '@/lib/api/hooks';
+import { useDeal, useDealEstimates, useDealInvoices, useOrganization } from '@/lib/api/hooks';
 import type { DealDoc } from '@/lib/api/types';
 
 function money(v: number, currency: string) {
@@ -30,6 +30,7 @@ export default function PrintDocPage() {
   const docId = params.docId;
 
   const { data: deal } = useDeal(dealId);
+  const { data: org } = useOrganization();
   const estimates = useDealEstimates(dealId);
   const invoices = useDealInvoices(dealId);
   const docs: DealDoc[] | undefined = kind === 'invoice' ? invoices.data : estimates.data;
@@ -62,11 +63,22 @@ export default function PrintDocPage() {
         .addrs { display: flex; gap: 48px; margin-top: 24px; }
         .memo { margin-top: 24px; padding-top: 12px; border-top: 1px solid #eee; color: #333; white-space: pre-wrap; }
         .toolbar { margin-bottom: 16px; }
+        .brandbar { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
+        .brandbar img { height: 48px; width: auto; max-width: 200px; object-fit: contain; }
+        .brandname { font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }
+        .totals { margin-top: 16px; margin-left: auto; width: 260px; }
+        .totals .line { display: flex; justify-content: space-between; padding: 3px 0; color: #444; }
+        .totals .grand { border-top: 2px solid #111; margin-top: 6px; padding-top: 8px; color: #111; font-size: 16px; font-weight: 700; }
         @media print { .toolbar { display: none; } .sheet { padding: 0; } }
       `}</style>
 
       <div className="toolbar">
         <button onClick={() => window.print()}>Print</button>
+      </div>
+
+      <div className="brandbar">
+        {org?.logoUrl ? <img src={org.logoUrl} alt="" /> : null}
+        {org?.name ? <div className="brandname">{org.name}</div> : null}
       </div>
 
       <div className="row">
@@ -103,7 +115,10 @@ export default function PrintDocPage() {
                 {l.description}
                 {l.itemName ? <div className="muted" style={{ textTransform: 'none' }}>{l.itemName}</div> : null}
               </td>
-              <td className="num">{l.quantity}</td>
+              <td className="num">
+                {l.quantity}
+                {l.unit ? ` ${l.unit}` : ''}
+              </td>
               <td className="num">{money(l.unitPrice, doc.currency)}</td>
               <td className="num">{money(l.amount, doc.currency)}</td>
             </tr>
@@ -111,7 +126,29 @@ export default function PrintDocPage() {
         </tbody>
       </table>
 
-      <div className="total">Total: {money(doc.totalAmount, doc.currency)}</div>
+      {(() => {
+        const subtotal = doc.lines.reduce((s, l) => s + l.amount, 0);
+        const tax = doc.totalAmount - subtotal;
+        const taxPct = doc.taxRateBps ? doc.taxRateBps / 100 : 0;
+        return taxPct > 0 && tax > 0 ? (
+          <div className="totals">
+            <div className="line">
+              <span>Subtotal</span>
+              <span>{money(subtotal, doc.currency)}</span>
+            </div>
+            <div className="line">
+              <span>Tax ({taxPct}%)</span>
+              <span>{money(tax, doc.currency)}</span>
+            </div>
+            <div className="line grand">
+              <span>Total</span>
+              <span>{money(doc.totalAmount, doc.currency)}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="total">Total: {money(doc.totalAmount, doc.currency)}</div>
+        );
+      })()}
 
       {doc.notes && (
         <div className="memo">

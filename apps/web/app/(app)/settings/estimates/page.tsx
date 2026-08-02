@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   Center,
+  Checkbox,
   Divider,
   Group,
   Loader,
@@ -45,14 +46,18 @@ export default function EstimatesSettingsPage() {
   const { data: items = [], isLoading } = useEstimateItems();
 
   const [taxPct, setTaxPct] = useState<number | string>(0);
+  const [taxDefault, setTaxDefault] = useState(false);
   useEffect(() => {
-    if (org) setTaxPct((org.taxRateBps ?? 0) / 100);
+    if (org) {
+      setTaxPct((org.taxRateBps ?? 0) / 100);
+      setTaxDefault(org.taxDefaultOn ?? false);
+    }
   }, [org]);
 
   const saveTax = () =>
     updateOrg.mutate(
-      { taxRateBps: Math.round(Number(taxPct || 0) * 100) },
-      { onSuccess: () => notifications.show({ message: 'Tax rate saved', color: 'green' }), onError: fail },
+      { taxRateBps: Math.round(Number(taxPct || 0) * 100), taxDefaultOn: taxDefault },
+      { onSuccess: () => notifications.show({ message: 'Tax settings saved', color: 'green' }), onError: fail },
     );
 
   const [editing, setEditing] = useState<EstimateItem | null>(null);
@@ -86,35 +91,43 @@ export default function EstimatesSettingsPage() {
   return (
     <Stack gap="lg">
       <div>
-        <Text fw={600}>Estimates</Text>
+        <Text fw={600}>Invoicing</Text>
         <Text size="sm" c="dimmed">
-          Your reusable line items for local estimates and a default sales-tax rate. When QuickBooks is connected,
-          estimates use QuickBooks products and its automated sales tax instead.
+          Reusable line items for your estimates and invoices, plus your sales-tax settings. When QuickBooks is
+          connected, estimates use QuickBooks products and its automated sales tax instead.
         </Text>
       </div>
 
-      {/* Tax rate */}
+      {/* Tax settings */}
       <Card withBorder radius="md" padding="lg">
-        <Group align="flex-end" gap="md">
-          <NumberInput
-            label="Sales tax rate"
-            description="Applied to local estimates when you turn tax on. Set your jurisdiction's rate."
-            suffix="%"
-            min={0}
-            max={50}
-            decimalScale={2}
-            step={0.25}
-            value={taxPct}
-            onChange={setTaxPct}
+        <Stack gap="md">
+          <Group align="flex-end" gap="md">
+            <NumberInput
+              label="Sales tax rate"
+              description="Applied to local estimates/invoices when tax is on. Set your jurisdiction's rate."
+              suffix="%"
+              min={0}
+              max={50}
+              decimalScale={2}
+              step={0.25}
+              value={taxPct}
+              onChange={setTaxPct}
+              disabled={!isAdmin}
+              w={220}
+            />
+          </Group>
+          <Checkbox
+            label="Apply sales tax by default on new estimates and invoices"
+            checked={taxDefault}
+            onChange={(e) => setTaxDefault(e.currentTarget.checked)}
             disabled={!isAdmin}
-            w={220}
           />
           {isAdmin && (
-            <Button onClick={saveTax} loading={updateOrg.isPending}>
+            <Button onClick={saveTax} loading={updateOrg.isPending} w="fit-content">
               Save
             </Button>
           )}
-        </Group>
+        </Stack>
       </Card>
 
       <Divider />
@@ -140,6 +153,7 @@ export default function EstimatesSettingsPage() {
               <Table.Tr>
                 <Table.Th>Name</Table.Th>
                 <Table.Th>Description</Table.Th>
+                <Table.Th>Unit</Table.Th>
                 <Table.Th ta="right">Price</Table.Th>
                 <Table.Th w={44} />
               </Table.Tr>
@@ -153,6 +167,11 @@ export default function EstimatesSettingsPage() {
                   <Table.Td>
                     <Text size="sm" c="dimmed" lineClamp={1}>
                       {it.description || '—'}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="sm" c="dimmed">
+                      {it.unit || '—'}
                     </Text>
                   </Table.Td>
                   <Table.Td ta="right">
@@ -194,12 +213,14 @@ function ItemModal({ opened, onClose, editing }: { opened: boolean; onClose: () 
   const update = useUpdateEstimateItem();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [unit, setUnit] = useState('');
   const [price, setPrice] = useState<number | string>('');
 
   useEffect(() => {
     if (!opened) return;
     setName(editing?.name ?? '');
     setDescription(editing?.description ?? '');
+    setUnit(editing?.unit ?? '');
     setPrice(editing?.unitPrice != null ? editing.unitPrice / 100 : '');
   }, [opened, editing]);
 
@@ -211,6 +232,7 @@ function ItemModal({ opened, onClose, editing }: { opened: boolean; onClose: () 
     const body = {
       name: name.trim(),
       description: description.trim() || undefined,
+      unit: unit.trim() || undefined,
       unitPrice: price === '' ? undefined : Math.round(Number(price) * 100),
     };
     const done = {
@@ -235,6 +257,13 @@ function ItemModal({ opened, onClose, editing }: { opened: boolean; onClose: () 
           minRows={2}
           value={description}
           onChange={(e) => setDescription(e.currentTarget.value)}
+        />
+        <TextInput
+          label="Unit"
+          description='Unit of measure — e.g. "hour", "each", "sq ft"'
+          placeholder="unit"
+          value={unit}
+          onChange={(e) => setUnit(e.currentTarget.value)}
         />
         <NumberInput
           label="Price"

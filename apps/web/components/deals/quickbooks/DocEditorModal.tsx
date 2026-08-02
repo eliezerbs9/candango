@@ -25,11 +25,12 @@ import type { CreateDocInput, DealDoc, QbItem } from '@/lib/api/types';
 interface LineRow {
   description: string;
   quantity: number | string;
+  unit: string;
   unitPrice: number | string; // dollars in the form
   itemId: string | null;
 }
 
-const blankLine = (): LineRow => ({ description: '', quantity: 1, unitPrice: 0, itemId: null });
+const blankLine = (): LineRow => ({ description: '', quantity: 1, unit: '', unitPrice: 0, itemId: null });
 
 /** Local date `YYYY-MM-DD` for today. */
 const todayDate = () => {
@@ -48,6 +49,7 @@ export function DocEditorModal({
   initial,
   submitLabel = 'Create',
   taxRatePct,
+  taxDefaultOn,
   onSubmit,
 }: {
   opened: boolean;
@@ -59,6 +61,7 @@ export function DocEditorModal({
   initial?: DealDoc | null; // prefill for editing
   submitLabel?: string;
   taxRatePct?: number; // when set (native/local docs), shows an "Apply tax" toggle at this %
+  taxDefaultOn?: boolean; // pre-select the tax toggle on a NEW doc
   onSubmit: (input: CreateDocInput) => Promise<unknown>;
 }) {
   const [txnDate, setTxnDate] = useState('');
@@ -72,7 +75,7 @@ export function DocEditorModal({
   useEffect(() => {
     if (!opened) return;
     setValueChoice('set');
-    setTaxOn(!!initial?.taxRateBps);
+    setTaxOn(initial ? !!initial.taxRateBps : !!taxDefaultOn);
     if (initial) {
       setTxnDate(initial.txnDate?.slice(0, 10) ?? '');
       setNotes(initial.notes ?? '');
@@ -81,6 +84,7 @@ export function DocEditorModal({
           ? initial.lines.map((l) => ({
               description: l.description,
               quantity: l.quantity,
+              unit: l.unit ?? '',
               unitPrice: l.unitPrice / 100,
               itemId: l.itemId,
             }))
@@ -109,6 +113,7 @@ export function DocEditorModal({
     setLine(i, {
       itemId,
       ...(item?.name && !lines[i].description ? { description: item.name } : {}),
+      ...(item?.unit ? { unit: item.unit } : {}),
       ...(item?.unitPrice != null ? { unitPrice: item.unitPrice / 100 } : {}), // catalog price (cents → form dollars)
     });
   };
@@ -120,6 +125,7 @@ export function DocEditorModal({
         description: l.description.trim(),
         quantity: Math.round(Number(l.quantity)),
         unitPrice: Math.round(Number(l.unitPrice || 0) * 100),
+        ...(l.unit.trim() ? { unit: l.unit.trim() } : {}),
         ...(l.itemId ? { itemId: l.itemId } : {}),
       }));
     if (!clean.length) {
@@ -159,6 +165,7 @@ export function DocEditorModal({
               {items && <Table.Th w={170}>Product / Service</Table.Th>}
               <Table.Th>Description</Table.Th>
               <Table.Th w={70}>Qty</Table.Th>
+              <Table.Th w={90}>Unit</Table.Th>
               <Table.Th w={120}>Unit price</Table.Th>
               <Table.Th w={100} ta="right">
                 Amount
@@ -190,6 +197,13 @@ export function DocEditorModal({
                 </Table.Td>
                 <Table.Td>
                   <NumberInput min={1} value={l.quantity} onChange={(v) => setLine(i, { quantity: v })} hideControls />
+                </Table.Td>
+                <Table.Td>
+                  <TextInput
+                    placeholder="unit"
+                    value={l.unit}
+                    onChange={(e) => setLine(i, { unit: e.currentTarget.value })}
+                  />
                 </Table.Td>
                 <Table.Td>
                   <NumberInput

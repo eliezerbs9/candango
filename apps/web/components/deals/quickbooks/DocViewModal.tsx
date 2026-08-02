@@ -33,11 +33,6 @@ export function DocViewModal({
             {kind} {doc.docNumber ? `#${doc.docNumber}` : '(draft)'}
           </Text>
           <Badge variant="light">{doc.status}</Badge>
-          {doc.source === 'native' && (
-            <Badge variant="light" color="grape">
-              local
-            </Badge>
-          )}
         </Group>
       }
     >
@@ -74,7 +69,10 @@ export function DocViewModal({
                     </Text>
                   )}
                 </Table.Td>
-                <Table.Td ta="right">{l.quantity}</Table.Td>
+                <Table.Td ta="right">
+                  {l.quantity}
+                  {l.unit ? ` ${l.unit}` : ''}
+                </Table.Td>
                 <Table.Td ta="right">
                   <Money value={l.unitPrice} currency={doc.currency} />
                 </Table.Td>
@@ -86,11 +84,28 @@ export function DocViewModal({
           </Table.Tbody>
         </Table>
 
-        <Group justify="flex-end">
-          <Text fw={700}>
-            Total: <Money value={doc.totalAmount} currency={doc.currency} />
-          </Text>
-        </Group>
+        {(() => {
+          const subtotal = doc.lines.reduce((s, l) => s + l.amount, 0);
+          const tax = doc.totalAmount - subtotal;
+          const taxPct = doc.taxRateBps ? doc.taxRateBps / 100 : 0;
+          return (
+            <Stack gap={2} align="flex-end">
+              {taxPct > 0 && tax > 0 ? (
+                <>
+                  <Text size="sm" c="dimmed">
+                    Subtotal: <Money value={subtotal} currency={doc.currency} />
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    Tax ({taxPct}%): <Money value={tax} currency={doc.currency} />
+                  </Text>
+                </>
+              ) : null}
+              <Text fw={700}>
+                Total: <Money value={doc.totalAmount} currency={doc.currency} />
+              </Text>
+            </Stack>
+          );
+        })()}
 
         {doc.notes && (
           <>

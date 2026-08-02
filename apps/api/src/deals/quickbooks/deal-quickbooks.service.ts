@@ -574,6 +574,7 @@ function nativeLines(dto: CreateDocDto) {
     position: i,
     description: l.description,
     quantity: l.quantity,
+    unit: l.unit ?? null,
     unitPrice: l.unitPrice,
     amount: l.quantity * l.unitPrice,
     qbLineId: null,
@@ -614,6 +615,7 @@ type DocRow = {
     position: number;
     description: string;
     quantity: number;
+    unit: string | null;
     unitPrice: number;
     amount: number;
     itemId: string | null;
@@ -643,6 +645,7 @@ function shapeDoc(d: DocRow) {
       position: l.position,
       description: l.description,
       quantity: l.quantity,
+      unit: l.unit,
       unitPrice: l.unitPrice,
       amount: l.amount,
       itemId: l.itemId,
