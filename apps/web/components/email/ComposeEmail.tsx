@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, FileButton, Group, Modal, Paper, Pill, Select, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Badge, Button, FileButton, Group, Modal, Paper, Pill, Select, Stack, Text, TextInput } from '@mantine/core';
 import { IconBulb, IconPaperclip } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
+import type { Editor } from '@tiptap/react';
 import { ApiError } from '@/lib/api/client';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
 import { RichTextBody } from '@/components/common/RichTextBody';
@@ -18,6 +19,7 @@ import {
   useProfile,
   useRenderEmailTemplate,
   useSendMessage,
+  useTemplateVariables,
 } from '@/lib/api/hooks';
 import { buildSignatureValues, renderSignatureHtml } from '@/lib/email-signature';
 import type { EmailAttachment } from '@/lib/api/messages';
@@ -70,8 +72,17 @@ export function ComposeEmail({
   const { data: profile } = useProfile();
   const { data: org } = useOrganization();
   const { data: google } = useGoogleStatus();
+  const { data: allVariables = [] } = useTemplateVariables();
+  // Deal composer → deal-scope variables (a missing scope defaults to deal).
+  const variables = useMemo(
+    () => allVariables.filter((v) => !v.hidden && (!v.scopes || v.scopes.includes('deal'))),
+    [allVariables],
+  );
   const send = useSendMessage();
   const renderTpl = useRenderEmailTemplate();
+
+  // Opened from a deal (or an estimate/invoice) → the deal is fixed, so hide the selector.
+  const dealHidden = lockDeal || !!defaultDealId;
 
   const [dealId, setDealId] = useState<string | null>(null);
   const [to, setTo] = useState<string[]>([]);
@@ -79,6 +90,40 @@ export function ComposeEmail({
   const [body, setBody] = useState('');
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
+
+  // Variable insertion: track which field is focused + the tiptap editor, like the template editor.
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyEditor = useRef<Editor | null>(null);
+  const activeField = useRef<'subject' | 'body'>('body');
+  const onBodyReady = (editor: Editor | null) => {
+    bodyEditor.current = editor;
+    if (editor) editor.on('focus', () => (activeField.current = 'body'));
+  };
+  const insertVar = (key: string) => {
+    const token = `{{${key}}}`;
+    if (activeField.current === 'subject') {
+      const el = subjectRef.current;
+      const start = el?.selectionStart ?? subject.length;
+      const end = el?.selectionEnd ?? subject.length;
+      setSubject(subject.slice(0, start) + token + subject.slice(end));
+      requestAnimationFrame(() => {
+        el?.focus();
+        const pos = start + token.length;
+        el?.setSelectionRange(pos, pos);
+      });
+    } else {
+      bodyEditor.current?.chain().focus().insertContent(token).run();
+    }
+  };
+  const variableGroups = useMemo(() => {
+    const map = new Map<string, typeof variables>();
+    for (const v of variables) {
+      const list = map.get(v.group) ?? [];
+      list.push(v);
+      map.set(v.group, list);
+    }
+    return [...map.entries()];
+  }, [variables]);
 
   // The workspace signature, resolved with the current sender + workspace, added to every send.
   const signatureHtml = useMemo(
@@ -225,10 +270,8 @@ export function ComposeEmail({
   return (
     <Modal opened={opened} onClose={onClose} title={reply ? 'Reply' : 'New email'} size="lg">
       <Stack>
-        {lockDeal ? (
-          // Sent from a deal's estimate/invoice — the deal is fixed.
-          <TextInput label="Deal" value={deals.find((d) => d.id === dealId)?.title ?? ''} disabled />
-        ) : (
+        {/* Opened from a deal → auto-linked and hidden; otherwise selectable. */}
+        {!dealHidden && (
           <Select
             label="Deal (optional)"
             placeholder="Attach to a deal — prefills recipients"
@@ -290,12 +333,46 @@ export function ComposeEmail({
             searchable
           />
         )}
-        <TextInput label="Subject" value={subject} onChange={(e) => setSubject(e.currentTarget.value)} />
+        <TextInput
+          ref={subjectRef}
+          label="Subject"
+          value={subject}
+          onChange={(e) => setSubject(e.currentTarget.value)}
+          onFocus={() => (activeField.current = 'subject')}
+        />
         <div>
           <Text size="sm" fw={500} mb={4}>
             Message
           </Text>
-          <RichTextBody value={body} onChange={setBody} />
+          <RichTextBody value={body} onChange={setBody} onReady={onBodyReady} />
+          {variableGroups.length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <Text size="xs" fw={600} c="dimmed" mb={4}>
+                Insert a variable (click to add it where you were typing)
+              </Text>
+              <Stack gap={6}>
+                {variableGroups.map(([group, vars]) => (
+                  <Group key={group} gap={6} wrap="wrap">
+                    <Text size="xs" c="dimmed" w={64}>
+                      {group}
+                    </Text>
+                    {vars.map((v) => (
+                      <Badge
+                        key={v.key}
+                        variant="light"
+                        color="candango"
+                        style={{ cursor: 'pointer', textTransform: 'none' }}
+                        onClick={() => insertVar(v.key)}
+                        title={`${v.label} — e.g. ${v.example}`}
+                      >
+                        {v.label}
+                      </Badge>
+                    ))}
+                  </Group>
+                ))}
+              </Stack>
+            </div>
+          )}
           {signatureHtml && (
             <Paper withBorder mt={6} p="xs" radius="sm" bg="var(--mantine-color-gray-0)">
               <Text size="xs" c="dimmed" mb={2}>

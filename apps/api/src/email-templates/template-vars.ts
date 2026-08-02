@@ -79,22 +79,41 @@ export const SIGNATURE_VARIABLES: TemplateVariable[] = [
   { key: 'sender.last_name', label: 'Last name', group: 'You', example: 'Lee' },
   { key: 'sender.email', label: 'Email', group: 'You', example: 'jordan@example.com' },
   { key: 'sender.phone', label: 'Phone', group: 'You', example: '(555) 987-6543' },
-  { key: 'sender.avatar_url', label: 'Profile photo', group: 'You', example: '' },
+  { key: 'sender.photo_70', label: 'Photo 70px', group: 'Photo', example: '' },
+  { key: 'sender.photo_100', label: 'Photo 100px', group: 'Photo', example: '' },
+  { key: 'sender.photo_130', label: 'Photo 130px', group: 'Photo', example: '' },
   { key: 'workspace.name', label: 'Company name', group: 'Company', example: 'Your Company' },
-  { key: 'workspace.logo_url', label: 'Company logo', group: 'Company', example: '' },
+  { key: 'workspace.logo_wide_sm', label: 'Logo landscape (S)', group: 'Logo', example: '' },
+  { key: 'workspace.logo_wide_lg', label: 'Logo landscape (L)', group: 'Logo', example: '' },
+  { key: 'workspace.logo_square_sm', label: 'Logo square (S)', group: 'Logo', example: '' },
+  { key: 'workspace.logo_square_lg', label: 'Logo square (L)', group: 'Logo', example: '' },
 ];
 
-/** Keys that render as an image, with their inline attributes. */
+/**
+ * Keys that render as an image, with their inline attributes. Landscape logos constrain height
+ * (width auto), square logos are boxed with object-fit contain, photos are round-cropped.
+ * Mirror apps/web/lib/email-signature.ts.
+ */
 const SIGNATURE_IMAGE_ATTRS: Record<string, string> = {
-  'sender.avatar_url': 'width="48" height="48" style="border-radius:24px;vertical-align:middle"',
+  // Legacy keys (kept so old signatures still render):
+  'sender.avatar_url': 'width="48" height="48" style="border-radius:24px;object-fit:cover;vertical-align:middle"',
   'workspace.logo_url': 'style="max-height:40px"',
+  // Profile photo sizes:
+  'sender.photo_70': 'width="70" height="70" style="border-radius:35px;object-fit:cover;vertical-align:middle"',
+  'sender.photo_100': 'width="100" height="100" style="border-radius:50px;object-fit:cover;vertical-align:middle"',
+  'sender.photo_130': 'width="130" height="130" style="border-radius:65px;object-fit:cover;vertical-align:middle"',
+  // Logo variants:
+  'workspace.logo_wide_sm': 'style="max-height:40px;max-width:200px;object-fit:contain;vertical-align:middle"',
+  'workspace.logo_wide_lg': 'style="max-height:64px;max-width:280px;object-fit:contain;vertical-align:middle"',
+  'workspace.logo_square_sm': 'width="64" height="64" style="object-fit:contain;vertical-align:middle"',
+  'workspace.logo_square_lg': 'width="110" height="110" style="object-fit:contain;vertical-align:middle"',
 };
 
 /** Default signature body: Profile photo → Full name → Email → Phone → Company name → Company logo. */
 export const DEFAULT_SIGNATURE_HTML =
-  '<p>{{sender.avatar_url}}</p>' +
+  '<p>{{sender.photo_100}}</p>' +
   '<p><strong>{{sender.name}}</strong><br />{{sender.email}} · {{sender.phone}}<br />{{workspace.name}}</p>' +
-  '<p>{{workspace.logo_url}}</p>';
+  '<p>{{workspace.logo_wide_sm}}</p>';
 
 /** A string (even empty) is the user's signature; anything else (null/undefined) → the default. */
 export function normalizeSignature(input: unknown): string {
@@ -118,15 +137,25 @@ export function buildSignatureValues(
 ): Record<string, string> {
   const full = (sender.name ?? '').trim();
   const parts = full ? full.split(/\s+/) : [];
+  const avatar = sender.avatarUrl ?? '';
+  const logo = workspace.logoUrl ?? '';
   return {
     'sender.name': full,
     'sender.first_name': parts[0] ?? '',
     'sender.last_name': parts.slice(1).join(' '),
     'sender.email': sender.email ?? '',
     'sender.phone': sender.phone ?? '',
-    'sender.avatar_url': sender.avatarUrl ?? '',
+    // Every photo/logo size resolves to the same source URL — only the <img> sizing differs.
+    'sender.avatar_url': avatar,
+    'sender.photo_70': avatar,
+    'sender.photo_100': avatar,
+    'sender.photo_130': avatar,
     'workspace.name': workspace.name ?? '',
-    'workspace.logo_url': workspace.logoUrl ?? '',
+    'workspace.logo_url': logo,
+    'workspace.logo_wide_sm': logo,
+    'workspace.logo_wide_lg': logo,
+    'workspace.logo_square_sm': logo,
+    'workspace.logo_square_lg': logo,
   };
 }
 
