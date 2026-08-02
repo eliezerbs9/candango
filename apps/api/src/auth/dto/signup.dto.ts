@@ -14,4 +14,9 @@ export class SignupDto {
 
   @MinLength(8)
   password!: string;
+
+  /** IANA timezone auto-detected from the browser at signup (e.g. America/New_York). */
+  @IsOptional()
+  @IsString()
+  timezone?: string;
 }

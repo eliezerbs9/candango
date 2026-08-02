@@ -11,6 +11,7 @@ export function apiSignup(body: {
   name?: string;
   email: string;
   password: string;
+  timezone?: string;
 }) {
   return apiFetch<AuthResponse>('/auth/signup', {
     method: 'POST',

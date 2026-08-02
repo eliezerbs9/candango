@@ -16,6 +16,12 @@ export class UpdateOrganizationDto {
   @IsIn(['first_last', 'last_first'])
   qboNameFormat?: string;
 
+  /** IANA workspace timezone (e.g. America/New_York). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  timezone?: string;
+
   /** Sales-tax rate for LOCAL estimates, in basis points (700 = 7%). 0–5000 (0–50%). */
   @IsOptional()
   @IsInt()

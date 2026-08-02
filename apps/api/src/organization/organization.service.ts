@@ -11,6 +11,7 @@ const PUBLIC_FIELDS = {
   plan: true,
   logoUrl: true,
   qboNameFormat: true,
+  timezone: true,
   taxRateBps: true,
   taxDefaultOn: true,
   emailSignature: true,
@@ -55,6 +56,7 @@ export class OrganizationService {
         name: dto.name,
         logoUrl: dto.logoUrl,
         qboNameFormat: dto.qboNameFormat,
+        ...(dto.timezone !== undefined ? { timezone: dto.timezone.trim() || null } : {}),
         taxRateBps: dto.taxRateBps,
         taxDefaultOn: dto.taxDefaultOn,
         ...(dto.emailSignature !== undefined

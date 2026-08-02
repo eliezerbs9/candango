@@ -9,6 +9,7 @@ export interface Organization {
   plan: string;
   logoUrl: string | null;
   qboNameFormat: QboNameFormat;
+  timezone: string | null; // IANA workspace timezone
   taxRateBps: number;
   taxDefaultOn: boolean;
   emailSignature: string; // HTML with sender/company {{variables}}
@@ -20,6 +21,7 @@ export interface OrganizationBody {
   name?: string;
   logoUrl?: string;
   qboNameFormat?: QboNameFormat;
+  timezone?: string;
   taxRateBps?: number;
   taxDefaultOn?: boolean;
   emailSignature?: string;

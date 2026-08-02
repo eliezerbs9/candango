@@ -33,6 +33,7 @@ export default function GeneralSettingsPage() {
   const [logo, setLogo] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
   const [nameFormat, setNameFormat] = useState<'first_last' | 'last_first'>('first_last');
+  const [timezone, setTimezone] = useState<string | null>(null);
 
   useEffect(() => {
     if (org) {
@@ -40,8 +41,17 @@ export default function GeneralSettingsPage() {
       setLogo(org.logoUrl);
       setLogoError(false);
       setNameFormat(org.qboNameFormat);
+      setTimezone(org.timezone);
     }
   }, [org]);
+
+  const tzList: string[] = (() => {
+    try {
+      return (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? [];
+    } catch {
+      return [];
+    }
+  })();
 
   const hasLogo = !!logo && !logoError;
 
@@ -65,7 +75,7 @@ export default function GeneralSettingsPage() {
 
   const save = () =>
     update.mutate(
-      { name, qboNameFormat: nameFormat },
+      { name, qboNameFormat: nameFormat, ...(timezone ? { timezone } : {}) },
       { onSuccess: () => notifications.show({ message: 'Workspace updated', color: 'green' }), onError: fail },
     );
 
@@ -126,6 +136,17 @@ export default function GeneralSettingsPage() {
         value={name}
         onChange={(e) => setName(e.currentTarget.value)}
         disabled={!isAdmin}
+      />
+
+      <Select
+        label="Workspace timezone"
+        description="Used for automation schedules, due dates and reminders."
+        searchable
+        data={tzList.length ? tzList : timezone ? [timezone] : []}
+        value={timezone}
+        onChange={setTimezone}
+        disabled={!isAdmin}
+        nothingFoundMessage="No match"
       />
 
       <Select

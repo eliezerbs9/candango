@@ -54,7 +54,13 @@ export class AuthService {
     await this.assertEmailAvailable(dto.email);
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
     const { org, user } = await this.prisma.$tx((tx) =>
-      this.provisionWorkspace(tx, { orgName: dto.orgName, email: dto.email, name: dto.name ?? null, passwordHash }),
+      this.provisionWorkspace(tx, {
+        orgName: dto.orgName,
+        email: dto.email,
+        name: dto.name ?? null,
+        passwordHash,
+        timezone: dto.timezone,
+      }),
     );
 
     // Send an email-verification link (the account is usable immediately; this
@@ -84,10 +90,19 @@ export class AuthService {
   /** Shared workspace provisioning: org + system roles + owner user + default pipeline/stages. */
   private async provisionWorkspace(
     tx: Prisma.TransactionClient,
-    opts: { orgName: string; email: string; name: string | null; passwordHash: string | null; emailVerified?: boolean },
+    opts: {
+      orgName: string;
+      email: string;
+      name: string | null;
+      passwordHash: string | null;
+      emailVerified?: boolean;
+      timezone?: string;
+    },
   ) {
     const slug = `${slugify(opts.orgName)}-${Math.random().toString(36).slice(2, 7)}`;
-    const org = await tx.organization.create({ data: { name: opts.orgName, slug } });
+    const org = await tx.organization.create({
+      data: { name: opts.orgName, slug, timezone: opts.timezone?.trim() || null },
+    });
     // The three built-in roles are system roles — protected from edit/delete in the UI;
     // admins add their own custom roles on top (FR-6.3).
     const adminRole = await tx.role.create({

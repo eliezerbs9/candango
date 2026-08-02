@@ -27,7 +27,9 @@ export function SignupForm() {
   const handleSubmit = form.onSubmit(async (values) => {
     setLoading(true);
     try {
-      const { token, user } = await apiSignup(values);
+      // Capture the browser's IANA timezone so the workspace always has one (FR-11.3).
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+      const { token, user } = await apiSignup({ ...values, timezone });
       signIn(token, user);
       notifications.show({ message: 'Workspace created — 7-day trial started', color: 'green' });
       router.push('/onboarding');
