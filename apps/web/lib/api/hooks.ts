@@ -71,6 +71,13 @@ import {
   type RoleBody,
 } from './members';
 import { getOrganization, updateOrganization, type OrganizationBody } from './organization';
+import {
+  getEstimateItems,
+  createEstimateItem,
+  updateEstimateItem,
+  deleteEstimateItem,
+  type EstimateItemBody,
+} from './estimate-items';
 import { getOnboarding, setOnboardingCompleted } from './onboarding';
 import { createApiKey, getApiKeys, revokeApiKey } from './apikeys';
 import {
@@ -696,6 +703,39 @@ export function useUpdateOrganization() {
   return useMutation({
     mutationFn: (body: OrganizationBody) => updateOrganization(token!, body),
     onSuccess: (data) => qc.setQueryData(['organization'], data),
+  });
+}
+
+// --- Estimate items (org catalog for local estimates) ---
+export function useEstimateItems() {
+  const token = useToken();
+  return useQuery({ queryKey: ['estimate-items'], queryFn: () => getEstimateItems(token!), enabled: !!token });
+}
+
+export function useCreateEstimateItem() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: EstimateItemBody) => createEstimateItem(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['estimate-items'] }),
+  });
+}
+
+export function useUpdateEstimateItem() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: EstimateItemBody }) => updateEstimateItem(token!, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['estimate-items'] }),
+  });
+}
+
+export function useDeleteEstimateItem() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteEstimateItem(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['estimate-items'] }),
   });
 }
 
