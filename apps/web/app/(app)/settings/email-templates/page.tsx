@@ -26,10 +26,12 @@ import type { Editor } from '@tiptap/react';
 import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/useAuth';
 import { RichTextBody } from '@/components/common/RichTextBody';
+import { ConnectGoogleNotice } from '@/components/email/ConnectGoogleNotice';
 import {
   useCreateEmailTemplate,
   useDeleteEmailTemplate,
   useEmailTemplates,
+  useGoogleStatus,
   useOrganization,
   useProfile,
   useSeedDefaultTemplates,
@@ -58,6 +60,7 @@ export default function EmailTemplatesSettingsPage() {
   const { data: variables = [] } = useTemplateVariables();
   const { data: profile } = useProfile();
   const { data: org } = useOrganization();
+  const { data: google, isLoading: googleLoading } = useGoogleStatus();
   const del = useDeleteEmailTemplate();
   const seed = useSeedDefaultTemplates();
 
@@ -112,13 +115,16 @@ export default function EmailTemplatesSettingsPage() {
       onError: fail,
     });
 
-  if (isLoading) {
+  if (isLoading || googleLoading) {
     return (
       <Center mih="40vh">
         <Loader />
       </Center>
     );
   }
+
+  // Email features send through the user's Gmail — unavailable without a mailbox connection.
+  if (!google?.mailbox) return <ConnectGoogleNotice feature="email templates" />;
 
   return (
     <Stack gap="lg">

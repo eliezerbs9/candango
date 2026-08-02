@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
+  Alert,
   Badge,
   Button,
   Card,
@@ -20,7 +21,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconBolt, IconDots, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconBolt, IconBrandGoogle, IconDots, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/useAuth';
 import {
@@ -30,6 +31,7 @@ import {
   useDeleteEmailAutomation,
   useEmailAutomations,
   useEmailTemplates,
+  useGoogleStatus,
   useUpdateEmailAutomation,
 } from '@/lib/api/hooks';
 import type { AutomationTrigger, EmailAutomation } from '@/lib/api/email-automations';
@@ -43,6 +45,7 @@ export default function AutomationsSettingsPage() {
   const { data: automations = [], isLoading } = useEmailAutomations();
   const { data: triggers = [] } = useAutomationTriggers();
   const { data: templates = [] } = useEmailTemplates();
+  const { data: google } = useGoogleStatus();
   const del = useDeleteEmailAutomation();
   const update = useUpdateEmailAutomation();
 
@@ -141,6 +144,13 @@ export default function AutomationsSettingsPage() {
           </Button>
         )}
       </Group>
+
+      {!google?.mailbox && (
+        <Alert variant="light" color="yellow" icon={<IconBrandGoogle size={16} />} title="Email actions need Google">
+          Your workspace has no Google connection, so <b>“send an email” automations won&apos;t fire</b> — only
+          “create an activity” ones will. Connect Google under Settings → Integrations to enable email automations.
+        </Alert>
+      )}
 
       {automations.length === 0 ? (
         <Text size="sm" c="dimmed">

@@ -154,10 +154,9 @@ export function OnboardingStepper() {
   const finish = async () => {
     if (!(await saveWorkspace())) return setActive(0);
     if (!(await saveProfile())) return setActive(1);
-    complete.mutate(true, {
-      onSuccess: () => router.push(goToTemplates ? '/settings/email-templates' : '/dashboard'),
-      onError: fail,
-    });
+    // Only send them to email templates if Gmail is actually connected (email needs the mailbox).
+    const dest = goToTemplates && google?.mailbox ? '/settings/email-templates' : '/dashboard';
+    complete.mutate(true, { onSuccess: () => router.push(dest), onError: fail });
   };
 
   const pickLogo = async (file: File | null) => {
