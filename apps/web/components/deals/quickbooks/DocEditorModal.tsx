@@ -51,7 +51,6 @@ export function DocEditorModal({
   initial,
   submitLabel = 'Create',
   taxRatePct,
-  qboTax,
   taxDefaultOn,
   onSubmit,
 }: {
@@ -64,7 +63,6 @@ export function DocEditorModal({
   initial?: DealDoc | null; // prefill for editing
   submitLabel?: string;
   taxRatePct?: number; // when set (native/local docs), shows an "Apply tax" toggle at this %
-  qboTax?: boolean; // QBO docs: show an "Apply sales tax" toggle (QuickBooks computes the amount)
   taxDefaultOn?: boolean; // pre-select the tax toggle on a NEW doc
   onSubmit: (input: CreateDocInput) => Promise<unknown>;
 }) {
@@ -106,12 +104,11 @@ export function DocEditorModal({
 
   const cents = (l: LineRow) => Math.round(Number(l.quantity || 0) * Number(l.unitPrice || 0) * 100);
   const subtotal = lines.reduce((sum, l) => sum + cents(l), 0);
-  const canTaxLocal = taxRatePct != null && taxRatePct > 0;
-  const canTaxQbo = !!qboTax;
-  const showTax = canTaxLocal || canTaxQbo;
-  const taxRateBps = taxOn && canTaxLocal ? Math.round(taxRatePct! * 100) : 0;
+  // Local (native) docs only: QuickBooks docs inherit tax from each item's QBO setting.
+  const canTax = taxRatePct != null && taxRatePct > 0;
+  const taxRateBps = taxOn && canTax ? Math.round(taxRatePct * 100) : 0;
   const taxAmount = Math.round((subtotal * taxRateBps) / 10000);
-  const total = subtotal + taxAmount; // QBO: QuickBooks adds its own tax after we send
+  const total = subtotal + taxAmount;
   const itemData = (items ?? []).map((i) => ({ value: i.id, label: i.name }));
 
   const pickItem = (i: number, itemId: string | null) => {
@@ -152,8 +149,7 @@ export function DocEditorModal({
         txnDate: txnDate || undefined,
         notes: notes || undefined,
         lines: clean,
-        ...(canTaxLocal ? { taxRateBps } : {}),
-        ...(canTaxQbo ? { applyTax: taxOn } : {}),
+        ...(canTax ? { taxRateBps } : {}),
         ...valueFlags,
       });
       onClose();
@@ -252,15 +248,15 @@ export function DocEditorModal({
             Add line
           </Button>
           <Stack gap={4} align="flex-end">
-            {showTax && (
+            {canTax && (
               <Checkbox
                 size="sm"
-                label={canTaxLocal ? `Apply tax (${taxRatePct}%)` : 'Apply sales tax'}
+                label={`Apply tax (${taxRatePct}%)`}
                 checked={taxOn}
                 onChange={(e) => setTaxOn(e.currentTarget.checked)}
               />
             )}
-            {taxOn && canTaxLocal ? (
+            {taxOn && canTax ? (
               <>
                 <Text size="sm" c="dimmed">
                   Subtotal: <Money value={subtotal} currency={currency} />
@@ -269,11 +265,6 @@ export function DocEditorModal({
                   Tax ({taxRatePct}%): <Money value={taxAmount} currency={currency} />
                 </Text>
               </>
-            ) : null}
-            {taxOn && canTaxQbo ? (
-              <Text size="xs" c="dimmed">
-                + sales tax calculated by QuickBooks
-              </Text>
             ) : null}
             <Text fw={600}>
               Total: <Money value={total} currency={currency} />

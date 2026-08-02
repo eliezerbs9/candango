@@ -44,7 +44,6 @@ export interface DocInput {
   privateNote?: string; // internal note (traceability: deal ref + id) — QBO PrivateNote
   memo?: string; // customer-facing message shown on the document — QBO CustomerMemo
   linkedTxns?: { txnId: string; txnType: string }[]; // e.g. estimates this invoice was generated from
-  applyTax?: boolean; // mark lines taxable + let QuickBooks Automated Sales Tax compute the amount
 }
 export interface NormalizedLine {
   description: string;
@@ -287,18 +286,31 @@ export class QuickbooksApiService {
   }
 
   // --- Estimates / Invoices ---
-  private async buildLines(orgId: string, realmId: string, lines: LineInput[], taxable = false) {
+  /** Which of these QBO items are marked Taxable — so lines match QuickBooks' own behaviour. */
+  private async itemTaxableMap(orgId: string, itemIds: string[]): Promise<Map<string, boolean>> {
+    const map = new Map<string, boolean>();
+    if (!itemIds.length) return map;
+    const inList = itemIds.map((id) => `'${id.replace(/'/g, '')}'`).join(',');
+    const r = await this.query(orgId, `select Id, Taxable from Item where Id in (${inList})`);
+    for (const it of r?.QueryResponse?.Item ?? []) map.set(it.Id, !!it.Taxable);
+    return map;
+  }
+
+  private async buildLines(orgId: string, realmId: string, lines: LineInput[]) {
     const fallback = await this.defaultItemId(orgId, realmId);
-    return lines.map((l) => ({
+    const withIds = lines.map((l) => ({ ...l, itemId: l.itemId || fallback }));
+    const taxable = await this.itemTaxableMap(orgId, [...new Set(withIds.map((l) => l.itemId))]);
+    return withIds.map((l) => ({
       DetailType: 'SalesItemLineDetail',
       Amount: toQbAmount(l.quantity * l.unitPrice),
       Description: l.description,
       SalesItemLineDetail: {
-        ItemRef: { value: l.itemId || fallback },
+        ItemRef: { value: l.itemId },
         Qty: l.quantity,
         UnitPrice: toQbAmount(l.unitPrice),
-        // 'TAX' = taxable → QuickBooks Automated Sales Tax computes the rate from the address.
-        ...(taxable ? { TaxCodeRef: { value: 'TAX' } } : {}),
+        // Inherit taxability from the item's QuickBooks setting ('TAX' = taxable, so
+        // Automated Sales Tax computes the rate; 'NON' = nontaxable).
+        TaxCodeRef: { value: taxable.get(l.itemId) ? 'TAX' : 'NON' },
       },
     }));
   }
@@ -327,12 +339,16 @@ export class QuickbooksApiService {
 
   private async docBody(orgId: string, input: DocInput): Promise<Record<string, unknown>> {
     const { realmId } = await this.authContext(orgId);
+    const lines = await this.buildLines(orgId, realmId, input.lines);
     const body: Record<string, unknown> = {
       CustomerRef: { value: input.customerId },
-      Line: await this.buildLines(orgId, realmId, input.lines, input.applyTax),
+      Line: lines,
     };
-    // Let QuickBooks add sales tax on top of the line amounts (Automated Sales Tax).
-    if (input.applyTax) body.GlobalTaxCalculation = 'TaxExcluded';
+    // If any line is taxable, tell QuickBooks to add its Automated Sales Tax on top.
+    const anyTaxable = lines.some(
+      (l) => (l.SalesItemLineDetail as { TaxCodeRef?: { value?: string } })?.TaxCodeRef?.value === 'TAX',
+    );
+    if (anyTaxable) body.GlobalTaxCalculation = 'TaxExcluded';
     if (input.txnDate) body.TxnDate = input.txnDate.slice(0, 10);
     if (input.currency && input.currency !== 'USD') body.CurrencyRef = { value: input.currency };
     const bill = toQbAddr(input.billAddr);

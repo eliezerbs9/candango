@@ -398,7 +398,6 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         currency={deal.currency}
         items={itemList}
         taxRatePct={taxRatePct}
-        qboTax={mode === 'qbo'}
         taxDefaultOn={org?.taxDefaultOn}
         initial={estEditing}
         loading={createEstimate.isPending || updateEstimate.isPending}
@@ -412,7 +411,6 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         currency={deal.currency}
         items={itemList}
         taxRatePct={taxRatePct}
-        qboTax={mode === 'qbo'}
         taxDefaultOn={org?.taxDefaultOn}
         initial={invEditing}
         loading={updateInvoice.isPending}
