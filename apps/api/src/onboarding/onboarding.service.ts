@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -10,7 +11,10 @@ function asObject(value: Prisma.JsonValue | null | undefined): Record<string, un
 
 @Injectable()
 export class OnboardingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventEmitter2,
+  ) {}
 
   /** Onboarding checklist — most flags are derived from real data. */
   async get(orgId: string) {
@@ -46,6 +50,10 @@ export class OnboardingService {
         where: { id: orgId },
         data: { onboardingState: { ...prev, completed } as Prisma.InputJsonValue },
       });
+      // On first completion, dispatch the invite emails that were deferred during onboarding.
+      if (completed === true && prev.completed !== true) {
+        this.events.emit('onboarding.completed', { orgId });
+      }
     }
     return this.get(orgId);
   }

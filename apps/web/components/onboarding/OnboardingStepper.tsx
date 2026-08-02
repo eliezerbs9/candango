@@ -383,8 +383,10 @@ function InviteStep() {
     }
     return list;
   }, [members, user]);
-  const activeSeats = rows.filter((r) => r.status === 'active').length;
-  const monthly = activeSeats * 30;
+  // A seat is a seat: every member that isn't deactivated is billable (active OR invited),
+  // matching the server's seat count. Remove an empty/invited seat to stop paying for it.
+  const seats = rows.filter((r) => r.status !== 'deactivated').length;
+  const monthly = seats * 30;
 
   const submit = () => {
     if (!email.trim()) {
@@ -406,7 +408,8 @@ function InviteStep() {
   return (
     <Stack mt="md" gap="sm">
       <Text size="sm">
-        Invite teammates (optional). Each active user is a billable seat ($30/mo) — but not during your trial.
+        Invite teammates (optional). Every member — <b>active or invited</b> — is a billable seat ($30/mo); remove an
+        empty seat anytime to stop paying for it. Nothing is charged during your trial.
       </Text>
       <Group align="flex-end" wrap="nowrap">
         <TextInput
@@ -467,7 +470,7 @@ function InviteStep() {
       )}
       <Text size="sm" mt={4}>
         <b>
-          {activeSeats} active {activeSeats === 1 ? 'seat' : 'seats'}
+          {seats} {seats === 1 ? 'seat' : 'seats'}
         </b>{' '}
         → <b>${monthly}/mo</b> after your trial.{' '}
         <Text span c="dimmed">

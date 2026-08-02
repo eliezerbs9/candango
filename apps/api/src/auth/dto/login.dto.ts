@@ -1,4 +1,4 @@
-import { IsEmail, IsString } from 'class-validator';
+import { IsEmail, IsOptional, IsString } from 'class-validator';
 
 export class LoginDto {
   @IsEmail()
@@ -6,4 +6,9 @@ export class LoginDto {
 
   @IsString()
   password!: string;
+
+  /** When the email exists in more than one workspace, the chosen workspace to sign into. */
+  @IsOptional()
+  @IsString()
+  orgId?: string;
 }

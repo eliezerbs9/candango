@@ -19,8 +19,14 @@ export function apiSignup(body: {
   });
 }
 
-export function apiLogin(body: { email: string; password: string }) {
-  return apiFetch<AuthResponse>('/auth/login', {
+export interface WorkspaceChoice {
+  orgId: string;
+  orgName: string;
+}
+export type LoginResult = AuthResponse | { needsWorkspace: true; workspaces: WorkspaceChoice[] };
+
+export function apiLogin(body: { email: string; password: string; orgId?: string }) {
+  return apiFetch<LoginResult>('/auth/login', {
     method: 'POST',
     body: JSON.stringify(body),
   });

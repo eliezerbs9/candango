@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Divider, PasswordInput, Stack, TextInput } from '@mantine/core';
+import { Button, Divider, PasswordInput, Select, Stack, Text, TextInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { useAuth } from '@/lib/auth/useAuth';
-import { apiLogin, apiMe, googleLoginUrl } from '@/lib/api/auth';
+import { apiLogin, apiMe, googleLoginUrl, type WorkspaceChoice } from '@/lib/api/auth';
 import { getOnboarding } from '@/lib/api/onboarding';
 import { ApiError } from '@/lib/api/client';
 import { OAuthButton } from './OAuthButton';
@@ -76,10 +76,20 @@ export function LoginForm() {
     },
   });
 
-  const handleSubmit = form.onSubmit(async (values) => {
+  // When an email exists in multiple workspaces, the API returns a list to pick from.
+  const [workspaces, setWorkspaces] = useState<WorkspaceChoice[] | null>(null);
+  const [chosenOrg, setChosenOrg] = useState<string | null>(null);
+
+  const doLogin = async (orgId?: string) => {
     setLoading(true);
     try {
-      const { token, user } = await apiLogin(values);
+      const res = await apiLogin({ ...form.values, ...(orgId ? { orgId } : {}) });
+      if ('needsWorkspace' in res) {
+        setWorkspaces(res.workspaces);
+        setChosenOrg(res.workspaces[0]?.orgId ?? null);
+        return;
+      }
+      const { token, user } = res;
       if (mobileRedirect) {
         finishMobile(token); // hand the token to the mobile app, don't sign into the web
         return;
@@ -88,14 +98,13 @@ export function LoginForm() {
       notifications.show({ message: 'Signed in', color: 'green' });
       await routeAfterAuth(token);
     } catch (e) {
-      notifications.show({
-        message: e instanceof ApiError ? e.message : 'Login failed',
-        color: 'red',
-      });
+      notifications.show({ message: e instanceof ApiError ? e.message : 'Login failed', color: 'red' });
     } finally {
       setLoading(false);
     }
-  });
+  };
+
+  const handleSubmit = form.onSubmit(() => doLogin());
 
   return (
     <Stack gap="md">
@@ -105,15 +114,34 @@ export function LoginForm() {
         }}
       />
       <Divider label="or" labelPosition="center" />
-      <form onSubmit={handleSubmit}>
+      {workspaces ? (
         <Stack gap="sm">
-          <TextInput label="Email" placeholder="you@company.com" {...form.getInputProps('email')} />
-          <PasswordInput label="Password" {...form.getInputProps('password')} />
-          <Button type="submit" fullWidth mt="xs" loading={loading}>
-            Sign in
+          <Text size="sm">This email is in more than one workspace. Choose which to sign into:</Text>
+          <Select
+            label="Workspace"
+            data={workspaces.map((w) => ({ value: w.orgId, label: w.orgName }))}
+            value={chosenOrg}
+            onChange={setChosenOrg}
+            allowDeselect={false}
+          />
+          <Button fullWidth loading={loading} disabled={!chosenOrg} onClick={() => chosenOrg && doLogin(chosenOrg)}>
+            Continue
+          </Button>
+          <Button variant="subtle" size="xs" onClick={() => setWorkspaces(null)}>
+            Use a different email
           </Button>
         </Stack>
-      </form>
+      ) : (
+        <form onSubmit={handleSubmit}>
+          <Stack gap="sm">
+            <TextInput label="Email" placeholder="you@company.com" {...form.getInputProps('email')} />
+            <PasswordInput label="Password" {...form.getInputProps('password')} />
+            <Button type="submit" fullWidth mt="xs" loading={loading}>
+              Sign in
+            </Button>
+          </Stack>
+        </form>
+      )}
     </Stack>
   );
 }

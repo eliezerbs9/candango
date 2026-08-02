@@ -217,15 +217,29 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    // Match the (now globally-unique, per the sign-up guard) active user for this
-    // email. Excludes soft-deleted accounts so a removed account can't be logged
-    // into and a re-created one is unambiguous.
-    const user = await this.prisma.user.findFirst({
-      where: { email: dto.email, deletedAt: null },
+    // The same email can belong to multiple workspaces (invites don't enforce global uniqueness),
+    // and each has its own password. Find every workspace where the credentials match.
+    const candidates = await this.prisma.user.findMany({
+      where: { email: dto.email, deletedAt: null, status: { not: 'deactivated' } },
       include: { organization: true, role: true },
     });
-    if (!user?.passwordHash || !(await bcrypt.compare(dto.password, user.passwordHash))) {
-      throw new UnauthorizedException('Invalid credentials');
+    const matches: typeof candidates = [];
+    for (const c of candidates) {
+      if (c.passwordHash && (await bcrypt.compare(dto.password, c.passwordHash))) matches.push(c);
+    }
+    if (matches.length === 0) throw new UnauthorizedException('Invalid credentials');
+
+    let user = matches[0];
+    if (dto.orgId) {
+      const chosen = matches.find((m) => m.orgId === dto.orgId);
+      if (!chosen) throw new UnauthorizedException('Invalid credentials');
+      user = chosen;
+    } else if (matches.length > 1) {
+      // Ask the client which workspace to sign into (it re-submits with orgId).
+      return {
+        needsWorkspace: true as const,
+        workspaces: matches.map((m) => ({ orgId: m.orgId, orgName: m.organization.name })),
+      };
     }
 
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });

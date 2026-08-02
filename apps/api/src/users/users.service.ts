@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { TokensService } from '../tokens/tokens.service';
@@ -60,24 +61,42 @@ export class UsersService {
     const existing = await this.prisma.user.findFirst({ where: { orgId, email: dto.email } });
     if (existing) throw new ConflictException('A member with this email already exists');
 
+    const org = await this.prisma.organization.findFirst({
+      where: { id: orgId },
+      select: { name: true, onboardingState: true },
+    });
     const user = await this.prisma.user.create({
-      data: {
-        orgId,
-        email: dto.email,
-        name: dto.name ?? null,
-        roleId: dto.roleId ?? null,
-        status: 'invited',
-      },
-      include: { role: true, organization: { select: { name: true } } },
+      data: { orgId, email: dto.email, name: dto.name ?? null, roleId: dto.roleId ?? null, status: 'invited' },
+      include: { role: true },
     });
 
-    // Email the invite link so the person can set a password and join.
-    const token = await this.tokens.issue(orgId, user.id, 'invite', INVITE_TTL_MS);
-    await this.mail.sendInvite(user.email, user.name, user.organization.name, token);
+    // Only email the invite once onboarding is complete — invites created during onboarding are
+    // dispatched together when the owner finishes setup (see sendPendingInvites / onboarding.completed).
+    const onboardingDone = (org?.onboardingState as { completed?: boolean } | null)?.completed === true;
+    if (onboardingDone) await this.sendInviteEmail(orgId, user.id, user.email, user.name, org?.name ?? '');
 
     // Keep the Stripe subscription quantity aligned with active seats (FR-10.7).
     void this.billing.syncSeats(orgId).catch(() => undefined);
     return shape(user);
+  }
+
+  private async sendInviteEmail(orgId: string, userId: string, email: string, name: string | null, orgName: string) {
+    const token = await this.tokens.issue(orgId, userId, 'invite', INVITE_TTL_MS);
+    await this.mail.sendInvite(email, name, orgName, token);
+  }
+
+  /** Dispatch invite emails deferred during onboarding — fired when the workspace finishes setup. */
+  @OnEvent('onboarding.completed')
+  async sendPendingInvites(payload: { orgId: string }) {
+    const orgId = payload.orgId;
+    const org = await this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true } });
+    const invited = await this.prisma.user.findMany({
+      where: { orgId, status: 'invited', deletedAt: null },
+      select: { id: true, email: true, name: true },
+    });
+    for (const u of invited) {
+      await this.sendInviteEmail(orgId, u.id, u.email, u.name, org?.name ?? '').catch(() => undefined);
+    }
   }
 
   async update(orgId: string, id: string, dto: UpdateUserDto) {
