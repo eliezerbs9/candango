@@ -356,6 +356,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
         opened={composeOpen}
         onClose={composeCtl.close}
         defaultDealId={deal.id}
+        lockDeal
         defaultSubject={compose?.subject}
         initialAttachments={compose?.attachments}
         onSent={() => {

@@ -28,6 +28,8 @@ export function CreatableMultiSelect({
   value,
   onChange,
   onCreate,
+  createVerb = 'Create',
+  emptyText = 'Type to search or create',
 }: {
   label: string;
   placeholder?: string;
@@ -35,6 +37,10 @@ export function CreatableMultiSelect({
   value: string[];
   onChange: (value: string[]) => void;
   onCreate: (name: string) => Promise<Option | null>;
+  /** Verb for the "add a new value" row, e.g. "Add" for emails (default "Create"). */
+  createVerb?: string;
+  /** Text shown when there are no options and no query. */
+  emptyText?: string;
 }) {
   const combobox = useCombobox({
     onDropdownClose: () => combobox.resetSelectedOption(),
@@ -129,14 +135,12 @@ export function CreatableMultiSelect({
               <Group gap={6} wrap="nowrap">
                 <IconPlus size={14} />
                 <Text size="sm">
-                  Create “<b>{query}</b>”
+                  {createVerb} “<b>{query}</b>”
                 </Text>
               </Group>
             </Combobox.Option>
           ) : null}
-          {filtered.length === 0 && !query ? (
-            <Combobox.Empty>Type to search or create</Combobox.Empty>
-          ) : null}
+          {filtered.length === 0 && !query ? <Combobox.Empty>{emptyText}</Combobox.Empty> : null}
         </Combobox.Options>
       </Combobox.Dropdown>
     </Combobox>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, FileButton, Group, Modal, Paper, Pill, Select, Stack, Text, TextInput } from '@mantine/core';
 import { IconBulb, IconPaperclip } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
@@ -46,6 +46,7 @@ export function ComposeEmail({
   initialAttachments,
   reply,
   onSent,
+  lockDeal = false,
 }: {
   opened: boolean;
   onClose: () => void;
@@ -54,6 +55,8 @@ export function ComposeEmail({
   initialAttachments?: EmailAttachment[];
   reply?: ReplyContext;
   onSent?: () => void;
+  /** When sending from a deal's estimate/invoice, the deal is fixed (not selectable). */
+  lockDeal?: boolean;
 }) {
   const { data: deals = [] } = useDeals();
   const { data: persons = [] } = usePersons();
@@ -103,8 +106,12 @@ export function ComposeEmail({
 
   const dealPeople = useMemo(() => dealPeopleOf(dealId), [dealId, deals, persons]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Once the user edits "To", stop auto-prefilling it from the deal.
+  const toTouched = useRef(false);
+
   useEffect(() => {
     if (!opened) return;
+    toTouched.current = false;
     setDealId(defaultDealId ?? null);
     setTo(reply ? reply.to : dealEmails(defaultDealId ?? null));
     setSubject(reply ? reply.subject : defaultSubject ?? '');
@@ -113,6 +120,15 @@ export function ComposeEmail({
     setAttachments(initialAttachments ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened]);
+
+  // Deals/persons load async — if "To" is still empty and untouched when the deal's people
+  // arrive, prefill it (so the recipients aren't missed just because data loaded after open).
+  useEffect(() => {
+    if (!opened || reply || toTouched.current || to.length > 0) return;
+    const emails = dealEmails(dealId);
+    if (emails.length > 0) setTo(emails);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealPeople]);
 
   // Load a template, resolving its variables against the current deal.
   const applyTemplate = (id: string | null, forDealId: string | null) => {
@@ -198,17 +214,22 @@ export function ComposeEmail({
   return (
     <Modal opened={opened} onClose={onClose} title={reply ? 'Reply' : 'New email'} size="lg">
       <Stack>
-        <Select
-          label="Deal (optional)"
-          placeholder="Attach to a deal — prefills recipients"
-          data={deals.map((d) => ({ value: d.id, label: d.title }))}
-          value={dealId}
-          onChange={onDealChange}
-          searchable
-          clearable
-        />
+        {lockDeal ? (
+          // Sent from a deal's estimate/invoice — the deal is fixed.
+          <TextInput label="Deal" value={deals.find((d) => d.id === dealId)?.title ?? ''} disabled />
+        ) : (
+          <Select
+            label="Deal (optional)"
+            placeholder="Attach to a deal — prefills recipients"
+            data={deals.map((d) => ({ value: d.id, label: d.title }))}
+            value={dealId}
+            onChange={onDealChange}
+            searchable
+            clearable
+          />
+        )}
         {/* Suggests the deal's people (primary contact + the deal company's
-            contacts) as you type; you can also type any email freely. */}
+            contacts); you can also type any email freely. */}
         <CreatableMultiSelect
           label="To"
           placeholder="Type a name or email"
@@ -216,7 +237,12 @@ export function ComposeEmail({
             .filter((p) => p.email)
             .map((p) => ({ value: p.email as string, label: p.name ? `${p.name} · ${p.email}` : (p.email as string) }))}
           value={to}
-          onChange={setTo}
+          onChange={(v) => {
+            toTouched.current = true;
+            setTo(v);
+          }}
+          createVerb="Add"
+          emptyText="Type an email address"
           onCreate={async (typed) => {
             const email = typed.trim();
             if (!/^\S+@\S+\.\S+$/.test(email)) {
