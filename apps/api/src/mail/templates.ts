@@ -46,6 +46,46 @@ export function inviteEmail(p: { name?: string | null; orgName: string; link: st
   };
 }
 
+export function automationDisabledEmail(p: {
+  automationName: string;
+  orgName: string;
+  error: string;
+  link: string;
+}): RenderedEmail {
+  return {
+    subject: `Automation "${p.automationName}" was turned off`,
+    html: layout(
+      'An automation was turned off',
+      `<p style="margin:0;">Your automation <strong>${escape(p.automationName)}</strong> in <strong>${escape(
+        p.orgName,
+      )}</strong> hit an error while sending email, so we turned it off to avoid repeated failures.</p>` +
+        `<p style="margin:12px 0 0;color:#6b7280;">Details: ${escape(p.error)}</p>` +
+        `<p style="margin:12px 0 0;">This is usually a missing Google connection. Fix it, then turn the automation back on.</p>`,
+      { label: 'Review automations', href: p.link },
+    ),
+    text: `Your automation "${p.automationName}" in ${p.orgName} was turned off after an email error: ${p.error}. Review: ${p.link}`,
+  };
+}
+
+export function automationErrorDevEmail(p: {
+  orgName: string;
+  automationName: string;
+  automationId: string;
+  error: string;
+}): RenderedEmail {
+  const body =
+    `Workspace: ${p.orgName}\n` +
+    `Automation: ${p.automationName} (${p.automationId})\n` +
+    `Error: ${p.error}`;
+  return {
+    subject: `[Candango] Automation error — ${p.orgName}`,
+    html: `<pre style="font-family:ui-monospace,monospace;font-size:13px;white-space:pre-wrap;background:#f4f4f5;padding:16px;border-radius:8px;">${escape(
+      body,
+    )}</pre>`,
+    text: `[Candango] Automation error\n${body}`,
+  };
+}
+
 export function passwordResetEmail(p: { name?: string | null; link: string }): RenderedEmail {
   const who = p.name ? escape(p.name) : 'there';
   return {

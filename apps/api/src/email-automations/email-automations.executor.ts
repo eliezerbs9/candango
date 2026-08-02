@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MessagesService } from '../messages/messages.service';
+import { MailService } from '../mail/mail.service';
 import {
   buildSignatureValues,
   buildTemplateContext,
@@ -31,6 +32,7 @@ export class EmailAutomationsExecutor {
   constructor(
     private readonly prisma: PrismaService,
     private readonly messages: MessagesService,
+    private readonly mail: MailService,
   ) {}
 
   async fireForDeal(orgId: string, dealId: string, auto: AutomationRow): Promise<void> {
@@ -88,8 +90,41 @@ export class EmailAutomationsExecutor {
       ),
     );
     const body = renderTemplate(auto.template.body, ctx) + signature;
-    await this.messages.send(orgId, deal.ownerUserId, { to: [recipient], subject, body, html: true, dealId });
-    this.logger.log(`automation ${auto.id} sent to ${recipient} for deal ${dealId}`);
+    try {
+      await this.messages.send(orgId, deal.ownerUserId, { to: [recipient], subject, body, html: true, dealId });
+      this.logger.log(`automation ${auto.id} sent to ${recipient} for deal ${dealId}`);
+    } catch (err) {
+      await this.handleEmailError(orgId, auto.id, err);
+    }
+  }
+
+  /**
+   * A send failure disables the automation (so it stops firing) and notifies both the workspace's
+   * admins and the app developer (DEV_ALERT_EMAIL) via Brevo with the workspace + error.
+   */
+  private async handleEmailError(orgId: string, automationId: string, err: unknown): Promise<void> {
+    const msg = err instanceof Error ? err.message : String(err);
+    this.logger.warn(`automation ${automationId} email failed → disabling: ${msg}`);
+    try {
+      const auto = await this.prisma.emailAutomation.update({
+        where: { id: automationId },
+        data: { enabled: false },
+        select: { name: true },
+      });
+      const [org, admins] = await Promise.all([
+        this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true } }),
+        this.prisma.user.findMany({
+          where: { orgId, deletedAt: null, status: 'active', role: { name: 'Admin' } },
+          select: { email: true, name: true },
+        }),
+      ]);
+      const orgName = org?.name ?? 'your workspace';
+      for (const a of admins) void this.mail.sendAutomationDisabled(a.email, a.name, auto.name, orgName, msg);
+      const dev = process.env.DEV_ALERT_EMAIL;
+      if (dev) void this.mail.sendAutomationErrorToDev(dev, orgName, auto.name, automationId, msg);
+    } catch (e) {
+      this.logger.warn(`automation ${automationId} error-handling failed: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   private async createActivity(

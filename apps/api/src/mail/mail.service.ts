@@ -2,7 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
-import { contactEmail, inviteEmail, passwordResetEmail, verifyEmail, type RenderedEmail } from './templates';
+import {
+  automationDisabledEmail,
+  automationErrorDevEmail,
+  contactEmail,
+  inviteEmail,
+  passwordResetEmail,
+  verifyEmail,
+  type RenderedEmail,
+} from './templates';
 
 /** A fully-rendered message handed to the worker, which sends it via Brevo. */
 export interface EmailJob extends RenderedEmail {
@@ -52,6 +60,17 @@ export class MailService {
   sendEmailVerification(to: string, name: string | null, token: string) {
     const link = `${this.appUrl}/verify-email?token=${token}`;
     return this.enqueue({ to, name, ...verifyEmail({ name, link }) });
+  }
+
+  /** Notify a workspace admin that an automation was auto-disabled after an email error. */
+  sendAutomationDisabled(to: string, name: string | null, automationName: string, orgName: string, error: string) {
+    const link = `${this.appUrl}/settings/automations`;
+    return this.enqueue({ to, name, ...automationDisabledEmail({ automationName, orgName, error, link }) });
+  }
+
+  /** Alert the app developer about an automation execution error (workspace + logs). */
+  sendAutomationErrorToDev(to: string, orgName: string, automationName: string, automationId: string, error: string) {
+    return this.enqueue({ to, name: null, ...automationErrorDevEmail({ orgName, automationName, automationId, error }) });
   }
 
   /** Website contact form → support inbox, with Reply-To set to the sender. */

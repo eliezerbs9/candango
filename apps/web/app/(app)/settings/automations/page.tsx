@@ -18,6 +18,7 @@ import {
   Switch,
   Text,
   TextInput,
+  Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -162,7 +163,21 @@ export default function AutomationsSettingsPage() {
             <Card key={a.id} withBorder radius="md" padding="md">
               <Group justify="space-between" wrap="nowrap">
                 <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-                  <Switch checked={a.enabled} onChange={(e) => toggle(a, e.currentTarget.checked)} disabled={!isAdmin} />
+                  <Tooltip
+                    label="Connect Google to enable email automations"
+                    disabled={!(a.action === 'send_email' && !google?.mailbox)}
+                    withArrow
+                    multiline
+                    w={220}
+                  >
+                    <div>
+                      <Switch
+                        checked={a.enabled}
+                        onChange={(e) => toggle(a, e.currentTarget.checked)}
+                        disabled={!isAdmin || (a.action === 'send_email' && !google?.mailbox)}
+                      />
+                    </div>
+                  </Tooltip>
                   <div style={{ minWidth: 0 }}>
                     <Text fw={500}>{a.name}</Text>
                     <Text size="sm" c="dimmed" lineClamp={2}>
@@ -219,6 +234,7 @@ function AutomationModal({
   const update = useUpdateEmailAutomation();
   const { data: templates = [] } = useEmailTemplates();
   const { data: stages = [] } = useAllStages();
+  const { data: google } = useGoogleStatus();
 
   const [name, setName] = useState('');
   const [trigger, setTrigger] = useState<string | null>(null);
@@ -259,7 +275,8 @@ function AutomationModal({
       action,
       templateId: action === 'send_email' ? templateId ?? undefined : undefined,
       config,
-      enabled,
+      // Email automations can't start on without a mailbox — the server enforces this too.
+      enabled: action === 'send_email' && !google?.mailbox ? false : enabled,
     };
     const done = {
       onSuccess: () => {
@@ -391,7 +408,17 @@ function AutomationModal({
             />
           </>
         )}
-        <Switch label="Enabled" checked={enabled} onChange={(e) => setEnabled(e.currentTarget.checked)} />
+        <Switch
+          label="Enabled"
+          description={
+            action === 'send_email' && !google?.mailbox
+              ? 'Connect Google to enable email automations — it will be created but stay off until then.'
+              : undefined
+          }
+          checked={enabled && !(action === 'send_email' && !google?.mailbox)}
+          onChange={(e) => setEnabled(e.currentTarget.checked)}
+          disabled={action === 'send_email' && !google?.mailbox}
+        />
 
         <Group justify="flex-end" mt="xs">
           <Button variant="default" onClick={onClose}>

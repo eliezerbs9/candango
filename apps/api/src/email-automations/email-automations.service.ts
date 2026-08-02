@@ -47,8 +47,16 @@ export class EmailAutomationsService {
     }
   }
 
+  /** Email automations can only be enabled when the workspace has at least one connected mailbox. */
+  private async orgHasMailbox(orgId: string) {
+    return (await this.prisma.mailboxConnection.count({ where: { orgId } })) > 0;
+  }
+
   async create(orgId: string, userId: string, dto: CreateEmailAutomationDto) {
     await this.validateAction(orgId, dto.action, dto.templateId);
+    // An email automation can be created without Google, but starts OFF until a mailbox is connected.
+    let enabled = dto.enabled ?? true;
+    if (dto.action === 'send_email' && enabled && !(await this.orgHasMailbox(orgId))) enabled = false;
     const row = await this.prisma.emailAutomation.create({
       data: {
         orgId,
@@ -58,7 +66,7 @@ export class EmailAutomationsService {
         action: dto.action,
         templateId: dto.action === 'send_email' ? dto.templateId : null,
         config: (dto.config ?? {}) as Prisma.InputJsonValue,
-        enabled: dto.enabled ?? true,
+        enabled,
       },
       include: { template: { select: { name: true } } },
     });
@@ -71,6 +79,11 @@ export class EmailAutomationsService {
     const action = dto.action ?? existing.action;
     const templateId = dto.templateId !== undefined ? dto.templateId : existing.templateId;
     if (dto.action !== undefined || dto.templateId !== undefined) await this.validateAction(orgId, action, templateId);
+    // Block turning ON an email automation until the workspace has a connected mailbox.
+    const willEnable = dto.enabled !== undefined ? dto.enabled : existing.enabled;
+    if (action === 'send_email' && willEnable && !(await this.orgHasMailbox(orgId))) {
+      throw new BadRequestException('Connect Google (Gmail) before enabling email automations');
+    }
     const row = await this.prisma.emailAutomation.update({
       where: { id },
       data: {
