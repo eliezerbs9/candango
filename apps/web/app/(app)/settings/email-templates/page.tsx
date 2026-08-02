@@ -581,7 +581,7 @@ function TemplateModal({
                   styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)', fontSize: 12 } }}
                 />
               ) : (
-                <RichTextBody value={body} onChange={setBody} onReady={onBodyReady} minHeight={200} />
+                <RichTextBody value={body} onChange={setBody} onReady={onBodyReady} minHeight={200} variables={scopedVariables} />
               )}
               <Text size="xs" c="dimmed" mt={4}>
                 Your signature is added automatically below the body — edit it via &ldquo;Email signature&rdquo;.

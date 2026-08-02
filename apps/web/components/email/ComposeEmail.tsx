@@ -344,7 +344,7 @@ export function ComposeEmail({
           <Text size="sm" fw={500} mb={4}>
             Message
           </Text>
-          <RichTextBody value={body} onChange={setBody} onReady={onBodyReady} />
+          <RichTextBody value={body} onChange={setBody} onReady={onBodyReady} variables={variables} />
           {variableGroups.length > 0 && (
             <div style={{ marginTop: 6 }}>
               <Text size="xs" fw={600} c="dimmed" mb={4}>
