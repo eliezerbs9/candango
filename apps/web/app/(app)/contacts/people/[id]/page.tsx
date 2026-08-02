@@ -23,9 +23,11 @@ import {
 } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
-import { usePersonDetail, usePersons, useUpdatePerson } from '@/lib/api/hooks';
+import { usePersonDetail, usePersons, useQuickbooksStatus, useUpdatePerson } from '@/lib/api/hooks';
 import { ContactMessages } from '@/components/contacts/ContactMessages';
 import { ContactDeals } from '@/components/contacts/ContactDeals';
+import { ContactDocuments } from '@/components/contacts/ContactDocuments';
+import { ContactStats } from '@/components/contacts/ContactStats';
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
@@ -34,6 +36,7 @@ export default function PersonDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: person, isLoading } = usePersonDetail(id);
   const { data: persons = [] } = usePersons();
+  const { data: qb } = useQuickbooksStatus();
   const update = useUpdatePerson();
 
   const allTags = [...new Set(persons.flatMap((p) => p.tags ?? []))].sort((a, b) => a.localeCompare(b));
@@ -74,7 +77,7 @@ export default function PersonDetailPage() {
     <Stack gap="lg">
       <BackLink />
 
-      <Group justify="space-between" align="flex-start">
+      <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
         <div>
           <Text fw={700} fz="xl">
             {person.name}
@@ -92,10 +95,25 @@ export default function PersonDetailPage() {
             </Text>
           )}
         </div>
+        <ContactStats deals={person.deals} />
       </Group>
 
+      {/* Labels — moved out of Details into their own full-width bar */}
+      <Card withBorder radius="md" padding="sm">
+        <CreatableMultiSelect
+          label="Labels"
+          placeholder="Add labels"
+          options={allTags.map((t) => ({ value: t, label: t }))}
+          value={person.tags ?? []}
+          onChange={saveTags}
+          onCreate={async (t) => ({ value: t.trim(), label: t.trim() })}
+          createVerb="Add"
+          emptyText="Type to add a label"
+        />
+      </Card>
+
       <Group align="flex-start" gap="lg" wrap="wrap">
-        {/* Left column: details + labels + subscription */}
+        {/* Left column: details + subscription */}
         <Stack gap="md" style={{ flex: '1 1 320px', minWidth: 300 }}>
           <Card withBorder radius="md" padding="md">
             <Text fw={600} mb="sm">
@@ -112,22 +130,6 @@ export default function PersonDetailPage() {
                 {person.companies.length ? person.companies.map((c) => c.name).join(', ') : <Dim />}
               </DetailRow>
             </Stack>
-          </Card>
-
-          <Card withBorder radius="md" padding="md">
-            <Text fw={600} mb="sm">
-              Labels
-            </Text>
-            <CreatableMultiSelect
-              label=""
-              placeholder="Add labels"
-              options={allTags.map((t) => ({ value: t, label: t }))}
-              value={person.tags ?? []}
-              onChange={saveTags}
-              onCreate={async (t) => ({ value: t.trim(), label: t.trim() })}
-              createVerb="Add"
-              emptyText="Type to add a label"
-            />
           </Card>
 
           <Card withBorder radius="md" padding="md">
@@ -154,7 +156,7 @@ export default function PersonDetailPage() {
           </Card>
         </Stack>
 
-        {/* Right column: deals + messages */}
+        {/* Right column: deals + documents + messages */}
         <Stack gap="md" style={{ flex: '2 1 420px', minWidth: 320 }}>
           <Card withBorder radius="md" padding="md">
             <Text fw={600} mb="sm">
@@ -162,6 +164,15 @@ export default function PersonDetailPage() {
             </Text>
             <ContactDeals deals={person.deals} />
           </Card>
+
+          {(qb?.connected || person.documents.length > 0) && (
+            <Card withBorder radius="md" padding="md">
+              <Text fw={600} mb="sm">
+                Estimates &amp; invoices
+              </Text>
+              <ContactDocuments documents={person.documents} />
+            </Card>
+          )}
 
           <Card withBorder radius="md" padding="md">
             <Text fw={600} mb="sm">

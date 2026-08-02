@@ -54,13 +54,28 @@ export interface ContactMessage {
   dealId: string | null;
 }
 
+/** An estimate or invoice across a contact's deals. */
+export interface ContactDocument {
+  id: string;
+  kind: 'estimate' | 'invoice';
+  docNumber: string | null;
+  status: string;
+  total: number;
+  currency: string;
+  at: string;
+  dealId: string;
+  dealTitle: string | null;
+}
+
 export interface ApiPersonDetail extends ApiPerson {
   deals: ContactDeal[];
+  documents: ContactDocument[];
   messages: ContactMessage[];
 }
 
 export interface ApiCompanyDetail extends ApiCompany {
   deals: ContactDeal[];
+  documents: ContactDocument[];
   messages: ContactMessage[];
 }
 

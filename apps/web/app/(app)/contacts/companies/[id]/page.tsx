@@ -7,9 +7,11 @@ import { notifications } from '@mantine/notifications';
 import { IconArrowLeft, IconPhone, IconUsers, IconWorld } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
-import { useCompanies, useCompanyDetail, useUpdateCompany } from '@/lib/api/hooks';
+import { useCompanies, useCompanyDetail, useQuickbooksStatus, useUpdateCompany } from '@/lib/api/hooks';
 import { ContactDeals } from '@/components/contacts/ContactDeals';
+import { ContactDocuments } from '@/components/contacts/ContactDocuments';
 import { ContactMessages } from '@/components/contacts/ContactMessages';
+import { ContactStats } from '@/components/contacts/ContactStats';
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
@@ -18,6 +20,7 @@ export default function CompanyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: company, isLoading } = useCompanyDetail(id);
   const { data: companies = [] } = useCompanies();
+  const { data: qb } = useQuickbooksStatus();
   const update = useUpdateCompany();
 
   const allTags = [...new Set(companies.flatMap((c) => c.tags ?? []))].sort((a, b) => a.localeCompare(b));
@@ -44,16 +47,33 @@ export default function CompanyDetailPage() {
     <Stack gap="lg">
       <BackLink />
 
-      <div>
-        <Text fw={700} fz="xl">
-          {company.name}
-        </Text>
-        {company.domain && (
-          <Anchor href={`https://${company.domain}`} target="_blank" rel="noreferrer" size="sm" c="dimmed">
-            {company.domain}
-          </Anchor>
-        )}
-      </div>
+      <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+        <div>
+          <Text fw={700} fz="xl">
+            {company.name}
+          </Text>
+          {company.domain && (
+            <Anchor href={`https://${company.domain}`} target="_blank" rel="noreferrer" size="sm" c="dimmed">
+              {company.domain}
+            </Anchor>
+          )}
+        </div>
+        <ContactStats deals={company.deals} />
+      </Group>
+
+      {/* Labels — moved into their own full-width bar */}
+      <Card withBorder radius="md" padding="sm">
+        <CreatableMultiSelect
+          label="Labels"
+          placeholder="Add labels"
+          options={allTags.map((t) => ({ value: t, label: t }))}
+          value={company.tags ?? []}
+          onChange={saveTags}
+          onCreate={async (t) => ({ value: t.trim(), label: t.trim() })}
+          createVerb="Add"
+          emptyText="Type to add a label"
+        />
+      </Card>
 
       <Group align="flex-start" gap="lg" wrap="wrap">
         <Stack gap="md" style={{ flex: '1 1 320px', minWidth: 300 }}>
@@ -86,22 +106,6 @@ export default function CompanyDetailPage() {
               </DetailRow>
             </Stack>
           </Card>
-
-          <Card withBorder radius="md" padding="md">
-            <Text fw={600} mb="sm">
-              Labels
-            </Text>
-            <CreatableMultiSelect
-              label=""
-              placeholder="Add labels"
-              options={allTags.map((t) => ({ value: t, label: t }))}
-              value={company.tags ?? []}
-              onChange={saveTags}
-              onCreate={async (t) => ({ value: t.trim(), label: t.trim() })}
-              createVerb="Add"
-              emptyText="Type to add a label"
-            />
-          </Card>
         </Stack>
 
         <Stack gap="md" style={{ flex: '2 1 420px', minWidth: 320 }}>
@@ -111,6 +115,15 @@ export default function CompanyDetailPage() {
             </Text>
             <ContactDeals deals={company.deals} />
           </Card>
+
+          {(qb?.connected || company.documents.length > 0) && (
+            <Card withBorder radius="md" padding="md">
+              <Text fw={600} mb="sm">
+                Estimates &amp; invoices
+              </Text>
+              <ContactDocuments documents={company.documents} />
+            </Card>
+          )}
 
           <Card withBorder radius="md" padding="md">
             <Text fw={600} mb="sm">

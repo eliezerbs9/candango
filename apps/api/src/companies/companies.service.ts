@@ -120,6 +120,10 @@ export class CompaniesService {
         },
       }),
     ]);
+    const documents = await this.documentsForDeals(
+      orgId,
+      deals.map((d) => ({ id: d.id, title: d.title })),
+    );
     return {
       ...company,
       deals: deals.map((d) => ({
@@ -131,6 +135,7 @@ export class CompaniesService {
         status: d.status,
         stageName: d.stage?.name ?? null,
       })),
+      documents,
       messages: messages.map((m) => ({
         id: m.id,
         direction: m.direction,
@@ -141,6 +146,44 @@ export class CompaniesService {
         dealId: m.dealId,
       })),
     };
+  }
+
+  /** Estimates + invoices across a set of deals, newest first — for the contact detail views. */
+  private async documentsForDeals(orgId: string, deals: { id: string; title: string }[]) {
+    const dealIds = deals.map((d) => d.id);
+    if (dealIds.length === 0) return [];
+    const titleById = new Map(deals.map((d) => [d.id, d.title]));
+    const select = {
+      id: true,
+      docNumber: true,
+      status: true,
+      totalAmount: true,
+      currency: true,
+      txnDate: true,
+      createdAt: true,
+      dealId: true,
+    } as const;
+    const [estimates, invoices] = await Promise.all([
+      this.prisma.dealEstimate.findMany({ where: { orgId, dealId: { in: dealIds }, deletedAt: null }, select }),
+      this.prisma.dealInvoice.findMany({ where: { orgId, dealId: { in: dealIds }, deletedAt: null }, select }),
+    ]);
+    const rows = [
+      ...estimates.map((e) => ({ ...e, kind: 'estimate' as const })),
+      ...invoices.map((i) => ({ ...i, kind: 'invoice' as const })),
+    ];
+    return rows
+      .map((r) => ({
+        id: r.id,
+        kind: r.kind,
+        docNumber: r.docNumber,
+        status: r.status,
+        total: r.totalAmount,
+        currency: r.currency,
+        at: (r.txnDate ?? r.createdAt).toISOString(),
+        dealId: r.dealId,
+        dealTitle: titleById.get(r.dealId) ?? null,
+      }))
+      .sort((a, b) => b.at.localeCompare(a.at));
   }
 
   async update(orgId: string, id: string, dto: UpdateCompanyDto) {
