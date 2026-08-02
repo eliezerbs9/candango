@@ -1,14 +1,18 @@
-import { Controller, Delete, Get, HttpCode, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser, type AuthContext } from '../auth/current-user.decorator';
 import { QuickbooksOAuthService } from './quickbooks-oauth.service';
+import { QuickbooksApiService } from './quickbooks-api.service';
+import { CreateQbItemDto } from './dto/qb-item.dto';
 
 @Controller('integrations/quickbooks')
 export class QuickbooksController {
   constructor(
     private readonly qbo: QuickbooksOAuthService,
+    private readonly api: QuickbooksApiService,
     private readonly config: ConfigService,
   ) {}
 
@@ -50,5 +54,18 @@ export class QuickbooksController {
   @HttpCode(204)
   disconnect(@CurrentUser() u: AuthContext) {
     return this.qbo.disconnect(u.orgId);
+  }
+
+  /** Org-level QuickBooks products/services — for the Invoicing settings catalog. */
+  @UseGuards(JwtAuthGuard)
+  @Get('items')
+  items(@CurrentUser() u: AuthContext) {
+    return this.api.listItems(u.orgId);
+  }
+
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Post('items')
+  createItem(@CurrentUser() u: AuthContext, @Body() dto: CreateQbItemDto) {
+    return this.api.createItem(u.orgId, dto);
   }
 }

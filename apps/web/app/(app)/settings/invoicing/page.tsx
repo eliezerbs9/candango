@@ -28,15 +28,19 @@ import { Money } from '@/components/primitives/Money';
 import { useAuth } from '@/lib/auth/useAuth';
 import {
   useCreateEstimateItem,
+  useCreateQbItem,
   useDeleteEstimateItem,
   useEstimateItems,
   useOrganization,
+  useQbCatalog,
   useQuickbooksStatus,
   useUpdateEstimateItem,
   useUpdateOrganization,
 } from '@/lib/api/hooks';
 import { POPULAR_UNITS } from '@/lib/units';
 import type { EstimateItem } from '@/lib/api/estimate-items';
+
+type CatalogItem = { id: string; name: string; description?: string | null; unit?: string | null; unitPrice?: number | null };
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
@@ -49,6 +53,9 @@ export default function EstimatesSettingsPage() {
   const connected = !!qb?.connected;
   const updateOrg = useUpdateOrganization();
   const { data: items = [], isLoading } = useEstimateItems();
+  const qbCatalog = useQbCatalog(connected);
+  // When QuickBooks is connected the catalog is its products/services; otherwise the local catalog.
+  const catalog: CatalogItem[] = connected ? qbCatalog.data ?? [] : items;
 
   const [taxPct, setTaxPct] = useState<number | string>(0);
   const [taxDefault, setTaxDefault] = useState(false);
@@ -144,16 +151,23 @@ export default function EstimatesSettingsPage() {
       <Divider />
 
       {/* Items catalog */}
-      <Group justify="space-between">
-        <Text fw={600}>Item catalog</Text>
-        {isAdmin && (
-          <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
-            Add item
-          </Button>
+      <div>
+        <Group justify="space-between">
+          <Text fw={600}>Item catalog{connected ? ' (QuickBooks)' : ''}</Text>
+          {isAdmin && (
+            <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
+              Add item
+            </Button>
+          )}
+        </Group>
+        {connected && (
+          <Text size="xs" c="dimmed">
+            These are your QuickBooks products/services. New items are created in QuickBooks; edit or remove them there.
+          </Text>
         )}
-      </Group>
+      </div>
 
-      {items.length === 0 ? (
+      {catalog.length === 0 ? (
         <Text size="sm" c="dimmed">
           No items yet. Add products/services you use often to add them to estimates in one click.
         </Text>
@@ -170,7 +184,7 @@ export default function EstimatesSettingsPage() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {items.map((it) => (
+              {catalog.map((it) => (
                 <Table.Tr key={it.id}>
                   <Table.Td>
                     <Text fw={500}>{it.name}</Text>
@@ -189,7 +203,7 @@ export default function EstimatesSettingsPage() {
                     {it.unitPrice != null ? <Money value={it.unitPrice} currency="USD" /> : <Text c="dimmed">—</Text>}
                   </Table.Td>
                   <Table.Td>
-                    {isAdmin && (
+                    {isAdmin && !connected && (
                       <Menu position="bottom-end" withinPortal shadow="sm">
                         <Menu.Target>
                           <ActionIcon variant="subtle" color="gray" aria-label="Actions">
@@ -197,10 +211,10 @@ export default function EstimatesSettingsPage() {
                           </ActionIcon>
                         </Menu.Target>
                         <Menu.Dropdown>
-                          <Menu.Item leftSection={<IconPencil size={14} />} onClick={() => openEdit(it)}>
+                          <Menu.Item leftSection={<IconPencil size={14} />} onClick={() => openEdit(it as EstimateItem)}>
                             Edit
                           </Menu.Item>
-                          <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => remove(it)}>
+                          <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => remove(it as EstimateItem)}>
                             Delete
                           </Menu.Item>
                         </Menu.Dropdown>
@@ -214,14 +228,25 @@ export default function EstimatesSettingsPage() {
         </Card>
       )}
 
-      <ItemModal opened={opened} onClose={ctl.close} editing={editing} />
+      <ItemModal opened={opened} onClose={ctl.close} editing={editing} qbo={connected} />
     </Stack>
   );
 }
 
-function ItemModal({ opened, onClose, editing }: { opened: boolean; onClose: () => void; editing: EstimateItem | null }) {
+function ItemModal({
+  opened,
+  onClose,
+  editing,
+  qbo,
+}: {
+  opened: boolean;
+  onClose: () => void;
+  editing: EstimateItem | null;
+  qbo: boolean;
+}) {
   const create = useCreateEstimateItem();
   const update = useUpdateEstimateItem();
+  const createQb = useCreateQbItem();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [unit, setUnit] = useState('');
@@ -240,12 +265,7 @@ function ItemModal({ opened, onClose, editing }: { opened: boolean; onClose: () 
       notifications.show({ message: 'Name is required', color: 'red' });
       return;
     }
-    const body = {
-      name: name.trim(),
-      description: description.trim() || undefined,
-      unit: unit.trim() || undefined,
-      unitPrice: price === '' ? undefined : Math.round(Number(price) * 100),
-    };
+    const unitPrice = price === '' ? undefined : Math.round(Number(price) * 100);
     const done = {
       onSuccess: () => {
         notifications.show({ message: editing ? 'Item saved' : 'Item added', color: 'green' });
@@ -253,12 +273,23 @@ function ItemModal({ opened, onClose, editing }: { opened: boolean; onClose: () 
       },
       onError: fail,
     };
+    if (qbo) {
+      // QuickBooks items have no unit of measure.
+      createQb.mutate({ name: name.trim(), description: description.trim() || undefined, unitPrice }, done);
+      return;
+    }
+    const body = { name: name.trim(), description: description.trim() || undefined, unit: unit.trim() || undefined, unitPrice };
     if (editing) update.mutate({ id: editing.id, body }, done);
     else create.mutate(body, done);
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title={editing ? 'Edit item' : 'New item'} centered>
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={qbo ? 'New QuickBooks item' : editing ? 'Edit item' : 'New item'}
+      centered
+    >
       <Stack gap="sm">
         <TextInput label="Name" required value={name} onChange={(e) => setName(e.currentTarget.value)} data-autofocus />
         <Textarea
@@ -269,14 +300,16 @@ function ItemModal({ opened, onClose, editing }: { opened: boolean; onClose: () 
           value={description}
           onChange={(e) => setDescription(e.currentTarget.value)}
         />
-        <Autocomplete
-          label="Unit"
-          description="Unit of measure — pick a common one or type your own"
-          placeholder="unit"
-          data={POPULAR_UNITS}
-          value={unit}
-          onChange={setUnit}
-        />
+        {!qbo && (
+          <Autocomplete
+            label="Unit"
+            description="Unit of measure — pick a common one or type your own"
+            placeholder="unit"
+            data={POPULAR_UNITS}
+            value={unit}
+            onChange={setUnit}
+          />
+        )}
         <NumberInput
           label="Price"
           description="Optional — leave blank to set it per estimate"
@@ -291,7 +324,7 @@ function ItemModal({ opened, onClose, editing }: { opened: boolean; onClose: () 
           <Button variant="default" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={submit} loading={create.isPending || update.isPending}>
+          <Button onClick={submit} loading={create.isPending || update.isPending || createQb.isPending}>
             {editing ? 'Save' : 'Add'}
           </Button>
         </Group>

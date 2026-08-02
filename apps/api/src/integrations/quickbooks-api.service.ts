@@ -200,6 +200,40 @@ export class QuickbooksApiService {
     }));
   }
 
+  private incomeAccountCache = new Map<string, string>(); // realmId → default Income account id
+  private async defaultIncomeAccountId(orgId: string, realmId: string): Promise<string> {
+    const cached = this.incomeAccountCache.get(realmId);
+    if (cached) return cached;
+    const r = await this.query(orgId, "select Id from Account where AccountType = 'Income' and Active = true MAXRESULTS 1");
+    const id = r?.QueryResponse?.Account?.[0]?.Id;
+    if (!id) throw new BadRequestException('No QuickBooks income account found to create an item');
+    this.incomeAccountCache.set(realmId, id);
+    return id;
+  }
+
+  /** Create a Service item in QuickBooks (needs an income account). */
+  async createItem(
+    orgId: string,
+    input: { name: string; description?: string; unitPrice?: number },
+  ): Promise<{ id: string; name: string; description: string | null; unitPrice: number | null }> {
+    const { realmId } = await this.authContext(orgId);
+    const body: Record<string, unknown> = {
+      Name: input.name,
+      Type: 'Service',
+      IncomeAccountRef: { value: await this.defaultIncomeAccountId(orgId, realmId) },
+    };
+    if (input.description) body.Description = input.description;
+    if (input.unitPrice != null) body.UnitPrice = toQbAmount(input.unitPrice);
+    const r = await this.request(orgId, 'POST', 'item', body);
+    const it = r.Item;
+    return {
+      id: it.Id,
+      name: it.Name,
+      description: it.Description ?? null,
+      unitPrice: it.UnitPrice != null ? fromQbAmount(it.UnitPrice) : null,
+    };
+  }
+
   // --- Customers ---
   async searchCustomers(orgId: string, q: string): Promise<{ id: string; name: string }[]> {
     const safe = q.replace(/['\\]/g, '');

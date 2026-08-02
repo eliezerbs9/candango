@@ -31,6 +31,15 @@ export function getQbItems(token: string, dealId: string) {
   return apiFetch<QbItem[]>(`/deals/${dealId}/quickbooks/items`, { token });
 }
 
+/** Org-level QuickBooks products/services (for the Invoicing settings catalog). */
+export function getQbCatalog(token: string) {
+  return apiFetch<QbItem[]>('/integrations/quickbooks/items', { token });
+}
+
+export function createQbItem(token: string, body: { name: string; description?: string; unitPrice?: number }) {
+  return apiFetch<QbItem>('/integrations/quickbooks/items', { method: 'POST', token, body: JSON.stringify(body) });
+}
+
 export function getDealEstimates(token: string, dealId: string) {
   return apiFetch<DealDoc[]>(`/deals/${dealId}/estimates`, { token });
 }

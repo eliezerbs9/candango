@@ -107,6 +107,8 @@ import {
   getDealEstimates,
   getDealInvoices,
   getQbItems,
+  getQbCatalog,
+  createQbItem,
   getQbLinkStatus,
   linkQuickbooks,
   searchQbParents,
@@ -981,6 +983,26 @@ export function useQbItems(dealId: string, enabled = true) {
     queryFn: () => getQbItems(token!, dealId),
     enabled: !!token && !!dealId && enabled,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+// Org-level QuickBooks catalog (Invoicing settings).
+export function useQbCatalog(enabled = true) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['qb-catalog'],
+    queryFn: () => getQbCatalog(token!),
+    enabled: !!token && enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useCreateQbItem() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; description?: string; unitPrice?: number }) => createQbItem(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['qb-catalog'] }),
   });
 }
 
