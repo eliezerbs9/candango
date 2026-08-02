@@ -20,6 +20,33 @@ export interface AutomationRow {
   template?: { subject: string; body: string } | null;
 }
 
+export interface MarketingFireRow {
+  id: string;
+  template?: { subject: string; body: string } | null;
+}
+
+/** A contact resolved from a marketing audience (see EmailAutomationsService.resolveAudience). */
+export interface MarketingRecipient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  name: string;
+  emails: unknown;
+  phones: unknown;
+  emailUnsubToken: string;
+  companyLinks: { company: { name: string } }[];
+}
+
+const stripHtml = (html: string) =>
+  html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const escapeText = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 /**
  * Performs an automation's action for a deal — either sending an email template (from the deal
  * owner's mailbox, with the workspace signature) or creating an activity/task on the deal. Shared
@@ -96,6 +123,53 @@ export class EmailAutomationsExecutor {
     } catch (err) {
       await this.handleEmailError(orgId, auto.id, err);
     }
+  }
+
+  /**
+   * Fire a marketing automation: render its (marketing-scoped) template for each resolved recipient
+   * and enqueue a send from the workspace via Brevo, with a per-contact unsubscribe link appended.
+   * Recipients are already filtered to subscribed contacts with an email (see resolveAudience).
+   */
+  async fireMarketing(orgId: string, auto: MarketingFireRow, recipients: MarketingRecipient[]): Promise<void> {
+    if (!auto.template || recipients.length === 0) return;
+    const org = await this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true } });
+
+    let sent = 0;
+    for (const r of recipients) {
+      const emails = (r.emails as string[]) ?? [];
+      const to = emails.find((e) => typeof e === 'string' && e);
+      if (!to) continue;
+      const ctx = buildTemplateContext({
+        person: { firstName: r.firstName, lastName: r.lastName, name: r.name, emails: r.emails, phones: r.phones },
+        company: r.companyLinks[0]?.company ?? null,
+        deal: null,
+        sender: null,
+        workspace: org,
+      });
+      const subject = renderTemplate(auto.template.subject, ctx);
+      const bodyHtml = renderTemplate(auto.template.body, ctx);
+      const unsubUrl = this.mail.unsubscribeUrl(r.emailUnsubToken);
+      const html = bodyHtml + this.unsubscribeFooter(unsubUrl, org?.name ?? '');
+      const text = `${stripHtml(bodyHtml)}\n\nUnsubscribe: ${unsubUrl}`;
+      try {
+        await this.mail.sendMarketing(to, r.name, { subject, html, text });
+        sent++;
+      } catch (err) {
+        this.logger.warn(`marketing ${auto.id} enqueue to ${to} failed: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+    this.logger.log(`marketing automation ${auto.id} enqueued ${sent}/${recipients.length} sends`);
+  }
+
+  /** CAN-SPAM style unsubscribe footer appended to every marketing email. */
+  private unsubscribeFooter(unsubUrl: string, orgName: string): string {
+    return (
+      `<hr style="margin:24px 0;border:none;border-top:1px solid #e5e5e5" />` +
+      `<p style="font-size:12px;color:#888;line-height:1.5">` +
+      `You received this because you subscribed to updates${orgName ? ` from ${escapeText(orgName)}` : ''}. ` +
+      `<a href="${unsubUrl}" style="color:#888">Unsubscribe</a>.` +
+      `</p>`
+    );
   }
 
   /**

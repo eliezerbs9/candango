@@ -3,9 +3,15 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser, type AuthContext } from '../auth/current-user.decorator';
 import { EmailAutomationsService } from './email-automations.service';
-import { CreateEmailAutomationDto, UpdateEmailAutomationDto } from './dto/email-automation.dto';
+import {
+  CreateEmailAutomationDto,
+  CreateMarketingAutomationDto,
+  UpdateEmailAutomationDto,
+  UpdateMarketingAutomationDto,
+} from './dto/email-automation.dto';
 import { AUTOMATION_TRIGGERS } from './triggers';
 import { AUTOMATION_CATEGORIES } from './automation-categories';
+import type { MarketingAudience } from './marketing-audience';
 
 @UseGuards(JwtAuthGuard)
 @Controller('email-automations')
@@ -33,6 +39,30 @@ export class EmailAutomationsController {
   @UseGuards(AdminGuard)
   create(@CurrentUser() u: AuthContext, @Body() dto: CreateEmailAutomationDto) {
     return this.svc.create(u.orgId, u.userId, dto);
+  }
+
+  // ── Marketing automations ──
+  @Post('marketing')
+  @UseGuards(AdminGuard)
+  createMarketing(@CurrentUser() u: AuthContext, @Body() dto: CreateMarketingAutomationDto) {
+    return this.svc.createMarketing(u.orgId, u.userId, dto);
+  }
+
+  @Patch('marketing/:id')
+  @UseGuards(AdminGuard)
+  updateMarketing(
+    @CurrentUser() u: AuthContext,
+    @Param('id') id: string,
+    @Body() dto: UpdateMarketingAutomationDto,
+  ) {
+    return this.svc.updateMarketing(u.orgId, id, dto);
+  }
+
+  /** How many contacts an audience currently resolves to (for the marketing builder). */
+  @Post('marketing/audience-preview')
+  async audiencePreview(@CurrentUser() u: AuthContext, @Body() body: { audience: MarketingAudience }) {
+    const people = await this.svc.resolveAudience(u.orgId, body.audience);
+    return { count: people.length };
   }
 
   @Patch(':id')

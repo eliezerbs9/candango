@@ -5,8 +5,12 @@ import { Job, Queue } from 'bullmq';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailAutomationsExecutor } from './email-automations.executor';
+import { EmailAutomationsService } from './email-automations.service';
+import { MarketingAudience } from './marketing-audience';
+import { MarketingSchedule, computeNextRun } from './marketing-schedule';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MARKETING_SCAN_MS = 5 * 60 * 1000; // marketing schedules fire at HH:MM, so poll every 5 min
 
 /**
  * Time-based automations (FR-16.3). A daily BullMQ job scans for deals matching each `follow_up`
@@ -22,19 +26,55 @@ export class AutomationScanProcessor extends WorkerHost implements OnModuleInit 
   constructor(
     private readonly prisma: PrismaService,
     private readonly executor: EmailAutomationsExecutor,
+    private readonly svc: EmailAutomationsService,
     @InjectQueue('automation-scan') private readonly queue: Queue,
   ) {
     super();
   }
 
   async onModuleInit() {
-    // One daily repeatable (BullMQ dedupes by key across instances).
+    // Repeatables (BullMQ dedupes by key across instances): daily deal follow-ups + 5-min marketing.
     await this.queue.add('scan', {}, { repeat: { every: DAY_MS }, removeOnComplete: true, removeOnFail: true });
+    await this.queue.add('marketing', {}, { repeat: { every: MARKETING_SCAN_MS }, removeOnComplete: true, removeOnFail: true });
   }
 
   async process(job: Job): Promise<void> {
-    if (job.name !== 'scan') return;
-    await this.scanFollowUp();
+    if (job.name === 'scan') await this.scanFollowUp();
+    else if (job.name === 'marketing') await this.scanMarketing();
+  }
+
+  /**
+   * Fire every marketing automation whose nextRunAt is due. Each row is claimed by advancing its
+   * nextRunAt atomically (updateMany guarded on the current value) BEFORE sending, so it fires once
+   * even across API instances. A one-time schedule disables itself after firing.
+   */
+  private async scanMarketing(): Promise<void> {
+    const now = new Date();
+    const autos = await this.prisma.emailAutomation.findMany({
+      where: { kind: 'marketing', enabled: true, archivedAt: null, nextRunAt: { lte: now } },
+      include: { template: { select: { subject: true, body: true } } },
+    });
+
+    for (const auto of autos) {
+      const cfg = (auto.config ?? {}) as { schedule?: MarketingSchedule; audience?: MarketingAudience };
+      if (!cfg.schedule || !cfg.audience) continue;
+      const isOnce = cfg.schedule.type === 'once';
+      const next = isOnce ? null : computeNextRun(cfg.schedule, auto.timezone ?? 'UTC', now, auto.startAt ?? undefined);
+
+      // Claim: only proceed if we win the race to move nextRunAt off its current value.
+      const claimed = await this.prisma.emailAutomation.updateMany({
+        where: { id: auto.id, nextRunAt: auto.nextRunAt },
+        data: { nextRunAt: next, lastRunAt: now, ...(isOnce ? { enabled: false } : {}) },
+      });
+      if (claimed.count === 0) continue;
+
+      try {
+        const recipients = await this.svc.resolveAudience(auto.orgId, cfg.audience);
+        await this.executor.fireMarketing(auto.orgId, auto, recipients);
+      } catch (e) {
+        this.logger.warn(`marketing automation ${auto.id} failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
   }
 
   private async scanFollowUp(): Promise<void> {

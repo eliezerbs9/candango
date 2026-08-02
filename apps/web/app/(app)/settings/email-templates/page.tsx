@@ -15,6 +15,7 @@ import {
   Modal,
   Paper,
   SegmentedControl,
+  Select,
   SimpleGrid,
   Stack,
   Text,
@@ -513,29 +514,27 @@ function TemplateModal({
               onChange={(e) => setName(e.currentTarget.value)}
               data-autofocus
             />
-            <div>
-              <Group justify="space-between" align="center" mb={4}>
-                <Text size="sm" fw={500}>
-                  Template type
-                </Text>
-                <SegmentedControl
-                  size="xs"
-                  value={scope}
-                  onChange={(v) => setScope(v as TemplateScope)}
-                  disabled={!!editing}
-                  data={[
-                    { label: 'Deal email', value: 'deal' },
-                    { label: 'Marketing email', value: 'marketing' },
-                  ]}
-                />
-              </Group>
-              <Text size="xs" c="dimmed">
-                {scope === 'deal'
+            <Select
+              label="Template type"
+              value={scope}
+              onChange={(v) => setScope((v as TemplateScope) ?? 'deal')}
+              disabled={!!editing}
+              allowDeselect={false}
+              data={[
+                { label: 'Deal email', value: 'deal' },
+                { label: 'Marketing email', value: 'marketing' },
+              ]}
+              description={
+                scope === 'deal'
                   ? 'Sent from a deal — can use contact, company, deal and your (sender) details. Available in the deal send box and deal automations.'
-                  : 'Broadcast to an audience of contacts — can use contact, company and workspace details only (no deal or sender). Available in marketing automations.'}
-                {editing ? ' The type can’t be changed after creation.' : ''}
+                  : 'Broadcast to an audience of contacts — contact, company and workspace details only (no deal or sender). Available in marketing automations.'
+              }
+            />
+            {editing && (
+              <Text size="xs" c="dimmed" mt={-6}>
+                The type can’t be changed after creation.
               </Text>
-            </div>
+            )}
             <TextInput
               ref={subjectRef}
               label="Subject"

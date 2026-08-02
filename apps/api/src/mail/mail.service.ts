@@ -81,4 +81,14 @@ export class MailService {
       ...contactEmail({ name, email, message }),
     });
   }
+
+  /** The public unsubscribe URL for a contact's opaque token. */
+  unsubscribeUrl(token: string) {
+    return `${this.appUrl}/unsubscribe/${encodeURIComponent(token)}`;
+  }
+
+  /** Enqueue an already-rendered marketing email (subject/html/text built by the caller). */
+  sendMarketing(to: string, name: string | null, rendered: RenderedEmail) {
+    return this.enqueue({ to, name, ...rendered });
+  }
 }
