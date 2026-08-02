@@ -22,7 +22,12 @@ const SECTIONS = [
 export function SettingsNav() {
   const pathname = usePathname();
   return (
-    <Group gap="xs" wrap="nowrap" mb="lg" style={{ overflowX: 'auto' }}>
+    <Group
+      gap={2}
+      wrap="nowrap"
+      mb="lg"
+      style={{ overflowX: 'auto', borderBottom: '1px solid var(--mantine-color-gray-3)' }}
+    >
       {SECTIONS.map((s) => {
         const active = pathname.startsWith(s.href);
         return (
@@ -32,12 +37,14 @@ export function SettingsNav() {
             style={{
               textDecoration: 'none',
               whiteSpace: 'nowrap',
-              padding: '6px 12px',
-              borderRadius: 8,
+              padding: '10px 14px',
+              marginBottom: -1, // active underline sits on the container's divider
               fontSize: 14,
-              fontWeight: active ? 600 : 400,
+              fontWeight: active ? 600 : 500,
               color: active ? 'var(--mantine-color-candango-7)' : 'var(--mantine-color-dimmed)',
-              background: active ? 'var(--mantine-color-candango-0)' : 'transparent',
+              borderBottom: active
+                ? '2px solid var(--mantine-color-candango-6)'
+                : '2px solid transparent',
             }}
           >
             {s.label}
