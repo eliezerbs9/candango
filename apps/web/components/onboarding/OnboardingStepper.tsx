@@ -323,8 +323,7 @@ export function OnboardingStepper() {
                 <List.Item>Sync your calendar &amp; meetings</List.Item>
               </List>
               <Text size="sm" c="dimmed">
-                We recommend connecting now to get 100% of the features. You can also do it later under Settings →
-                Integrations (per user).
+                We recommend connecting now to get 100% of the features. You can also do it later.
               </Text>
               <Button
                 leftSection={<IconBrandGoogle size={16} />}

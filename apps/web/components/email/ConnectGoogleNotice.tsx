@@ -40,9 +40,6 @@ export function ConnectGoogleNotice() {
         >
           Connect Gmail
         </Button>
-        <Text size="xs" c="dimmed">
-          You can also connect it under Settings → Integrations (each user connects their own Google).
-        </Text>
       </Stack>
     </Card>
   );

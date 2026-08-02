@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   ActionIcon,
   Alert,
+  Anchor,
   Badge,
   Button,
   Card,
@@ -149,7 +151,11 @@ export default function AutomationsSettingsPage() {
       {!google?.mailbox && (
         <Alert variant="light" color="yellow" icon={<IconBrandGoogle size={16} />} title="Email actions need Google">
           Your workspace has no Google connection, so <b>“send an email” automations won&apos;t fire</b> — only
-          “create an activity” ones will. Connect Google under Settings → Integrations to enable email automations.
+          “create an activity” ones will. Connect Google under{' '}
+          <Anchor component={Link} href="/settings/integrations">
+            Settings → Integrations
+          </Anchor>{' '}
+          to enable email automations.
         </Alert>
       )}
 
