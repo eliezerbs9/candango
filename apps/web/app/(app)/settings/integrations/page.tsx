@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Alert, Badge, Button, Card, Group, SimpleGrid, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconBrandGoogle, IconInfoCircle, IconReceipt } from '@tabler/icons-react';
@@ -14,18 +15,31 @@ import {
   useQuickbooksStatus,
 } from '@/lib/api/hooks';
 
-/** Shows a toast for ?google=…/?quickbooks=… set by the OAuth callback redirect, then cleans the URL. */
-function useOAuthResultToast(param: string, label: string) {
+/** Shows a toast for ?google=…/?quickbooks=… set by the OAuth callback redirect, then cleans the URL.
+ *  `redirectTo` (used for QuickBooks): after a successful connect, send the user there after 5s so they
+ *  can review their imported items and decide on tax. */
+function useOAuthResultToast(param: string, label: string, redirectTo?: string) {
+  const router = useRouter();
   useEffect(() => {
     const result = new URLSearchParams(window.location.search).get(param);
     if (!result) return;
-    notifications.show(
-      result === 'connected'
-        ? { message: `${label} connected`, color: 'green' }
-        : { message: `${label} connection failed — please try again`, color: 'red' },
-    );
     window.history.replaceState(null, '', window.location.pathname);
-  }, [param, label]);
+    if (result !== 'connected') {
+      notifications.show({ message: `${label} connection failed — please try again`, color: 'red' });
+      return;
+    }
+    if (!redirectTo) {
+      notifications.show({ message: `${label} connected`, color: 'green' });
+      return;
+    }
+    notifications.show({
+      message: `${label} connected — taking you to Invoicing settings to review your items and tax…`,
+      color: 'green',
+      autoClose: 5000,
+    });
+    const t = setTimeout(() => router.push(redirectTo), 5000);
+    return () => clearTimeout(t);
+  }, [param, label, redirectTo, router]);
 }
 
 function GoogleCard() {
@@ -76,7 +90,7 @@ function QuickbooksCard() {
   const connect = useConnectQuickbooks();
   const disconnect = useDisconnectQuickbooks();
   const connected = !!status?.connected;
-  useOAuthResultToast('quickbooks', 'QuickBooks');
+  useOAuthResultToast('quickbooks', 'QuickBooks', '/settings/invoicing');
 
   const onConnect = async () => {
     try {

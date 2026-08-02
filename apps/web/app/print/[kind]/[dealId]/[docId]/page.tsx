@@ -63,8 +63,8 @@ export default function PrintDocPage() {
         .addrs { display: flex; gap: 48px; margin-top: 24px; }
         .memo { margin-top: 24px; padding-top: 12px; border-top: 1px solid #eee; color: #333; white-space: pre-wrap; }
         .toolbar { margin-bottom: 16px; }
-        .brandbar { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
-        .brandbar img { height: 48px; width: auto; max-width: 200px; object-fit: contain; }
+        .brandbar { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 28px; }
+        .brandbar img { height: 52px; width: auto; max-width: 220px; object-fit: contain; }
         .brandname { font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }
         .totals { margin-top: 16px; margin-left: auto; width: 260px; }
         .totals .line { display: flex; justify-content: space-between; padding: 3px 0; color: #444; }
