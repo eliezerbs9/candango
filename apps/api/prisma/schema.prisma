@@ -825,15 +825,31 @@ model EmailAutomation {
   name            String
   enabled         Boolean   @default(true)
   trigger         String
+  action          String    @default("send_email") // send_email | create_activity
   config          Json      @default("{}")
-  templateId      String
+  templateId      String? // only for the send_email action
   createdByUserId String?
   archivedAt      DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  organization Organization  @relation(fields: [orgId], references: [id])
-  template     EmailTemplate @relation(fields: [templateId], references: [id])
+  organization Organization   @relation(fields: [orgId], references: [id])
+  template     EmailTemplate? @relation(fields: [templateId], references: [id])
+  runs         AutomationRun[]
 
+  @@index([orgId])
+}
+
+/// De-dupes time-based automation firings: a (automation, deal) pair fires at most once.
+model AutomationRun {
+  id           String   @id @default(cuid())
+  orgId        String
+  automationId String
+  dealId       String
+  firedAt      DateTime @default(now())
+
+  automation EmailAutomation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@unique([automationId, dealId])
   @@index([orgId])
 }

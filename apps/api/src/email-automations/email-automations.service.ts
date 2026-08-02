@@ -8,8 +8,9 @@ const shape = (a: {
   name: string;
   enabled: boolean;
   trigger: string;
+  action: string;
   config: Prisma.JsonValue;
-  templateId: string;
+  templateId: string | null;
   template?: { name: string } | null;
   updatedAt: Date;
 }) => ({
@@ -17,6 +18,7 @@ const shape = (a: {
   name: a.name,
   enabled: a.enabled,
   trigger: a.trigger,
+  action: a.action,
   config: (a.config ?? {}) as Record<string, unknown>,
   templateId: a.templateId,
   templateName: a.template?.name ?? null,
@@ -36,21 +38,25 @@ export class EmailAutomationsService {
     return rows.map(shape);
   }
 
-  /** A template must exist (and belong to this org) before an automation can reference it. */
-  private async assertTemplate(orgId: string, templateId: string) {
-    const t = await this.prisma.emailTemplate.findFirst({ where: { id: templateId, orgId, archivedAt: null } });
-    if (!t) throw new BadRequestException('Template not found');
+  /** The send_email action needs a template that belongs to this org. */
+  private async validateAction(orgId: string, action: string, templateId?: string | null) {
+    if (action === 'send_email') {
+      if (!templateId) throw new BadRequestException('Pick a template for the email action');
+      const t = await this.prisma.emailTemplate.findFirst({ where: { id: templateId, orgId, archivedAt: null } });
+      if (!t) throw new BadRequestException('Template not found');
+    }
   }
 
   async create(orgId: string, userId: string, dto: CreateEmailAutomationDto) {
-    await this.assertTemplate(orgId, dto.templateId);
+    await this.validateAction(orgId, dto.action, dto.templateId);
     const row = await this.prisma.emailAutomation.create({
       data: {
         orgId,
         createdByUserId: userId,
         name: dto.name.trim(),
         trigger: dto.trigger,
-        templateId: dto.templateId,
+        action: dto.action,
+        templateId: dto.action === 'send_email' ? dto.templateId : null,
         config: (dto.config ?? {}) as Prisma.InputJsonValue,
         enabled: dto.enabled ?? true,
       },
@@ -62,13 +68,18 @@ export class EmailAutomationsService {
   async update(orgId: string, id: string, dto: UpdateEmailAutomationDto) {
     const existing = await this.prisma.emailAutomation.findFirst({ where: { id, orgId, archivedAt: null } });
     if (!existing) throw new NotFoundException('Automation not found');
-    if (dto.templateId) await this.assertTemplate(orgId, dto.templateId);
+    const action = dto.action ?? existing.action;
+    const templateId = dto.templateId !== undefined ? dto.templateId : existing.templateId;
+    if (dto.action !== undefined || dto.templateId !== undefined) await this.validateAction(orgId, action, templateId);
     const row = await this.prisma.emailAutomation.update({
       where: { id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
         ...(dto.trigger !== undefined ? { trigger: dto.trigger } : {}),
-        ...(dto.templateId !== undefined ? { templateId: dto.templateId } : {}),
+        ...(dto.action !== undefined ? { action: dto.action } : {}),
+        ...(dto.action !== undefined || dto.templateId !== undefined
+          ? { templateId: action === 'send_email' ? templateId : null }
+          : {}),
         ...(dto.config !== undefined ? { config: dto.config as Prisma.InputJsonValue } : {}),
         ...(dto.enabled !== undefined ? { enabled: dto.enabled } : {}),
       },

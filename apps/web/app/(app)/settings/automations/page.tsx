@@ -75,8 +75,8 @@ export default function AutomationsSettingsPage() {
         <div>
           <Text fw={600}>Automations</Text>
           <Text size="sm" c="dimmed">
-            Automatically send an email template when something happens on a deal. The email goes from the deal
-            owner&apos;s mailbox to the deal&apos;s primary contact, with your signature.
+            When something happens on a deal, automatically <b>send an email</b> (from the deal owner&apos;s mailbox to
+            the primary contact, with your signature) or <b>create a task</b> for the deal owner.
           </Text>
         </div>
         {isAdmin && (
@@ -86,18 +86,11 @@ export default function AutomationsSettingsPage() {
               setEditing(null);
               ctl.open();
             }}
-            disabled={templates.length === 0}
           >
             New automation
           </Button>
         )}
       </Group>
-
-      {templates.length === 0 && (
-        <Text size="sm" c="dimmed">
-          Create an email template first — automations send a template.
-        </Text>
-      )}
 
       {automations.length === 0 ? (
         <Text size="sm" c="dimmed">
@@ -113,7 +106,12 @@ export default function AutomationsSettingsPage() {
                   <div style={{ minWidth: 0 }}>
                     <Text fw={500}>{a.name}</Text>
                     <Text size="sm" c="dimmed" lineClamp={1}>
-                      When <b>{triggerLabel[a.trigger] ?? a.trigger}</b> → send <b>{a.templateName ?? 'template'}</b>
+                      When <b>{triggerLabel[a.trigger] ?? a.trigger}</b> →{' '}
+                      {a.action === 'create_activity' ? (
+                        <>create a <b>{(a.config.activityType as string) ?? 'task'}</b></>
+                      ) : (
+                        <>send <b>{a.templateName ?? 'template'}</b></>
+                      )}
                     </Text>
                   </div>
                 </Group>
@@ -169,6 +167,7 @@ function AutomationModal({
 
   const [name, setName] = useState('');
   const [trigger, setTrigger] = useState<string | null>(null);
+  const [action, setAction] = useState<'send_email' | 'create_activity'>('send_email');
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [config, setConfig] = useState<Record<string, unknown>>({});
   const [enabled, setEnabled] = useState(true);
@@ -177,19 +176,36 @@ function AutomationModal({
     if (!opened) return;
     setName(editing?.name ?? '');
     setTrigger(editing?.trigger ?? null);
+    setAction(editing?.action ?? 'send_email');
     setTemplateId(editing?.templateId ?? null);
     setConfig(editing?.config ?? {});
     setEnabled(editing?.enabled ?? true);
   }, [opened, editing]);
 
   const def = triggers.find((t) => t.key === trigger);
+  const setCfg = (key: string, value: unknown) => setConfig((c) => ({ ...c, [key]: value }));
 
   const submit = () => {
-    if (!name.trim() || !trigger || !templateId) {
-      notifications.show({ message: 'Name, trigger and template are required', color: 'red' });
+    if (!name.trim() || !trigger) {
+      notifications.show({ message: 'Name and trigger are required', color: 'red' });
       return;
     }
-    const body = { name: name.trim(), trigger, templateId, config, enabled };
+    if (action === 'send_email' && !templateId) {
+      notifications.show({ message: 'Pick a template to send', color: 'red' });
+      return;
+    }
+    if (action === 'create_activity' && !String(config.activitySubject ?? '').trim()) {
+      notifications.show({ message: 'Give the task a subject', color: 'red' });
+      return;
+    }
+    const body = {
+      name: name.trim(),
+      trigger,
+      action,
+      templateId: action === 'send_email' ? templateId ?? undefined : undefined,
+      config,
+      enabled,
+    };
     const done = {
       onSuccess: () => {
         notifications.show({ message: editing ? 'Automation saved' : 'Automation created', color: 'green' });
@@ -217,8 +233,8 @@ function AutomationModal({
           required
           data={triggers.map((t) => ({
             value: t.key,
-            label: t.kind === 'time' ? `${t.label} (coming soon)` : t.label,
-            disabled: t.kind === 'time',
+            label: t.comingSoon ? `${t.label} (coming soon)` : t.label,
+            disabled: t.comingSoon,
           }))}
           value={trigger}
           onChange={(v) => {
@@ -272,12 +288,53 @@ function AutomationModal({
         })}
 
         <Select
-          label="Send this template"
+          label="Then do this (action)"
           required
-          data={templates.map((t) => ({ value: t.id, label: t.name }))}
-          value={templateId}
-          onChange={setTemplateId}
+          data={[
+            { value: 'send_email', label: 'Send an email' },
+            { value: 'create_activity', label: 'Create a task/activity' },
+          ]}
+          value={action}
+          onChange={(v) => setAction((v as 'send_email' | 'create_activity') ?? 'send_email')}
         />
+
+        {action === 'send_email' ? (
+          <Select
+            label="Send this template"
+            required
+            placeholder={templates.length === 0 ? 'Create a template first' : 'Pick a template'}
+            data={templates.map((t) => ({ value: t.id, label: t.name }))}
+            value={templateId}
+            onChange={setTemplateId}
+          />
+        ) : (
+          <>
+            <Select
+              label="Task type"
+              data={[
+                { value: 'task', label: 'Task' },
+                { value: 'call', label: 'Call' },
+                { value: 'meeting', label: 'Meeting' },
+              ]}
+              value={(config.activityType as string) ?? 'task'}
+              onChange={(v) => setCfg('activityType', v ?? 'task')}
+            />
+            <TextInput
+              label="Task subject"
+              required
+              placeholder="e.g. Follow up with the client"
+              value={(config.activitySubject as string) ?? ''}
+              onChange={(e) => setCfg('activitySubject', e.currentTarget.value)}
+            />
+            <NumberInput
+              label="Due in (days)"
+              description="0 = same day"
+              min={0}
+              value={(config.dueInDays as number) ?? 0}
+              onChange={(v) => setCfg('dueInDays', v === '' ? 0 : Number(v))}
+            />
+          </>
+        )}
         <Switch label="Enabled" checked={enabled} onChange={(e) => setEnabled(e.currentTarget.checked)} />
 
         <Group justify="flex-end" mt="xs">

@@ -1,12 +1,15 @@
 import { apiFetch } from './client';
 
+export type AutomationAction = 'send_email' | 'create_activity';
+
 export interface EmailAutomation {
   id: string;
   name: string;
   enabled: boolean;
   trigger: string;
+  action: AutomationAction;
   config: Record<string, unknown>;
-  templateId: string;
+  templateId: string | null;
   templateName: string | null;
   updatedAt: string;
 }
@@ -25,11 +28,13 @@ export interface AutomationTrigger {
   kind: 'event' | 'time';
   events?: string[];
   fields: AutomationTriggerField[];
+  comingSoon?: boolean;
 }
 
 export interface EmailAutomationBody {
   name?: string;
   trigger?: string;
+  action?: AutomationAction;
   templateId?: string;
   config?: Record<string, unknown>;
   enabled?: boolean;

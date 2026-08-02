@@ -23,6 +23,8 @@ export interface TriggerDef {
   /** Domain event `type`(s) that fire this trigger (for event kinds). */
   events?: string[];
   fields: TriggerConfigField[];
+  /** Not yet wired to fire — shown but not selectable. */
+  comingSoon?: boolean;
 }
 
 export const AUTOMATION_TRIGGERS: TriggerDef[] = [
@@ -59,23 +61,24 @@ export const AUTOMATION_TRIGGERS: TriggerDef[] = [
     fields: [{ key: 'docKind', label: 'Document', type: 'docKind' }],
   },
   {
+    key: 'follow_up',
+    label: 'Deal sits in a stage for N days',
+    description: 'When an open deal has been in the chosen stage (or any stage) for the given number of days — a follow-up nudge. Checked daily.',
+    kind: 'time',
+    fields: [
+      { key: 'stageId', label: 'In stage', type: 'stage' },
+      { key: 'afterDays', label: 'For this many days', type: 'days', required: true },
+    ],
+  },
+  {
     key: 'doc_overdue',
     label: 'Estimate/invoice overdue',
     description: 'A set number of days after an estimate/invoice was sent without being accepted/paid.',
     kind: 'time',
+    comingSoon: true,
     fields: [
       { key: 'docKind', label: 'Document', type: 'docKind' },
       { key: 'afterDays', label: 'Days after sent', type: 'days', required: true },
-    ],
-  },
-  {
-    key: 'follow_up',
-    label: 'Time-based follow-up',
-    description: 'A set number of days after a deal entered a stage, as a follow-up nudge.',
-    kind: 'time',
-    fields: [
-      { key: 'stageId', label: 'From stage', type: 'stage' },
-      { key: 'afterDays', label: 'Days after', type: 'days', required: true },
     ],
   },
 ];

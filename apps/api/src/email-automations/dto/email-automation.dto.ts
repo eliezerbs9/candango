@@ -1,6 +1,8 @@
 import { IsBoolean, IsIn, IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { TRIGGER_KEYS } from '../triggers';
 
+const ACTIONS = ['send_email', 'create_activity'];
+
 export class CreateEmailAutomationDto {
   @IsString()
   @MinLength(1)
@@ -10,8 +12,12 @@ export class CreateEmailAutomationDto {
   @IsIn(TRIGGER_KEYS)
   trigger!: string;
 
+  @IsIn(ACTIONS)
+  action!: string;
+
+  @IsOptional()
   @IsString()
-  templateId!: string;
+  templateId?: string;
 
   @IsOptional()
   @IsObject()
@@ -32,6 +38,10 @@ export class UpdateEmailAutomationDto {
   @IsOptional()
   @IsIn(TRIGGER_KEYS)
   trigger?: string;
+
+  @IsOptional()
+  @IsIn(ACTIONS)
+  action?: string;
 
   @IsOptional()
   @IsString()
