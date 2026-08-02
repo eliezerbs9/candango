@@ -837,12 +837,18 @@ model EmailAutomation {
   orgId           String
   name            String
   enabled         Boolean   @default(true)
+  kind            String    @default("deal") // deal (event/time triggered, one deal) | marketing (scheduled broadcast to an audience)
   category        String    @default("general") // system-defined bucket (see automation-categories.ts); users cannot add categories
   tags            String[]  @default([]) // freeform, user-creatable labels
-  trigger         String
+  trigger         String    @default("") // deal automations only (empty for marketing)
   action          String    @default("send_email") // send_email | create_activity
-  config          Json      @default("{}")
-  templateId      String? // only for the send_email action
+  config          Json      @default("{}") // deal: trigger config. marketing: { schedule, audience } (see marketing-schedule.ts)
+  templateId      String? // send_email action (deal-scoped) / marketing template (marketing-scoped)
+  // Marketing scheduling (null for deal automations):
+  timezone        String? // IANA tz the schedule is evaluated in
+  startAt         DateTime? // don't fire before this instant
+  nextRunAt       DateTime? // next computed fire time; the scanner picks up rows whose nextRunAt <= now
+  lastRunAt       DateTime? // last time it fired
   createdByUserId String?
   archivedAt      DateTime?
   createdAt       DateTime  @default(now())
@@ -853,6 +859,7 @@ model EmailAutomation {
   runs         AutomationRun[]
 
   @@index([orgId])
+  @@index([kind, enabled, nextRunAt]) // scanner: due marketing automations
 }
 
 /// De-dupes time-based automation firings: a (automation, deal) pair fires at most once.
