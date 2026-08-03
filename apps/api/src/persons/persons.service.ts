@@ -3,6 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePersonDto, UpdatePersonDto } from './dto/person.dto';
+import { formatPersonName } from './name-format';
 
 const withCompanies = {
   companyLinks: { include: { company: { select: { id: true, name: true } } } },
@@ -83,6 +84,12 @@ export class PersonsService {
     private readonly events: EventEmitter2,
   ) {}
 
+  /** The workspace's chosen contact-name display format (drives the derived Person.name). */
+  private async nameFormat(orgId: string): Promise<string> {
+    const org = await this.prisma.organization.findFirst({ where: { id: orgId }, select: { qboNameFormat: true } });
+    return org?.qboNameFormat ?? 'first_last';
+  }
+
   /** Keep only company ids that belong to this tenant (prevents cross-tenant links). */
   private async validCompanyIds(orgId: string, ids?: string[]): Promise<string[]> {
     if (!ids?.length) return [];
@@ -105,13 +112,14 @@ export class PersonsService {
   async create(orgId: string, dto: CreatePersonDto) {
     const parts = resolveName(dto);
     if (!parts || !parts.name) throw new BadRequestException('A first name is required');
+    const name = formatPersonName(parts.firstName, parts.lastName, await this.nameFormat(orgId));
     const companyIds = await this.validCompanyIds(orgId, dto.companyIds);
     const row = await this.prisma.person.create({
       data: {
         orgId,
         firstName: parts.firstName,
         lastName: parts.lastName,
-        name: parts.name,
+        name,
         emails: dto.email ? [dto.email] : [],
         phones: dto.phone ? [dto.phone] : [],
         address: (dto.address ?? undefined) as Prisma.InputJsonValue | undefined,
@@ -243,7 +251,7 @@ export class PersonsService {
       if (!parts.name) throw new BadRequestException('A first name is required');
       data.firstName = parts.firstName;
       data.lastName = parts.lastName;
-      data.name = parts.name;
+      data.name = formatPersonName(parts.firstName, parts.lastName, await this.nameFormat(orgId));
     }
     if (dto.email !== undefined) data.emails = dto.email ? [dto.email] : [];
     if (dto.phone !== undefined) data.phones = dto.phone ? [dto.phone] : [];

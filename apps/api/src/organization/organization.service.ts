@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateOrganizationDto } from './dto/organization.dto';
 import { normalizeSignature } from '../email-templates/template-vars';
+import { formatPersonName } from '../persons/name-format';
 
 const PUBLIC_FIELDS = {
   id: true,
@@ -49,7 +50,7 @@ export class OrganizationService {
   }
 
   async update(orgId: string, dto: UpdateOrganizationDto) {
-    await this.get(orgId);
+    const before = await this.get(orgId);
     const org = await this.prisma.organization.update({
       where: { id: orgId },
       data: {
@@ -65,6 +66,24 @@ export class OrganizationService {
       },
       select: PUBLIC_FIELDS,
     });
+    // Changing the contact-name format re-derives every existing Person.name.
+    if (dto.qboNameFormat && dto.qboNameFormat !== before.qboNameFormat) {
+      await this.recomputePersonNames(orgId, dto.qboNameFormat);
+    }
     return shape(org);
+  }
+
+  /** Rewrite every contact's derived display name in the workspace's chosen format. */
+  private async recomputePersonNames(orgId: string, format: string) {
+    const persons = await this.prisma.person.findMany({
+      where: { orgId, deletedAt: null },
+      select: { id: true, firstName: true, lastName: true, name: true },
+    });
+    await Promise.all(
+      persons
+        .map((p) => ({ id: p.id, next: formatPersonName(p.firstName, p.lastName, format) }))
+        .filter((p, i) => p.next !== persons[i].name)
+        .map((p) => this.prisma.person.update({ where: { id: p.id }, data: { name: p.next } })),
+    );
   }
 }
