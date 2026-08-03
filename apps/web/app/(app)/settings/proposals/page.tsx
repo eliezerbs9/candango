@@ -30,6 +30,7 @@ import {
   useCreateProposalTemplate,
   useDeleteProposalTemplate,
   useProposalMeta,
+  useOrganization,
   useProposalTemplates,
   useSeedProposalTemplates,
   useTemplateVariables,
@@ -51,7 +52,11 @@ export default function ProposalTemplatesPage() {
   const { data: templates = [], isLoading } = useProposalTemplates();
   const { data: meta } = useProposalMeta();
   const { data: variables = [] } = useTemplateVariables();
-  const thumbCtx = useMemo(() => buildPreviewCtx(Object.fromEntries(variables.map((v) => [v.key, v.example]))), [variables]);
+  const { data: org } = useOrganization();
+  const thumbCtx = useMemo(
+    () => buildPreviewCtx(Object.fromEntries(variables.map((v) => [v.key, v.example])), {}, org?.logoUrl),
+    [variables, org?.logoUrl],
+  );
   const create = useCreateProposalTemplate();
   const del = useDeleteProposalTemplate();
   const seed = useSeedProposalTemplates();
@@ -191,7 +196,7 @@ export default function ProposalTemplatesPage() {
               </Group>
               {/* First-page preview (example / John Doe data) */}
               <Link href={`/settings/proposals/${t.id}`} style={{ textDecoration: 'none' }}>
-                <ProposalMiniPreview layout={t.layout} theme={t.theme} ctx={thumbCtx} />
+                <ProposalMiniPreview layout={t.layout} theme={t.theme} ctx={thumbCtx} height={170} />
               </Link>
             </Card>
           ))}

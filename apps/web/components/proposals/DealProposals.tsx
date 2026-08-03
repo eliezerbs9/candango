@@ -27,6 +27,7 @@ import {
   useDealEstimates,
   useDealProposals,
   useDeleteProposal,
+  useOrganization,
   useProposalMeta,
   useProposalRender,
   useProposalTemplates,
@@ -66,9 +67,13 @@ export function DealProposals({ dealId }: { dealId: string }) {
 function ProposalList({ dealId, onOpen }: { dealId: string; onOpen: (id: string) => void }) {
   const { data: proposals = [], isLoading } = useDealProposals(dealId);
   const { data: variables = [] } = useTemplateVariables();
+  const { data: org } = useOrganization();
   const del = useDeleteProposal();
   const [opened, ctl] = useDisclosure(false);
-  const thumbCtx = useMemo(() => buildPreviewCtx(Object.fromEntries(variables.map((v) => [v.key, v.example]))), [variables]);
+  const thumbCtx = useMemo(
+    () => buildPreviewCtx(Object.fromEntries(variables.map((v) => [v.key, v.example])), {}, org?.logoUrl),
+    [variables, org?.logoUrl],
+  );
 
   const remove = (p: Proposal) => {
     if (!window.confirm(`Delete proposal "${p.title}"?`)) return;
@@ -94,7 +99,9 @@ function ProposalList({ dealId, onOpen }: { dealId: string; onOpen: (id: string)
         <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
           {proposals.map((p) => (
             <Card key={p.id} withBorder radius="md" padding="md" style={{ cursor: 'pointer' }} onClick={() => onOpen(p.id)}>
-              <Group justify="space-between" wrap="nowrap" mb="xs">
+              <ProposalMiniPreview layout={p.content} theme={p.theme} ctx={thumbCtx} height={170} />
+
+              <Group justify="space-between" wrap="nowrap" mt="sm" mb={4}>
                 <Text fw={600} lineClamp={1}>
                   {p.title}
                 </Text>
@@ -113,9 +120,7 @@ function ProposalList({ dealId, onOpen }: { dealId: string; onOpen: (id: string)
                 </Menu>
               </Group>
 
-              <ProposalMiniPreview layout={p.content} theme={p.theme} ctx={thumbCtx} />
-
-              <Group justify="space-between" wrap="nowrap" mt="sm">
+              <Group justify="space-between" wrap="nowrap">
                 <Badge variant="light" color={STATUS_COLOR[p.status]} style={{ textTransform: 'none' }}>
                   {p.status}
                 </Badge>
@@ -129,9 +134,6 @@ function ProposalList({ dealId, onOpen }: { dealId: string; onOpen: (id: string)
                   </Text>
                 )}
               </Group>
-              <Text size="xs" c="dimmed" mt={4}>
-                Updated {new Date(p.updatedAt).toLocaleDateString()}
-              </Text>
             </Card>
           ))}
         </SimpleGrid>

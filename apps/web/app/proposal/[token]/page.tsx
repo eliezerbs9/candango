@@ -112,7 +112,7 @@ export default function PublicProposalPage() {
 
       {/* Proposal — rendered at the template's orientation */}
       {fullscreen ? (
-        <div style={{ flex: 1, minHeight: 0, padding: '10px 10px 0' }}>
+        <div style={{ flex: 1, minHeight: 0, background: '#15161a', padding: 10 }}>
           <ProposalSlides pages={data.content as CanvasPage[]} theme={data.theme} ctx={buildDealCtx(data)} fill />
         </div>
       ) : (
