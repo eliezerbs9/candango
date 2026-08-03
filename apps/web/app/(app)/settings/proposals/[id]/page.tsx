@@ -29,12 +29,15 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconDeviceFloppy,
+  IconEye,
   IconPalette,
   IconTrash,
 } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
-import { useProposalMeta, useProposalTemplate, useUpdateProposalTemplate } from '@/lib/api/hooks';
+import { useProposalMeta, useProposalTemplate, useTemplateVariables, useUpdateProposalTemplate } from '@/lib/api/hooks';
 import type { ProposalBlockType, ProposalRow, ProposalTheme } from '@/lib/api/proposals';
+import { ProposalRenderer } from '@/components/proposals/ProposalRenderer';
+import { buildPreviewCtx } from '@/components/proposals/previewCtx';
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
@@ -47,12 +50,14 @@ export default function ProposalTemplateEditor() {
   const { id } = useParams<{ id: string }>();
   const { data: template, isLoading } = useProposalTemplate(id);
   const { data: meta } = useProposalMeta();
+  const { data: variables = [] } = useTemplateVariables();
   const update = useUpdateProposalTemplate();
 
   const [name, setName] = useState('');
   const [theme, setTheme] = useState<ProposalTheme | null>(null);
   const [rows, setRows] = useState<ProposalRow[]>([]);
   const [themeOpen, themeCtl] = useDisclosure(false);
+  const [previewOpen, previewCtl] = useDisclosure(false);
 
   useEffect(() => {
     if (!template) return;
@@ -122,6 +127,9 @@ export default function ProposalTemplateEditor() {
           style={{ flex: '1 1 280px' }}
         />
         <Group gap="xs">
+          <Button variant="default" leftSection={<IconEye size={16} />} onClick={previewCtl.open}>
+            Preview
+          </Button>
           <Button variant="default" leftSection={<IconPalette size={16} />} onClick={themeCtl.open}>
             Theme
           </Button>
@@ -209,6 +217,16 @@ export default function ProposalTemplateEditor() {
       </Stack>
 
       <ThemeModal opened={themeOpen} onClose={themeCtl.close} theme={theme} fonts={meta?.fonts ?? []} onChange={setTheme} />
+
+      <Modal opened={previewOpen} onClose={previewCtl.close} title="Preview (example data)" size="xl" centered>
+        <Paper p="lg" radius="md" bg="#fff">
+          <ProposalRenderer
+            layout={rows}
+            theme={theme}
+            ctx={buildPreviewCtx(Object.fromEntries(variables.map((v) => [v.key, v.example])))}
+          />
+        </Paper>
+      </Modal>
     </Stack>
   );
 }
