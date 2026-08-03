@@ -35,6 +35,7 @@ import {
   IconX,
 } from '@tabler/icons-react';
 import { useCustomFields, useFileUrl, useUploadFile, useUploadStatus } from '@/lib/api/hooks';
+import { compressImage } from '@/lib/imageCompress';
 import type { CustomFieldDef } from '@/lib/api/customFields';
 
 const IMAGE_MAX = 10 * 1024 * 1024;
@@ -139,15 +140,17 @@ function ImageField({
 
   const add = async (files: File[]) => {
     const keys: string[] = [];
-    for (const file of files) {
+    for (const raw of files) {
+      // Shrink big photos before upload to save storage; falls back to the original on failure.
+      const file = await compressImage(raw);
       if (file.size > IMAGE_MAX) {
-        notifications.show({ message: `${file.name} is larger than 10 MB`, color: 'red' });
+        notifications.show({ message: `${raw.name} is larger than 10 MB`, color: 'red' });
         continue;
       }
       try {
         keys.push(await upload.mutateAsync({ entity, file }));
       } catch {
-        notifications.show({ message: `Could not upload ${file.name}`, color: 'red' });
+        notifications.show({ message: `Could not upload ${raw.name}`, color: 'red' });
       }
     }
     if (keys.length) onChange([...value, ...keys]);
