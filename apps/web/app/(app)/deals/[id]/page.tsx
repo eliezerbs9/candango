@@ -16,6 +16,7 @@ import {
   NumberInput,
   SimpleGrid,
   Stack,
+  Tabs,
   Text,
   TextInput,
   Title,
@@ -144,6 +145,15 @@ export default function DealDetailPage() {
     );
   };
 
+  // A compact, right-aligned save — the whole deal saves from any tab.
+  const saveBar = (
+    <Group justify="flex-end" mt="md">
+      <Button size="xs" onClick={save} loading={update.isPending}>
+        Save changes
+      </Button>
+    </Group>
+  );
+
   return (
     <Stack gap="md">
       <Anchor component={Link} href="/deals" size="sm">
@@ -218,107 +228,111 @@ export default function DealDetailPage() {
       <ComposeEmail opened={emailOpen} onClose={emailCtl.close} defaultDealId={deal.id} />
       <WinConvertModal dealId={deal.id} currency={deal.currency} opened={winConvertOpen} onClose={winConvertCtl.close} />
 
-      <Grid gutter="lg">
-        {/* Left: custom fields (above) + activity */}
-        <Grid.Col span={{ base: 12, md: 8 }}>
+      <Tabs defaultValue="overview">
+        <Tabs.List>
+          <Tabs.Tab value="overview">Overview</Tabs.Tab>
+          {dealFields.length > 0 && <Tabs.Tab value="fields">Custom fields</Tabs.Tab>}
+          <Tabs.Tab value="billing">{qb?.connected ? 'Estimates & invoices' : 'Estimates'}</Tabs.Tab>
+        </Tabs.List>
+
+        {/* Overview — system fields (Details) + Activity */}
+        <Tabs.Panel value="overview" pt="lg">
+          <Grid gutter="lg">
+            <Grid.Col span={{ base: 12, md: 7 }}>
+              <DealTimeline dealId={deal.id} />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, md: 5 }}>
+              <Card withBorder radius="md" padding="lg">
+                <Stack gap="sm">
+                  <Text fw={600}>Details</Text>
+                  <TextInput
+                    label="Title"
+                    value={form.title}
+                    onChange={(e) => setForm({ ...form, title: e.currentTarget.value })}
+                  />
+                  <NumberInput
+                    label="Value (USD)"
+                    prefix="$"
+                    thousandSeparator=","
+                    min={0}
+                    value={form.value}
+                    onChange={(v) => setForm({ ...form, value: v })}
+                    disabled={dealEstimates.length > 0}
+                    description={
+                      dealEstimates.length > 0
+                        ? 'From the estimates counted below — edit those to change the value.'
+                        : undefined
+                    }
+                  />
+                  <TextInput
+                    type="date"
+                    label="Expected close"
+                    value={form.expectedCloseDate}
+                    onChange={(e) => setForm({ ...form, expectedCloseDate: e.currentTarget.value })}
+                  />
+                  <Divider label="People" labelPosition="left" />
+                  <CreatableSelect
+                    label="Company"
+                    placeholder="Search or create a company"
+                    options={companies.map((c) => ({ value: c.id, label: c.name }))}
+                    value={form.companyId}
+                    onChange={(v) => setForm({ ...form, companyId: v })}
+                    onCreate={async (name) => {
+                      const c = await createCompany.mutateAsync({ name });
+                      return { value: c.id, label: c.name };
+                    }}
+                  />
+                  <CreatableSelect
+                    label="Primary contact"
+                    placeholder="Search or create a contact"
+                    options={persons.map((p) => ({ value: p.id, label: p.name }))}
+                    value={form.primaryPersonId}
+                    onChange={(v) => setForm({ ...form, primaryPersonId: v })}
+                    onCreate={personCreate.prompt}
+                  />
+                  {saveBar}
+                </Stack>
+              </Card>
+            </Grid.Col>
+          </Grid>
+        </Tabs.Panel>
+
+        {/* Custom fields */}
+        {dealFields.length > 0 && (
+          <Tabs.Panel value="fields" pt="lg">
+            <Card withBorder radius="md" padding="lg">
+              <CustomFieldsEditor
+                entity="deal"
+                values={form.customFields}
+                onChange={(k, val) => setForm({ ...form, customFields: { ...form.customFields, [k]: val } })}
+              />
+              {saveBar}
+            </Card>
+          </Tabs.Panel>
+        )}
+
+        {/* Estimates & invoices (+ QuickBooks addresses) */}
+        <Tabs.Panel value="billing" pt="lg">
           <Stack gap="lg">
-            {dealFields.length > 0 && (
-              <Card withBorder radius="md" padding="md">
-                <CustomFieldsEditor
-                  entity="deal"
-                  values={form.customFields}
-                  onChange={(k, val) => setForm({ ...form, customFields: { ...form.customFields, [k]: val } })}
-                />
-                <Button onClick={save} loading={update.isPending} mt="md" size="xs">
-                  Save changes
-                </Button>
+            {qb?.connected && (
+              <Card withBorder radius="md" padding="lg">
+                <Group justify="space-between" mb="sm">
+                  <Text fw={600}>Addresses</Text>
+                  <Badge size="xs" variant="light" color="blue" style={{ textTransform: 'none' }}>
+                    QuickBooks
+                  </Badge>
+                </Group>
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
+                  <AddressFields label="Ship to (work site)" value={form.shipTo} onChange={(v) => setForm({ ...form, shipTo: v })} />
+                  <AddressFields label="Bill to (payer)" value={form.billTo} onChange={(v) => setForm({ ...form, billTo: v })} />
+                </SimpleGrid>
+                {saveBar}
               </Card>
             )}
-            <DealTimeline dealId={deal.id} />
+            <QuickbooksPanel deal={deal} />
           </Stack>
-        </Grid.Col>
-
-        {/* Right: core details (narrower) */}
-        <Grid.Col span={{ base: 12, md: 4 }}>
-          <Card withBorder radius="md" padding="lg">
-            <Stack gap="sm">
-              <Text fw={600}>Details</Text>
-              <TextInput
-                label="Title"
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.currentTarget.value })}
-              />
-              <NumberInput
-                label="Value (USD)"
-                prefix="$"
-                thousandSeparator=","
-                min={0}
-                value={form.value}
-                onChange={(v) => setForm({ ...form, value: v })}
-                disabled={dealEstimates.length > 0}
-                description={
-                  dealEstimates.length > 0
-                    ? 'From the estimates counted below — edit those to change the value.'
-                    : undefined
-                }
-              />
-              <TextInput
-                type="date"
-                label="Expected close"
-                value={form.expectedCloseDate}
-                onChange={(e) => setForm({ ...form, expectedCloseDate: e.currentTarget.value })}
-              />
-              <Divider label="People" labelPosition="left" />
-              <CreatableSelect
-                label="Company"
-                placeholder="Search or create a company"
-                options={companies.map((c) => ({ value: c.id, label: c.name }))}
-                value={form.companyId}
-                onChange={(v) => setForm({ ...form, companyId: v })}
-                onCreate={async (name) => {
-                  const c = await createCompany.mutateAsync({ name });
-                  return { value: c.id, label: c.name };
-                }}
-              />
-              <CreatableSelect
-                label="Primary contact"
-                placeholder="Search or create a contact"
-                options={persons.map((p) => ({ value: p.id, label: p.name }))}
-                value={form.primaryPersonId}
-                onChange={(v) => setForm({ ...form, primaryPersonId: v })}
-                onCreate={personCreate.prompt}
-              />
-              <Button onClick={save} loading={update.isPending} mt="xs">
-                Save changes
-              </Button>
-            </Stack>
-          </Card>
-        </Grid.Col>
-
-        {/* Full-width: QuickBooks addresses (Ship to / Bill to), then billing */}
-        <Grid.Col span={12}>
-          <Card withBorder radius="md" padding="lg">
-            <Group justify="space-between" mb="sm">
-              <Text fw={600}>Addresses</Text>
-              <Badge size="xs" variant="light" color="blue" style={{ textTransform: 'none' }}>
-                QuickBooks
-              </Badge>
-            </Group>
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
-              <AddressFields label="Ship to (work site)" value={form.shipTo} onChange={(v) => setForm({ ...form, shipTo: v })} />
-              <AddressFields label="Bill to (payer)" value={form.billTo} onChange={(v) => setForm({ ...form, billTo: v })} />
-            </SimpleGrid>
-            <Button onClick={save} loading={update.isPending} mt="md" size="xs">
-              Save changes
-            </Button>
-          </Card>
-        </Grid.Col>
-
-        {/* Billing (QuickBooks estimates & invoices) */}
-        <Grid.Col span={12}>
-          <QuickbooksPanel deal={deal} />
-        </Grid.Col>
-      </Grid>
+        </Tabs.Panel>
+      </Tabs>
     </Stack>
   );
 }
