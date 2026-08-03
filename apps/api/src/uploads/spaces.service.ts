@@ -4,6 +4,24 @@ import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } fro
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 /**
+ * The SDK adds the bucket as a subdomain (virtual-hosted style), so SPACES_ENDPOINT must be the
+ * REGION endpoint without the bucket. Be forgiving: if someone sets the bucket endpoint (or the CDN
+ * host), strip the bucket subdomain and drop `.cdn.` so we sign against the origin — otherwise the
+ * bucket ends up doubled (candango.candango.nyc3…) and the TLS cert doesn't match.
+ */
+function regionEndpoint(endpoint: string, bucket: string): string {
+  try {
+    const u = new URL(endpoint);
+    let host = u.hostname;
+    if (host.startsWith(`${bucket}.`)) host = host.slice(bucket.length + 1);
+    host = host.replace('.cdn.digitaloceanspaces.com', '.digitaloceanspaces.com');
+    return `${u.protocol}//${host}`;
+  } catch {
+    return endpoint;
+  }
+}
+
+/**
  * DigitalOcean Spaces (S3-compatible) object storage for uploaded files — a single shared bucket
  * for all tenants. Objects are keyed by workspace (`org-<orgId>/…`) and isolation is enforced by the
  * upload controller (it only signs keys under the caller's org). Uploads use a presigned PUT
@@ -26,7 +44,7 @@ export class SpacesService {
 
     if (endpoint && accessKeyId && secretAccessKey && this.bucket) {
       this.client = new S3Client({
-        endpoint,
+        endpoint: regionEndpoint(endpoint, this.bucket),
         region,
         credentials: { accessKeyId, secretAccessKey },
         forcePathStyle: false,
