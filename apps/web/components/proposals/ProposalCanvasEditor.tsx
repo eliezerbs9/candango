@@ -454,18 +454,18 @@ export function ProposalCanvasEditor({
         {/* Canvas — a "studio" stage backdrop with the page floating on it */}
         <div
           style={{
-            flex: '1 1 560px',
-            minWidth: 300,
-            position: 'relative',
+            flex: '1 1 620px',
+            minWidth: 320,
             background: 'radial-gradient(circle at 50% 0%, #33343a 0%, #202126 100%)',
             borderRadius: 14,
-            height: 'calc(100vh - 250px)',
-            minHeight: 380,
-            overflow: 'hidden',
+            padding: '28px 24px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 14,
           }}
         >
-          <div style={{ height: '100%', overflowY: 'auto', display: 'flex', justifyContent: 'center', padding: '32px 20px' }}>
-            <div style={{ width: '100%', maxWidth: theme.orientation === 'landscape' ? 860 : 640 }}>
+            <div style={{ width: '100%', maxWidth: theme.orientation === 'landscape' ? 1100 : 820 }}>
             <div
               ref={pageRef}
               onPointerDown={onPagePointerDown}
@@ -536,13 +536,12 @@ export function ProposalCanvasEditor({
               )}
             </div>
             </div>
-          </div>
           {pages.length > 1 && (
             <Group
               gap={6}
               justify="center"
               wrap="nowrap"
-              style={{ position: 'absolute', bottom: 14, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.62)', borderRadius: 999, padding: '2px 6px' }}
+              style={{ background: 'rgba(0,0,0,0.5)', borderRadius: 999, padding: '2px 6px' }}
             >
               <ActionIcon variant="transparent" c="gray.1" size="sm" disabled={activeIndex <= 0} onClick={() => goPage(-1)} aria-label="Previous page">
                 <IconChevronLeft size={16} />
@@ -557,8 +556,8 @@ export function ProposalCanvasEditor({
           )}
         </div>
 
-        {/* Sidebar — its own full-height column so the controls always have room */}
-        <Stack gap="md" style={{ flex: '0 0 320px', minWidth: 280, alignSelf: 'stretch' }}>
+        {/* Sidebar */}
+        <Stack gap="md" style={{ flex: '0 0 320px', minWidth: 280 }}>
           <Card withBorder radius="md" padding="sm">
             <Text size="sm" fw={600} mb={2}>
               Add element

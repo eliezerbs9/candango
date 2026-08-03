@@ -61,6 +61,38 @@ export function DealProposals({ dealId }: { dealId: string }) {
   return <ProposalList dealId={dealId} onOpen={setSelected} />;
 }
 
+/** A tiny first-page preview (element boxes) for a proposal card. */
+function ProposalThumb({ proposal }: { proposal: Proposal }) {
+  const page = Array.isArray(proposal.content) ? (proposal.content[0] as CanvasPage | undefined) : undefined;
+  const landscape = proposal.theme?.orientation === 'landscape';
+  return (
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        aspectRatio: landscape ? '11 / 8.5' : '8.5 / 11',
+        maxHeight: 190,
+        background: '#fff',
+        border: '1px solid var(--mantine-color-gray-3)',
+        borderRadius: 6,
+        overflow: 'hidden',
+      }}
+    >
+      {(page?.elements ?? []).map((el) => (
+        <div
+          key={el.id}
+          style={{ position: 'absolute', left: `${el.x}%`, top: `${el.y}%`, width: `${el.w}%`, height: `${el.h}%`, background: 'var(--mantine-color-gray-2)', borderRadius: 2 }}
+        />
+      ))}
+      {(!page || page.elements.length === 0) && (
+        <Text size="xs" c="dimmed" ta="center" mt="lg">
+          Empty
+        </Text>
+      )}
+    </div>
+  );
+}
+
 function ProposalList({ dealId, onOpen }: { dealId: string; onOpen: (id: string) => void }) {
   const { data: proposals = [], isLoading } = useDealProposals(dealId);
   const del = useDeleteProposal();
@@ -90,7 +122,7 @@ function ProposalList({ dealId, onOpen }: { dealId: string; onOpen: (id: string)
         <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
           {proposals.map((p) => (
             <Card key={p.id} withBorder radius="md" padding="md" style={{ cursor: 'pointer' }} onClick={() => onOpen(p.id)}>
-              <Group justify="space-between" wrap="nowrap" mb="sm">
+              <Group justify="space-between" wrap="nowrap" mb="xs">
                 <Text fw={600} lineClamp={1}>
                   {p.title}
                 </Text>
@@ -108,14 +140,26 @@ function ProposalList({ dealId, onOpen }: { dealId: string; onOpen: (id: string)
                   </Menu.Dropdown>
                 </Menu>
               </Group>
-              <Group justify="space-between" wrap="nowrap">
+
+              <ProposalThumb proposal={p} />
+
+              <Group justify="space-between" wrap="nowrap" mt="sm">
                 <Badge variant="light" color={STATUS_COLOR[p.status]} style={{ textTransform: 'none' }}>
                   {p.status}
                 </Badge>
-                <Text size="xs" c="dimmed">
-                  {new Date(p.updatedAt).toLocaleDateString()}
-                </Text>
+                {p.total ? (
+                  <Text fw={600} size="sm">
+                    {money(p.total, p.currency ?? 'USD')}
+                  </Text>
+                ) : (
+                  <Text size="xs" c="dimmed">
+                    No estimate
+                  </Text>
+                )}
               </Group>
+              <Text size="xs" c="dimmed" mt={4}>
+                Updated {new Date(p.updatedAt).toLocaleDateString()}
+              </Text>
             </Card>
           ))}
         </SimpleGrid>

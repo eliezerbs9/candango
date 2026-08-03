@@ -140,6 +140,9 @@ export interface Proposal {
   viewedAt: string | null;
   respondedAt: string | null;
   updatedAt: string;
+  /** Sum of the selected estimates (cents) — present on the deal list response. */
+  total?: number;
+  currency?: string;
 }
 
 export interface ProposalImageFile {

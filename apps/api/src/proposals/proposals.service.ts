@@ -122,7 +122,16 @@ export class ProposalsService {
 
   async list(orgId: string, dealId: string) {
     const rows = await this.prisma.proposal.findMany({ where: { orgId, dealId }, orderBy: { createdAt: 'desc' } });
-    return rows.map(shapeProposal);
+    // Sum each proposal's selected estimates so the list can show a value.
+    const ids = [...new Set(rows.flatMap((r) => r.estimateIds))];
+    const estimates = ids.length
+      ? await this.prisma.dealEstimate.findMany({ where: { id: { in: ids }, orgId, dealId, deletedAt: null }, select: { id: true, totalAmount: true, currency: true } })
+      : [];
+    const byId = new Map(estimates.map((e) => [e.id, e]));
+    return rows.map((r) => {
+      const sel = r.estimateIds.map((id) => byId.get(id)).filter((e): e is (typeof estimates)[number] => !!e);
+      return { ...shapeProposal(r), total: sel.reduce((s, e) => s + e.totalAmount, 0), currency: sel[0]?.currency ?? 'USD' };
+    });
   }
 
   async get(orgId: string, id: string) {
