@@ -2,7 +2,9 @@ import type { ProposalRenderCtx } from './ProposalRenderer';
 
 /** A render context that fills a template with example data — for the settings preview (no real deal). */
 export function buildPreviewCtx(exampleByKey: Record<string, string>): ProposalRenderCtx {
-  const resolveText = (s: string) => s.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, k: string) => exampleByKey[k] ?? k);
+  const today = new Intl.DateTimeFormat('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }).format(new Date());
+  const resolveText = (s: string) =>
+    s.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, k: string) => (k === 'date.today' ? today : exampleByKey[k] ?? k));
 
   return {
     resolveText,
@@ -44,6 +46,11 @@ export function buildPreviewCtx(exampleByKey: Record<string, string>): ProposalR
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid #dee2e6', borderRadius: 8, padding: '8px 12px' }}>
         <span style={{ color: '#e03131', fontWeight: 700 }}>PDF</span>
         <span style={{ fontSize: 13 }}>Document.pdf</span>
+      </div>
+    ),
+    logo: () => (
+      <div style={{ width: '100%', height: '100%', minHeight: 40, background: '#e9ecef', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#868e96', fontSize: 12 }}>
+        Logo
       </div>
     ),
     pricing: () => (

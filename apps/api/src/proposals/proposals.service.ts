@@ -129,7 +129,7 @@ export class ProposalsService {
       deal.ownerUserId
         ? this.prisma.user.findFirst({ where: { id: deal.ownerUserId, orgId }, select: { name: true, email: true, phone: true } })
         : null,
-      this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true, timezone: true } }),
+      this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true, timezone: true, logoUrl: true } }),
       this.prisma.customFieldDefinition.findMany({
         where: { orgId, entity: 'deal', type: { in: ['image', 'document'] } },
         select: { key: true, type: true },
@@ -186,7 +186,7 @@ export class ProposalsService {
       total: estimates.reduce((sum, e) => sum + e.totalAmount, 0),
     };
 
-    return { variables, imagesByField, documentsByField, pricing };
+    return { variables, imagesByField, documentsByField, logoUrl: org?.logoUrl ?? null, pricing };
   }
 
   /** Available estimates for a deal (for the "select estimates" picker). */

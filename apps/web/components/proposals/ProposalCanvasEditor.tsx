@@ -21,7 +21,7 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconCheck, IconCopy, IconEye, IconLayout2, IconLayoutGrid, IconLock, IconPalette, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
+import { IconClipboard, IconClipboardCopy, IconCheck, IconCopy, IconEye, IconLayout2, IconLayoutGrid, IconLock, IconPalette, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
 import type { CanvasElement, CanvasPage, ElementType, Orientation, ProposalDocFile, ProposalImageFile, ProposalTheme } from '@/lib/api/proposals';
 import { RichTextBody } from '@/components/common/RichTextBody';
 import { ElementView, ProposalRenderer, type MediaPick, type ProposalRenderCtx } from './ProposalRenderer';
@@ -56,6 +56,7 @@ const PALETTE: { type: ElementType; label: string }[] = [
   { type: 'text', label: 'Text' },
   { type: 'image', label: 'Image' },
   { type: 'document', label: 'Document' },
+  { type: 'logo', label: 'Logo' },
   { type: 'pricing', label: 'Pricing' },
   { type: 'divider', label: 'Divider' },
 ];
@@ -100,6 +101,8 @@ function newElement(type: ElementType): CanvasElement {
       return { ...base, w: 45, h: 26, props: { label: 'Photos', cols: 1, count: 1 } };
     case 'document':
       return { ...base, w: 45, h: 8, props: { label: 'Document' } };
+    case 'logo':
+      return { ...base, w: 30, h: 10, props: { fit: 'contain' } };
     case 'pricing':
       return { ...base, w: 84, h: 22, props: {} };
     case 'divider':
@@ -161,6 +164,7 @@ export function ProposalCanvasEditor({
   const [showGrid, setShowGrid] = useState(true);
   const [showMargins, setShowMargins] = useState(false);
   const [snap, setSnap] = useState(true);
+  const [clipboard, setClipboard] = useState<CanvasElement | null>(null);
   const pageRef = useRef<HTMLDivElement>(null);
   const margin = theme.margin ?? 6;
 
@@ -204,6 +208,28 @@ export function ProposalCanvasEditor({
   const removeElement = (elId: string) => {
     setPageElements((els) => els.filter((e) => e.id !== elId));
     if (selId === elId) setSelId(null);
+  };
+  const cloneEl = (el: CanvasElement, dx = 3, dy = 3): CanvasElement => ({
+    ...el,
+    id: uid(),
+    x: clamp(el.x + dx, 0, 100 - el.w),
+    y: clamp(el.y + dy, 0, 100 - el.h),
+    props: { ...el.props },
+    style: { ...el.style },
+  });
+  const duplicateElement = (elId: string) => {
+    const el = page?.elements.find((e) => e.id === elId);
+    if (!el) return;
+    const copy = cloneEl(el);
+    setPageElements((els) => [...els, copy]);
+    setSelId(copy.id);
+  };
+  /** Paste the clipboard element onto the CURRENT page (enables cross-page copy/paste). */
+  const pasteElement = () => {
+    if (!clipboard) return;
+    const copy = cloneEl(clipboard);
+    setPageElements((els) => [...els, copy]);
+    setSelId(copy.id);
   };
 
   const addPage = () => {
@@ -267,6 +293,11 @@ export function ProposalCanvasEditor({
               ))}
             </Menu.Dropdown>
           </Menu>
+          {clipboard && (
+            <Button variant="light" size="xs" leftSection={<IconClipboard size={16} />} onClick={pasteElement}>
+              Paste
+            </Button>
+          )}
           <Button variant="default" size="xs" leftSection={<IconEye size={16} />} onClick={previewCtl.open}>
             Preview
           </Button>
@@ -394,9 +425,17 @@ export function ProposalCanvasEditor({
                   </Text>
                 </Group>
                 {!(enforceLocks && sel.props.locked) && (
-                  <ActionIcon variant="subtle" color="red" onClick={() => removeElement(sel.id)} aria-label="Delete element">
-                    <IconTrash size={16} />
-                  </ActionIcon>
+                  <Group gap={2} wrap="nowrap">
+                    <ActionIcon variant="subtle" color="gray" onClick={() => duplicateElement(sel.id)} aria-label="Duplicate element" title="Duplicate">
+                      <IconCopy size={16} />
+                    </ActionIcon>
+                    <ActionIcon variant="subtle" color="gray" onClick={() => setClipboard(sel)} aria-label="Copy element" title="Copy (paste on any page)">
+                      <IconClipboardCopy size={16} />
+                    </ActionIcon>
+                    <ActionIcon variant="subtle" color="red" onClick={() => removeElement(sel.id)} aria-label="Delete element">
+                      <IconTrash size={16} />
+                    </ActionIcon>
+                  </Group>
                 )}
               </Group>
               <ElementSettings
@@ -670,6 +709,23 @@ function ElementSettings({
         </Group>
       )}
       {media}
+      {el.type === 'logo' && (
+        <div>
+          <Text size="xs" fw={500} mb={2}>
+            Fit
+          </Text>
+          <SegmentedControl
+            size="xs"
+            fullWidth
+            data={[{ value: 'contain', label: 'Contain' }, { value: 'cover', label: 'Cover' }]}
+            value={(el.props.fit as string) ?? 'contain'}
+            onChange={(v) => onProp('fit', v)}
+          />
+          <Text size="xs" c="dimmed" mt={4}>
+            Uses your workspace logo (Settings → Workspace).
+          </Text>
+        </div>
+      )}
       {el.type === 'pricing' && (
         <Text size="xs" c="dimmed">
           Fills from the estimate(s) selected on the proposal.

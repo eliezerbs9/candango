@@ -22,6 +22,7 @@ export interface ProposalRenderCtx {
   image: (opts: ProposalImageOpts) => React.ReactNode;
   document: (opts: { fieldKey?: string; pick?: MediaPick; picked?: string[] }) => React.ReactNode;
   pricing: () => React.ReactNode;
+  logo: (opts?: { fit?: 'contain' | 'cover' }) => React.ReactNode;
 }
 
 const isCanvasPage = (p: unknown): p is CanvasPage => !!p && Array.isArray((p as CanvasPage).elements);
@@ -39,10 +40,12 @@ function normalize(layout: unknown): (CanvasPage | ProposalPage)[] {
 /** Renders one element's content, filling its positioned box. Shared with the editor for WYSIWYG. */
 export function ElementView({ element, theme, ctx }: { element: CanvasElement; theme: ProposalTheme; ctx: ProposalRenderCtx }) {
   const s = element.style ?? {};
+  // Text/heading may wrap past their box — let them spill instead of clipping words.
+  const textLike = element.type === 'text' || element.type === 'heading';
   const base: CSSProperties = {
     width: '100%',
     height: '100%',
-    overflow: 'hidden',
+    overflow: textLike ? 'visible' : 'hidden',
     color: s.color ?? theme.accentColor,
     textAlign: s.align ?? 'left',
     background: s.background,
@@ -89,6 +92,8 @@ export function ElementView({ element, theme, ctx }: { element: CanvasElement; t
       );
     case 'pricing':
       return <div style={{ ...base, fontSize: s.fontSize ?? 14 }}>{ctx.pricing()}</div>;
+    case 'logo':
+      return <div style={base}>{ctx.logo({ fit: (element.props.fit as 'contain' | 'cover' | undefined) ?? 'contain' })}</div>;
     case 'divider':
       return <div style={{ width: '100%', borderTop: `2px solid ${s.color ?? '#dee2e6'}` }} />;
     default:

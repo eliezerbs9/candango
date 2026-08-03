@@ -68,6 +68,12 @@ export function buildDealCtx(data: ProposalRenderData): ProposalRenderCtx {
         </div>
       );
     },
+    logo: ({ fit = 'contain' } = {}) =>
+      data.logoUrl ? (
+        <img src={data.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: fit }} />
+      ) : (
+        <div style={{ width: '100%', height: '100%', minHeight: 40, background: '#f1f3f5', borderRadius: 8 }} />
+      ),
     pricing: () => {
       const { rows, total, currency } = data.pricing;
       if (rows.length === 0 && total === 0) return <div style={{ color: '#868e96', fontSize: 13 }}>No estimate selected.</div>;

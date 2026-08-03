@@ -26,7 +26,7 @@ export interface ProposalPage {
 
 // ── Free-canvas model ──────────────────────────────────────────────────────────
 export type Orientation = 'portrait' | 'landscape';
-export type ElementType = 'text' | 'heading' | 'image' | 'document' | 'pricing' | 'divider';
+export type ElementType = 'text' | 'heading' | 'image' | 'document' | 'pricing' | 'divider' | 'logo';
 
 export interface ElementStyle {
   fontSize?: number; // px
@@ -151,6 +151,7 @@ export interface ProposalRenderData extends Proposal {
   variables: Record<string, string>;
   imagesByField: Record<string, ProposalImageFile[]>;
   documentsByField: Record<string, ProposalDocFile[]>;
+  logoUrl: string | null;
   pricing: { currency: string; rows: { description: string; amount: number }[]; total: number };
 }
 
