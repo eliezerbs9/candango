@@ -13,14 +13,15 @@ import {
   ColorInput,
   Group,
   Loader,
+  Menu,
   Modal,
   NumberInput,
   Paper,
   SegmentedControl,
   Select,
   Stack,
+  Switch,
   Text,
-  Textarea,
   TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -29,6 +30,8 @@ import {
   IconArrowLeft,
   IconDeviceFloppy,
   IconEye,
+  IconLayout2,
+  IconLayoutGrid,
   IconPalette,
   IconPlus,
   IconTrash,
@@ -39,6 +42,12 @@ import { useProposalMeta, useProposalTemplate, useTemplateVariables, useUpdatePr
 import type { CanvasElement, CanvasPage, ElementType, Orientation, ProposalTheme } from '@/lib/api/proposals';
 import { ElementView, ProposalRenderer, type ProposalRenderCtx } from '@/components/proposals/ProposalRenderer';
 import { buildPreviewCtx } from '@/components/proposals/previewCtx';
+import { RichTextBody } from '@/components/common/RichTextBody';
+
+// 12-column grid + a fine vertical unit, for the alignment overlay and snapping.
+const COL = 100 / 12; // ≈ 8.333%
+const ROW = 2.5;
+const snapTo = (v: number, unit: number) => Math.round(v / unit) * unit;
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
@@ -103,6 +112,20 @@ function newElement(type: ElementType): CanvasElement {
   }
 }
 
+const heading = (x: number, y: number, w: number, h: number, text: string): CanvasElement => ({ id: uid(), type: 'heading', x, y, w, h, props: { text }, style: { fontSize: 28, fontWeight: 800 } });
+const textEl = (x: number, y: number, w: number, h: number, html: string): CanvasElement => ({ id: uid(), type: 'text', x, y, w, h, props: { html }, style: { fontSize: 15 } });
+const imageEl = (x: number, y: number, w: number, h: number): CanvasElement => ({ id: uid(), type: 'image', x, y, w, h, props: {} });
+
+/** Page-level layout presets — apply a common structure to the current page. */
+const PAGE_PRESETS: { key: string; label: string; build: () => CanvasElement[] }[] = [
+  { key: 'blank', label: 'Blank', build: () => [] },
+  { key: 'title', label: 'Title + content', build: () => [heading(6, 6, 88, 9, 'Heading'), textEl(6, 18, 88, 66, '<p>Content…</p>')] },
+  { key: '2col', label: 'Two columns', build: () => [heading(6, 6, 88, 8, 'Heading'), textEl(6, 16, 42, 66, '<p>Left column…</p>'), textEl(52, 16, 42, 66, '<p>Right column…</p>')] },
+  { key: '3col', label: 'Three columns', build: () => [textEl(6, 8, 27, 74, '<p>One…</p>'), textEl(37, 8, 27, 74, '<p>Two…</p>'), textEl(68, 8, 27, 74, '<p>Three…</p>')] },
+  { key: 'gallery', label: 'Cover + gallery', build: () => [heading(6, 6, 88, 10, '{{deal.title}}'), imageEl(6, 20, 27, 24), imageEl(37, 20, 27, 24), imageEl(68, 20, 27, 24)] },
+  { key: 'hero', label: 'Hero + pricing', build: () => [heading(6, 8, 88, 12, '{{deal.title}}'), textEl(6, 24, 88, 20, '<p>Overview…</p>'), { id: uid(), type: 'pricing', x: 6, y: 50, w: 88, h: 30, props: {} }] },
+];
+
 export default function ProposalTemplateEditor() {
   const { id } = useParams<{ id: string }>();
   const { data: template, isLoading } = useProposalTemplate(id);
@@ -117,6 +140,8 @@ export default function ProposalTemplateEditor() {
   const [selId, setSelId] = useState<string | null>(null);
   const [themeOpen, themeCtl] = useDisclosure(false);
   const [previewOpen, previewCtl] = useDisclosure(false);
+  const [showGrid, setShowGrid] = useState(true);
+  const [snap, setSnap] = useState(true);
   const pageRef = useRef<HTMLDivElement>(null);
 
   const ctx: ProposalRenderCtx = useMemo(
@@ -151,6 +176,11 @@ export default function ProposalTemplateEditor() {
     const el = newElement(type);
     setPageElements((els) => [...els, el]);
     setSelId(el.id);
+  };
+  const applyPreset = (build: () => CanvasElement[]) => {
+    if ((page?.elements.length ?? 0) > 0 && !window.confirm('Replace this page with the chosen layout?')) return;
+    setPageElements(() => build());
+    setSelId(null);
   };
   const updateElement = (elId: string, patch: Partial<CanvasElement>) =>
     setPageElements((els) => els.map((e) => (e.id === elId ? { ...e, ...patch } : e)));
@@ -208,6 +238,21 @@ export default function ProposalTemplateEditor() {
             value={theme.orientation ?? 'portrait'}
             onChange={(v) => setTheme({ ...theme, orientation: v as Orientation })}
           />
+          <Menu position="bottom-end" withinPortal shadow="sm">
+            <Menu.Target>
+              <Button variant="default" size="sm" leftSection={<IconLayout2 size={16} />}>
+                Layout
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Label>Apply a page layout</Menu.Label>
+              {PAGE_PRESETS.map((p) => (
+                <Menu.Item key={p.key} onClick={() => applyPreset(p.build)}>
+                  {p.label}
+                </Menu.Item>
+              ))}
+            </Menu.Dropdown>
+          </Menu>
           <Button variant="default" size="sm" leftSection={<IconEye size={16} />} onClick={previewCtl.open}>
             Preview
           </Button>
@@ -218,6 +263,11 @@ export default function ProposalTemplateEditor() {
             Save
           </Button>
         </Group>
+      </Group>
+
+      <Group gap="lg">
+        <Switch size="xs" label="12-col grid" checked={showGrid} onChange={(e) => setShowGrid(e.currentTarget.checked)} thumbIcon={<IconLayoutGrid size={10} />} />
+        <Switch size="xs" label="Snap to grid" checked={snap} onChange={(e) => setSnap(e.currentTarget.checked)} />
       </Group>
 
       {/* Pages strip */}
@@ -256,6 +306,14 @@ export default function ProposalTemplateEditor() {
                 boxShadow: '0 1px 8px rgba(0,0,0,0.08)',
               }}
             >
+              {/* 12-column reference grid */}
+              {showGrid && (
+                <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                  {Array.from({ length: 11 }).map((_, i) => (
+                    <div key={i} style={{ position: 'absolute', top: 0, bottom: 0, left: `${(i + 1) * COL}%`, width: 1, background: 'rgba(0,0,0,0.06)' }} />
+                  ))}
+                </div>
+              )}
               {page?.elements.map((el) => (
                 <EditableElement
                   key={el.id}
@@ -264,6 +322,7 @@ export default function ProposalTemplateEditor() {
                   theme={theme}
                   ctx={ctx}
                   pageRef={pageRef}
+                  snap={snap}
                   onSelect={() => setSelId(el.id)}
                   onChange={(patch) => updateElement(el.id, patch)}
                   onRemove={() => removeElement(el.id)}
@@ -333,6 +392,7 @@ function EditableElement({
   theme,
   ctx,
   pageRef,
+  snap,
   onSelect,
   onChange,
   onRemove,
@@ -342,6 +402,7 @@ function EditableElement({
   theme: ProposalTheme;
   ctx: ProposalRenderCtx;
   pageRef: React.RefObject<HTMLDivElement | null>;
+  snap: boolean;
   onSelect: () => void;
   onChange: (patch: Partial<CanvasElement>) => void;
   onRemove: () => void;
@@ -362,10 +423,12 @@ function EditableElement({
     if (!d || !rect) return;
     const dxp = ((e.clientX - d.sx) / rect.width) * 100;
     const dyp = ((e.clientY - d.sy) / rect.height) * 100;
+    const sx = (v: number) => (snap ? snapTo(v, COL) : v);
+    const sy = (v: number) => (snap ? snapTo(v, ROW) : v);
     if (d.mode === 'move') {
-      onChange({ x: clamp(d.ex + dxp, 0, 100 - el.w), y: clamp(d.ey + dyp, 0, 100 - el.h) });
+      onChange({ x: clamp(sx(d.ex + dxp), 0, 100 - el.w), y: clamp(sy(d.ey + dyp), 0, 100 - el.h) });
     } else {
-      onChange({ w: clamp(d.ew + dxp, 5, 100 - el.x), h: clamp(d.eh + dyp, 2, 100 - el.y) });
+      onChange({ w: clamp(sx(d.ew + dxp), 5, 100 - el.x), h: clamp(sy(d.eh + dyp), 2, 100 - el.y) });
     }
   };
   const onUp = () => {
@@ -444,7 +507,12 @@ function ElementSettings({
         <TextInput size="xs" label="Text" value={(el.props.text as string) ?? ''} onChange={(e) => onProp('text', e.currentTarget.value)} />
       )}
       {el.type === 'text' && (
-        <Textarea size="xs" label="Text (HTML + {{variables}})" autosize minRows={3} maxRows={10} value={(el.props.html as string) ?? ''} onChange={(e) => onProp('html', e.currentTarget.value)} />
+        <div>
+          <Text size="xs" fw={500} mb={4}>
+            Text
+          </Text>
+          <RichTextBody value={(el.props.html as string) ?? ''} onChange={(html) => onProp('html', html)} minHeight={120} variables={variables} />
+        </div>
       )}
       {(el.type === 'image' || el.type === 'document') && (
         <TextInput size="xs" label="Field key" description="Optional — custom field to pull from; blank = choose per proposal." value={(el.props.fieldKey as string) ?? ''} onChange={(e) => onProp('fieldKey', e.currentTarget.value)} />
