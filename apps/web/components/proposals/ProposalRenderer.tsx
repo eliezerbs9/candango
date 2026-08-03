@@ -1,7 +1,18 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import type { ProposalRow, ProposalTheme } from '@/lib/api/proposals';
+import type { ProposalPage, ProposalRow, ProposalTheme } from '@/lib/api/proposals';
+
+/** Accept the current pages shape or a legacy flat rows[] (wrap as one page). */
+export function toPages(layout: unknown): ProposalPage[] {
+  const arr = Array.isArray(layout) ? layout : [];
+  if (arr.length === 0) return [];
+  if (arr[0] && typeof arr[0] === 'object' && 'rows' in (arr[0] as object)) return arr as ProposalPage[];
+  if (arr[0] && typeof arr[0] === 'object' && 'columns' in (arr[0] as object)) {
+    return [{ id: 'p1', rows: arr as ProposalRow[] }];
+  }
+  return [];
+}
 
 /**
  * Renders a proposal layout (rows → columns/areas → block) with a theme. The image/document/pricing
@@ -20,18 +31,33 @@ export function ProposalRenderer({
   layout,
   theme,
   ctx,
+  paged = false,
 }: {
-  layout: ProposalRow[];
+  layout: ProposalPage[] | ProposalRow[];
   theme: ProposalTheme;
   ctx: ProposalRenderCtx;
+  /** When true, each page is a separate sheet (borders + gap) — for the presentation view. */
+  paged?: boolean;
 }) {
+  const pages = toPages(layout);
   return (
     <div style={{ fontFamily: `${theme.fontBody}, sans-serif`, color: theme.accentColor, lineHeight: 1.5 }}>
-      {layout.map((row) => (
-        <div key={row.id} style={{ display: 'flex', gap: 16, alignItems: 'flex-start', marginBottom: 16 }}>
-          {row.columns.map((c) => (
-            <div key={c.id} style={{ flex: c.width, minWidth: 0 }}>
-              {c.block && <Block type={c.block.type} props={c.block.props} theme={theme} ctx={ctx} />}
+      {pages.map((page) => (
+        <div
+          key={page.id}
+          style={
+            paged
+              ? { background: '#fff', borderRadius: 10, padding: 40, marginBottom: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }
+              : { marginBottom: 8 }
+          }
+        >
+          {page.rows.map((row) => (
+            <div key={row.id} style={{ display: 'flex', gap: 16, alignItems: 'flex-start', marginBottom: 16 }}>
+              {row.columns.map((c) => (
+                <div key={c.id} style={{ flex: c.width, minWidth: 0 }}>
+                  {c.block && <Block type={c.block.type} props={c.block.props} theme={theme} ctx={ctx} />}
+                </div>
+              ))}
             </div>
           ))}
         </div>

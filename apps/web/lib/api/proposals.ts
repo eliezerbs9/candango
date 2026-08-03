@@ -18,6 +18,12 @@ export interface ProposalRow {
   columns: ProposalColumn[];
 }
 
+/** A template/proposal is an ordered list of pages; each page is a stack of rows. */
+export interface ProposalPage {
+  id: string;
+  rows: ProposalRow[];
+}
+
 export interface ProposalTheme {
   primaryColor: string;
   accentColor: string;
@@ -30,7 +36,7 @@ export interface ProposalTemplate {
   id: string;
   name: string;
   theme: ProposalTheme;
-  layout: ProposalRow[];
+  layout: ProposalPage[];
   systemKey: string | null;
   system: boolean;
   updatedAt: string;
@@ -45,7 +51,7 @@ export interface ProposalMeta {
 export interface ProposalTemplateBody {
   name?: string;
   theme?: ProposalTheme;
-  layout?: ProposalRow[];
+  layout?: ProposalPage[];
 }
 
 export function getProposalMeta(token: string) {
@@ -85,7 +91,7 @@ export interface Proposal {
   templateId: string | null;
   title: string;
   theme: ProposalTheme;
-  content: ProposalRow[];
+  content: ProposalPage[];
   estimateIds: string[];
   status: ProposalStatus;
   shareToken: string;
@@ -109,7 +115,7 @@ export interface ProposalBody {
   templateId?: string;
   title?: string;
   estimateIds?: string[];
-  content?: ProposalRow[];
+  content?: ProposalPage[];
   theme?: ProposalTheme;
   status?: ProposalStatus;
 }

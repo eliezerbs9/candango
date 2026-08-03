@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
@@ -25,26 +25,47 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import {
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  closestCenter,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
   IconArrowLeft,
-  IconChevronDown,
-  IconChevronUp,
   IconDeviceFloppy,
   IconEye,
+  IconGripVertical,
   IconPalette,
+  IconPlus,
   IconTrash,
+  IconX,
 } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import { useProposalMeta, useProposalTemplate, useTemplateVariables, useUpdateProposalTemplate } from '@/lib/api/hooks';
-import type { ProposalBlockType, ProposalRow, ProposalTheme } from '@/lib/api/proposals';
-import { ProposalRenderer } from '@/components/proposals/ProposalRenderer';
+import type { ProposalBlockType, ProposalColumn, ProposalPage, ProposalTheme } from '@/lib/api/proposals';
+import { ProposalRenderer, toPages } from '@/components/proposals/ProposalRenderer';
 import { buildPreviewCtx } from '@/components/proposals/previewCtx';
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
-
 const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
-const equalCols = (n: number, blocks: (ProposalRow['columns'][number]['block'])[] = []) =>
-  Array.from({ length: n }, (_, i) => ({ id: uid(), width: Math.round(12 / n), block: blocks[i] ?? null }));
+
+const ROW_PRESETS = [
+  { value: '12', label: '1 column', widths: [12] },
+  { value: '6-6', label: '2 · equal', widths: [6, 6] },
+  { value: '8-4', label: '2 · wide + narrow', widths: [8, 4] },
+  { value: '4-8', label: '2 · narrow + wide', widths: [4, 8] },
+  { value: '4-4-4', label: '3 columns', widths: [4, 4, 4] },
+];
+const cols = (widths: number[], blocks: (ProposalColumn['block'])[] = []): ProposalColumn[] =>
+  widths.map((w, i) => ({ id: uid(), width: w, block: blocks[i] ?? null }));
+const blankRow = () => ({ id: uid(), columns: cols([12]) });
 
 export default function ProposalTemplateEditor() {
   const { id } = useParams<{ id: string }>();
@@ -55,16 +76,25 @@ export default function ProposalTemplateEditor() {
 
   const [name, setName] = useState('');
   const [theme, setTheme] = useState<ProposalTheme | null>(null);
-  const [rows, setRows] = useState<ProposalRow[]>([]);
+  const [pages, setPages] = useState<ProposalPage[]>([]);
+  const [pageId, setPageId] = useState<string | null>(null);
+  const [sel, setSel] = useState<{ rowId: string; colId: string } | null>(null);
   const [themeOpen, themeCtl] = useDisclosure(false);
   const [previewOpen, previewCtl] = useDisclosure(false);
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   useEffect(() => {
     if (!template) return;
     setName(template.name);
     setTheme(template.theme);
-    setRows(template.layout ?? []);
+    const p = toPages(template.layout);
+    const init = p.length ? p : [{ id: uid(), rows: [blankRow()] }];
+    setPages(init);
+    setPageId(init[0].id);
   }, [template]);
+
+  const page = useMemo(() => pages.find((p) => p.id === pageId) ?? null, [pages, pageId]);
 
   if (isLoading || !template || !theme) {
     return (
@@ -74,42 +104,91 @@ export default function ProposalTemplateEditor() {
     );
   }
 
-  const blockLabel = (t: ProposalBlockType) => meta?.blocks.find((b) => b.type === t)?.label ?? t;
-  const blockOptions = (meta?.blocks ?? []).map((b) => ({ value: b.type, label: b.label }));
-
-  const setRow = (rowId: string, fn: (r: ProposalRow) => ProposalRow) =>
-    setRows((rs) => rs.map((r) => (r.id === rowId ? fn(r) : r)));
-  const addRow = () => setRows((rs) => [...rs, { id: uid(), columns: equalCols(1) }]);
-  const removeRow = (rowId: string) => setRows((rs) => rs.filter((r) => r.id !== rowId));
-  const moveRow = (rowId: string, dir: -1 | 1) =>
-    setRows((rs) => {
-      const i = rs.findIndex((r) => r.id === rowId);
-      const j = i + dir;
-      if (i < 0 || j < 0 || j >= rs.length) return rs;
-      const next = [...rs];
-      [next[i], next[j]] = [next[j], next[i]];
-      return next;
+  // ── mutators ──
+  const setPage = (pid: string, fn: (p: ProposalPage) => ProposalPage) =>
+    setPages((ps) => ps.map((p) => (p.id === pid ? fn(p) : p)));
+  const addPage = () => {
+    const np = { id: uid(), rows: [blankRow()] };
+    setPages((ps) => [...ps, np]);
+    setPageId(np.id);
+  };
+  const removePage = (pid: string) =>
+    setPages((ps) => {
+      const next = ps.filter((p) => p.id !== pid);
+      if (pid === pageId) setPageId(next[0]?.id ?? null);
+      return next.length ? next : [{ id: uid(), rows: [blankRow()] }];
     });
-  const setColumnCount = (rowId: string, n: number) =>
-    setRow(rowId, (r) => ({ ...r, columns: equalCols(n, r.columns.map((c) => c.block)) }));
-  const setBlockType = (rowId: string, colId: string, type: ProposalBlockType | null) =>
-    setRow(rowId, (r) => ({
-      ...r,
-      columns: r.columns.map((c) => (c.id === colId ? { ...c, block: type ? { type, props: {} } : null } : c)),
+  const addRow = () => page && setPage(page.id, (p) => ({ ...p, rows: [...p.rows, blankRow()] }));
+  const removeRow = (rowId: string) => page && setPage(page.id, (p) => ({ ...p, rows: p.rows.filter((r) => r.id !== rowId) }));
+  const setRowWidths = (rowId: string, widths: number[]) =>
+    page &&
+    setPage(page.id, (p) => ({
+      ...p,
+      rows: p.rows.map((r) => (r.id === rowId ? { ...r, columns: cols(widths, r.columns.map((c) => c.block)) } : r)),
+    }));
+  const setAreaBlock = (rowId: string, colId: string, block: ProposalColumn['block']) =>
+    page &&
+    setPage(page.id, (p) => ({
+      ...p,
+      rows: p.rows.map((r) =>
+        r.id === rowId ? { ...r, columns: r.columns.map((c) => (c.id === colId ? { ...c, block } : c)) } : r,
+      ),
     }));
   const setBlockProp = (rowId: string, colId: string, key: string, value: unknown) =>
-    setRow(rowId, (r) => ({
-      ...r,
-      columns: r.columns.map((c) =>
-        c.id === colId && c.block ? { ...c, block: { ...c.block, props: { ...c.block.props, [key]: value } } } : c,
+    page &&
+    setPage(page.id, (p) => ({
+      ...p,
+      rows: p.rows.map((r) =>
+        r.id === rowId
+          ? {
+              ...r,
+              columns: r.columns.map((c) =>
+                c.id === colId && c.block ? { ...c, block: { ...c.block, props: { ...c.block.props, [key]: value } } } : c,
+              ),
+            }
+          : r,
       ),
     }));
 
+  const onDragEnd = (e: DragEndEvent) => {
+    const a = String(e.active.id);
+    const o = e.over ? String(e.over.id) : '';
+    if (!o) return;
+    // Place a palette block into an area
+    if (a.startsWith('palette:') && o.startsWith('area:')) {
+      const type = a.slice('palette:'.length) as ProposalBlockType;
+      const [, rowId, colId] = o.split(':');
+      setAreaBlock(rowId, colId, { type, props: {} });
+      return;
+    }
+    // Move a placed block to another area (swap)
+    if (a.startsWith('block:') && o.startsWith('area:')) {
+      const [, fromRow, fromCol] = a.split(':');
+      const [, toRow, toCol] = o.split(':');
+      if (fromRow === toRow && fromCol === toCol) return;
+      const src = page?.rows.find((r) => r.id === fromRow)?.columns.find((c) => c.id === fromCol)?.block ?? null;
+      const dst = page?.rows.find((r) => r.id === toRow)?.columns.find((c) => c.id === toCol)?.block ?? null;
+      setAreaBlock(toRow, toCol, src);
+      setAreaBlock(fromRow, fromCol, dst);
+      return;
+    }
+    // Reorder rows within the page
+    if (a.startsWith('row:') && o.startsWith('row:') && page) {
+      const ids = page.rows.map((r) => `row:${r.id}`);
+      const from = ids.indexOf(a);
+      const to = ids.indexOf(o);
+      if (from >= 0 && to >= 0) setPage(page.id, (p) => ({ ...p, rows: arrayMove(p.rows, from, to) }));
+    }
+  };
+
   const save = () =>
     update.mutate(
-      { id: template.id, body: { name: name.trim(), theme, layout: rows } },
+      { id: template.id, body: { name: name.trim(), theme, layout: pages } },
       { onSuccess: () => notifications.show({ message: 'Template saved', color: 'green' }), onError: fail },
     );
+
+  const selBlock =
+    sel && page ? page.rows.find((r) => r.id === sel.rowId)?.columns.find((c) => c.id === sel.colId)?.block ?? null : null;
 
   return (
     <Stack gap="md">
@@ -120,12 +199,7 @@ export default function ProposalTemplateEditor() {
       </Anchor>
 
       <Group justify="space-between" align="flex-end" wrap="wrap">
-        <TextInput
-          label="Template name"
-          value={name}
-          onChange={(e) => setName(e.currentTarget.value)}
-          style={{ flex: '1 1 280px' }}
-        />
+        <TextInput label="Template name" value={name} onChange={(e) => setName(e.currentTarget.value)} style={{ flex: '1 1 260px' }} />
         <Group gap="xs">
           <Button variant="default" leftSection={<IconEye size={16} />} onClick={previewCtl.open}>
             Preview
@@ -139,95 +213,235 @@ export default function ProposalTemplateEditor() {
         </Group>
       </Group>
 
-      {/* Canvas — the layout of rows → columns (areas) → block */}
-      <Stack gap="sm">
-        {rows.map((row, ri) => (
-          <Card key={row.id} withBorder radius="md" padding="sm">
-            <Group justify="space-between" mb="xs">
-              <SegmentedControl
-                size="xs"
-                data={[
-                  { value: '1', label: '1 column' },
-                  { value: '2', label: '2 columns' },
-                  { value: '3', label: '3 columns' },
-                ]}
-                value={String(row.columns.length)}
-                onChange={(v) => setColumnCount(row.id, Number(v))}
-              />
-              <Group gap={2}>
-                <ActionIcon variant="subtle" color="gray" disabled={ri === 0} onClick={() => moveRow(row.id, -1)} aria-label="Move up">
-                  <IconChevronUp size={16} />
-                </ActionIcon>
-                <ActionIcon variant="subtle" color="gray" disabled={ri === rows.length - 1} onClick={() => moveRow(row.id, 1)} aria-label="Move down">
-                  <IconChevronDown size={16} />
-                </ActionIcon>
-                <ActionIcon variant="subtle" color="red" onClick={() => removeRow(row.id)} aria-label="Remove row">
-                  <IconTrash size={16} />
-                </ActionIcon>
-              </Group>
-            </Group>
-
-            <Group align="stretch" gap="xs" wrap="nowrap">
-              {row.columns.map((c) => (
-                <Paper key={c.id} withBorder radius="sm" p="xs" style={{ flex: c.width, minWidth: 0 }}>
-                  {c.block ? (
-                    <Stack gap={6}>
-                      <Group justify="space-between" wrap="nowrap">
-                        <Badge variant="light" color="candango" style={{ textTransform: 'none' }}>
-                          {blockLabel(c.block.type)}
-                        </Badge>
-                        <Group gap={2} wrap="nowrap">
-                          <Select
-                            size="xs"
-                            w={120}
-                            data={blockOptions}
-                            value={c.block.type}
-                            onChange={(v) => setBlockType(row.id, c.id, (v as ProposalBlockType) ?? c.block!.type)}
-                            allowDeselect={false}
-                          />
-                          <ActionIcon variant="subtle" color="red" onClick={() => setBlockType(row.id, c.id, null)} aria-label="Remove block">
-                            <IconTrash size={14} />
-                          </ActionIcon>
-                        </Group>
-                      </Group>
-                      <BlockSettings
-                        type={c.block.type}
-                        props={c.block.props}
-                        onChange={(k, val) => setBlockProp(row.id, c.id, k, val)}
-                      />
-                    </Stack>
-                  ) : (
-                    <Select
-                      size="xs"
-                      placeholder="Add a block"
-                      data={blockOptions}
-                      value={null}
-                      onChange={(v) => v && setBlockType(row.id, c.id, v as ProposalBlockType)}
-                    />
-                  )}
-                </Paper>
-              ))}
-            </Group>
-          </Card>
+      {/* Pages strip */}
+      <Group gap="xs" wrap="wrap">
+        {pages.map((p, i) => (
+          <Button
+            key={p.id}
+            size="xs"
+            variant={p.id === pageId ? 'filled' : 'default'}
+            rightSection={
+              pages.length > 1 ? (
+                <IconX
+                  size={12}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    removePage(p.id);
+                  }}
+                />
+              ) : null
+            }
+            onClick={() => {
+              setPageId(p.id);
+              setSel(null);
+            }}
+          >
+            Page {i + 1}
+          </Button>
         ))}
-
-        <Button variant="light" onClick={addRow}>
-          + Add row
+        <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={addPage}>
+          Page
         </Button>
-      </Stack>
+      </Group>
+
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <Group align="flex-start" gap="lg" wrap="wrap">
+          {/* Canvas */}
+          <Stack gap="sm" style={{ flex: '1 1 520px', minWidth: 320 }}>
+            {page && (
+              <SortableContext items={page.rows.map((r) => `row:${r.id}`)} strategy={verticalListSortingStrategy}>
+                {page.rows.map((row) => (
+                  <RowEditor
+                    key={row.id}
+                    row={row}
+                    selected={sel}
+                    onSelect={(colId) => setSel({ rowId: row.id, colId })}
+                    onWidths={(w) => setRowWidths(row.id, w)}
+                    onRemove={() => removeRow(row.id)}
+                    onClearBlock={(colId) => setAreaBlock(row.id, colId, null)}
+                    blockLabel={(t) => meta?.blocks.find((b) => b.type === t)?.label ?? t}
+                  />
+                ))}
+              </SortableContext>
+            )}
+            <Button variant="light" onClick={addRow}>
+              + Add section
+            </Button>
+          </Stack>
+
+          {/* Sidebar: palette + block settings */}
+          <Stack gap="md" style={{ flex: '0 0 260px', minWidth: 240 }}>
+            <Card withBorder radius="md" padding="sm">
+              <Text size="sm" fw={600} mb="xs">
+                Blocks — drag onto a section
+              </Text>
+              <Stack gap={6}>
+                {(meta?.blocks ?? []).map((b) => (
+                  <PaletteChip key={b.type} type={b.type} label={b.label} />
+                ))}
+              </Stack>
+            </Card>
+
+            {selBlock && sel && (
+              <Card withBorder radius="md" padding="sm">
+                <Text size="sm" fw={600} mb="xs">
+                  {meta?.blocks.find((b) => b.type === selBlock.type)?.label ?? selBlock.type} settings
+                </Text>
+                <BlockSettings type={selBlock.type} props={selBlock.props} onChange={(k, v) => setBlockProp(sel.rowId, sel.colId, k, v)} />
+              </Card>
+            )}
+          </Stack>
+        </Group>
+      </DndContext>
 
       <ThemeModal opened={themeOpen} onClose={themeCtl.close} theme={theme} fonts={meta?.fonts ?? []} onChange={setTheme} />
-
       <Modal opened={previewOpen} onClose={previewCtl.close} title="Preview (example data)" size="xl" centered>
-        <Paper p="lg" radius="md" bg="#fff">
-          <ProposalRenderer
-            layout={rows}
-            theme={theme}
-            ctx={buildPreviewCtx(Object.fromEntries(variables.map((v) => [v.key, v.example])))}
-          />
+        <Paper p="lg" radius="md" bg="var(--mantine-color-gray-1)">
+          <ProposalRenderer layout={pages} theme={theme} paged ctx={buildPreviewCtx(Object.fromEntries(variables.map((v) => [v.key, v.example])))} />
         </Paper>
       </Modal>
     </Stack>
+  );
+}
+
+function RowEditor({
+  row,
+  selected,
+  onSelect,
+  onWidths,
+  onRemove,
+  onClearBlock,
+  blockLabel,
+}: {
+  row: ProposalPage['rows'][number];
+  selected: { rowId: string; colId: string } | null;
+  onSelect: (colId: string) => void;
+  onWidths: (widths: number[]) => void;
+  onRemove: () => void;
+  onClearBlock: (colId: string) => void;
+  blockLabel: (t: ProposalBlockType) => string;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `row:${row.id}` });
+  const preset = ROW_PRESETS.find((p) => p.widths.join('-') === row.columns.map((c) => c.width).join('-'))?.value ?? '12';
+  return (
+    <Card
+      ref={setNodeRef}
+      withBorder
+      radius="md"
+      padding="sm"
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 }}
+    >
+      <Group justify="space-between" mb="xs">
+        <Group gap={6}>
+          <ActionIcon variant="subtle" color="gray" {...attributes} {...listeners} aria-label="Drag section" style={{ cursor: 'grab' }}>
+            <IconGripVertical size={16} />
+          </ActionIcon>
+          <Select
+            size="xs"
+            w={190}
+            data={ROW_PRESETS.map((p) => ({ value: p.value, label: p.label }))}
+            value={preset}
+            onChange={(v) => onWidths(ROW_PRESETS.find((p) => p.value === v)?.widths ?? [12])}
+            allowDeselect={false}
+          />
+        </Group>
+        <ActionIcon variant="subtle" color="red" onClick={onRemove} aria-label="Remove section">
+          <IconTrash size={16} />
+        </ActionIcon>
+      </Group>
+      <Group align="stretch" gap="xs" wrap="nowrap">
+        {row.columns.map((c) => (
+          <Area
+            key={c.id}
+            rowId={row.id}
+            col={c}
+            selected={selected?.rowId === row.id && selected?.colId === c.id}
+            onSelect={() => onSelect(c.id)}
+            onClear={() => onClearBlock(c.id)}
+            label={c.block ? blockLabel(c.block.type) : ''}
+          />
+        ))}
+      </Group>
+    </Card>
+  );
+}
+
+function Area({
+  rowId,
+  col,
+  selected,
+  onSelect,
+  onClear,
+  label,
+}: {
+  rowId: string;
+  col: ProposalColumn;
+  selected: boolean;
+  onSelect: () => void;
+  onClear: () => void;
+  label: string;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `area:${rowId}:${col.id}` });
+  const drag = useDraggable({ id: `block:${rowId}:${col.id}` });
+  return (
+    <div
+      ref={setNodeRef}
+      onClick={onSelect}
+      style={{
+        flex: col.width,
+        minWidth: 0,
+        minHeight: 54,
+        borderRadius: 8,
+        border: `1px dashed ${isOver ? 'var(--mantine-color-candango-6)' : selected ? 'var(--mantine-color-candango-4)' : 'var(--mantine-color-gray-4)'}`,
+        background: isOver ? 'var(--mantine-color-candango-0)' : selected ? 'var(--mantine-color-candango-0)' : 'transparent',
+        padding: 8,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {col.block ? (
+        <Group gap={4} wrap="nowrap" ref={drag.setNodeRef} {...drag.attributes} style={{ transform: CSS.Translate.toString(drag.transform) }}>
+          <Badge variant="light" color="candango" style={{ textTransform: 'none', cursor: 'grab' }} {...drag.listeners}>
+            {label}
+          </Badge>
+          <ActionIcon
+            size="xs"
+            variant="subtle"
+            color="red"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClear();
+            }}
+            aria-label="Remove block"
+          >
+            <IconX size={12} />
+          </ActionIcon>
+        </Group>
+      ) : (
+        <Text size="xs" c="dimmed">
+          Drop a block
+        </Text>
+      )}
+    </div>
+  );
+}
+
+function PaletteChip({ type, label }: { type: ProposalBlockType; label: string }) {
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: `palette:${type}` });
+  return (
+    <Paper
+      ref={setNodeRef}
+      withBorder
+      radius="sm"
+      p="xs"
+      {...attributes}
+      {...listeners}
+      style={{ cursor: 'grab', transform: CSS.Translate.toString(transform), background: 'var(--mantine-color-gray-0)' }}
+    >
+      <Text size="sm">{label}</Text>
+    </Paper>
   );
 }
 
@@ -243,25 +457,19 @@ function BlockSettings({
   if (type === 'cover') {
     return (
       <Stack gap={6}>
-        <TextInput size="xs" placeholder="Title (supports {{variables}})" value={(props.title as string) ?? ''} onChange={(e) => onChange('title', e.currentTarget.value)} />
+        <TextInput size="xs" placeholder="Title ({{variables}})" value={(props.title as string) ?? ''} onChange={(e) => onChange('title', e.currentTarget.value)} />
         <TextInput size="xs" placeholder="Subtitle" value={(props.subtitle as string) ?? ''} onChange={(e) => onChange('subtitle', e.currentTarget.value)} />
       </Stack>
     );
   }
   if (type === 'text') {
-    return (
-      <Textarea size="xs" autosize minRows={2} maxRows={8} placeholder="Text (HTML + {{variables}})" value={(props.html as string) ?? ''} onChange={(e) => onChange('html', e.currentTarget.value)} />
-    );
+    return <Textarea size="xs" autosize minRows={3} maxRows={10} placeholder="Text (HTML + {{variables}})" value={(props.html as string) ?? ''} onChange={(e) => onChange('html', e.currentTarget.value)} />;
   }
   if (type === 'image') {
-    return (
-      <TextInput size="xs" label="Image field key (optional)" description="Which image custom field to pull from at build time — leave blank to choose per proposal." value={(props.fieldKey as string) ?? ''} onChange={(e) => onChange('fieldKey', e.currentTarget.value)} />
-    );
+    return <TextInput size="xs" label="Image field key" description="Optional — which image custom field to pull; blank = choose per proposal." value={(props.fieldKey as string) ?? ''} onChange={(e) => onChange('fieldKey', e.currentTarget.value)} />;
   }
   if (type === 'document') {
-    return (
-      <TextInput size="xs" label="Document field key (optional)" description="Which document custom field to attach — leave blank to choose per proposal." value={(props.fieldKey as string) ?? ''} onChange={(e) => onChange('fieldKey', e.currentTarget.value)} />
-    );
+    return <TextInput size="xs" label="Document field key" description="Optional — which document custom field to attach." value={(props.fieldKey as string) ?? ''} onChange={(e) => onChange('fieldKey', e.currentTarget.value)} />;
   }
   return (
     <Text size="xs" c="dimmed">

@@ -45,7 +45,9 @@ export const DEFAULT_THEME: ProposalTheme = {
 // ── Starter templates (protected; always seeded) ───────────────────────────────
 type Col = { id: string; width: number; block: { type: ProposalBlockType; props: Record<string, unknown> } | null };
 type Row = { id: string; columns: Col[] };
+type Page = { id: string; rows: Row[] };
 
+const page = (id: string, rows: Row[]): Page => ({ id, rows });
 const row = (id: string, columns: Col[]): Row => ({ id, columns });
 const col = (id: string, width: number, type: ProposalBlockType, props: Record<string, unknown> = {}): Col => ({
   id,
@@ -57,7 +59,7 @@ export interface StarterTemplate {
   systemKey: string;
   name: string;
   theme: ProposalTheme;
-  layout: Row[];
+  layout: Page[]; // ordered pages, each a stack of rows
 }
 
 export const STARTER_TEMPLATES: StarterTemplate[] = [
@@ -66,9 +68,11 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     name: 'Simple estimate',
     theme: DEFAULT_THEME,
     layout: [
-      row('r1', [col('c1', 12, 'cover', { title: '{{deal.title}}', subtitle: 'Prepared for {{contact.name}}' })]),
-      row('r2', [col('c1', 12, 'text', { html: '<p>Hi {{contact.first_name}}, thank you for the opportunity. Here is your estimate.</p>' })]),
-      row('r3', [col('c1', 12, 'pricing', {})]),
+      page('p1', [
+        row('r1', [col('c1', 12, 'cover', { title: '{{deal.title}}', subtitle: 'Prepared for {{contact.name}}' })]),
+        row('r2', [col('c1', 12, 'text', { html: '<p>Hi {{contact.first_name}}, thank you for the opportunity. Here is your estimate.</p>' })]),
+        row('r3', [col('c1', 12, 'pricing', {})]),
+      ]),
     ],
   },
   {
@@ -76,11 +80,15 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     name: 'Photo-rich proposal',
     theme: { ...DEFAULT_THEME, coverStyle: 'image' },
     layout: [
-      row('r1', [col('c1', 12, 'cover', { title: '{{deal.title}}', subtitle: '{{company.name}}' })]),
-      row('r2', [col('c1', 12, 'image', {})]),
-      row('r3', [col('c1', 6, 'text', { html: '<p>Scope of work…</p>' }), col('c2', 6, 'text', { html: '<p>What’s included…</p>' })]),
-      row('r4', [col('c1', 12, 'pricing', {})]),
-      row('r5', [col('c1', 12, 'document', {})]),
+      page('p1', [
+        row('r1', [col('c1', 12, 'cover', { title: '{{deal.title}}', subtitle: '{{company.name}}' })]),
+        row('r2', [col('c1', 12, 'image', {})]),
+      ]),
+      page('p2', [
+        row('r1', [col('c1', 6, 'text', { html: '<p>Scope of work…</p>' }), col('c2', 6, 'text', { html: '<p>What’s included…</p>' })]),
+        row('r2', [col('c1', 12, 'pricing', {})]),
+        row('r3', [col('c1', 12, 'document', {})]),
+      ]),
     ],
   },
   {
@@ -88,9 +96,11 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     name: 'Service agreement',
     theme: DEFAULT_THEME,
     layout: [
-      row('r1', [col('c1', 12, 'cover', { title: 'Service Agreement', subtitle: '{{deal.title}} — {{contact.name}}' })]),
-      row('r2', [col('c1', 12, 'text', { html: '<p>This agreement is between {{workspace.name}} and {{contact.name}}…</p>' })]),
-      row('r3', [col('c1', 12, 'pricing', {})]),
+      page('p1', [
+        row('r1', [col('c1', 12, 'cover', { title: 'Service Agreement', subtitle: '{{deal.title}} — {{contact.name}}' })]),
+        row('r2', [col('c1', 12, 'text', { html: '<p>This agreement is between {{workspace.name}} and {{contact.name}}…</p>' })]),
+        row('r3', [col('c1', 12, 'pricing', {})]),
+      ]),
     ],
   },
 ];

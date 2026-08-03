@@ -176,19 +176,22 @@ export default function ProposalTemplatesPage() {
               <Link href={`/settings/proposals/${t.id}`} style={{ textDecoration: 'none' }}>
                 <Paper withBorder radius="sm" p="xs" bg="var(--mantine-color-gray-0)">
                   <Stack gap={4}>
-                    {(t.layout ?? []).slice(0, 5).map((r) => (
-                      <Group key={r.id} gap={4} wrap="nowrap">
-                        {r.columns.map((c) => (
-                          <Paper
-                            key={c.id}
-                            withBorder
-                            radius={2}
-                            style={{ flex: c.width, height: 14, background: 'var(--mantine-color-gray-1)' }}
-                          />
-                        ))}
-                      </Group>
-                    ))}
-                    {(t.layout ?? []).length === 0 && (
+                    {(t.layout ?? [])
+                      .flatMap((p) => p.rows ?? [])
+                      .slice(0, 5)
+                      .map((r) => (
+                        <Group key={r.id} gap={4} wrap="nowrap">
+                          {r.columns.map((c) => (
+                            <Paper
+                              key={c.id}
+                              withBorder
+                              radius={2}
+                              style={{ flex: c.width, height: 14, background: 'var(--mantine-color-gray-1)' }}
+                            />
+                          ))}
+                        </Group>
+                      ))}
+                    {(t.layout ?? []).flatMap((p) => p.rows ?? []).length === 0 && (
                       <Text size="xs" c="dimmed">
                         Empty — click to design
                       </Text>
