@@ -11,8 +11,8 @@ import {
   Menu,
   Modal,
   MultiSelect,
-  Paper,
   Select,
+  SimpleGrid,
   Stack,
   Text,
   TextInput,
@@ -87,42 +87,38 @@ function ProposalList({ dealId, onOpen }: { dealId: string; onOpen: (id: string)
           No proposals yet. Create one from a template.
         </Text>
       ) : (
-        <Stack gap="xs">
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
           {proposals.map((p) => (
-            <Paper key={p.id} withBorder radius="sm" p="xs">
-              <Group justify="space-between" wrap="nowrap">
-                <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, cursor: 'pointer' }} onClick={() => onOpen(p.id)}>
-                  <div style={{ minWidth: 0 }}>
-                    <Text fw={500} lineClamp={1}>
-                      {p.title}
-                    </Text>
-                    <Text size="xs" c="dimmed">
-                      Updated {new Date(p.updatedAt).toLocaleDateString()}
-                    </Text>
-                  </div>
-                </Group>
-                <Group gap="xs" wrap="nowrap">
-                  <Badge variant="light" color={STATUS_COLOR[p.status]} style={{ textTransform: 'none' }}>
-                    {p.status}
-                  </Badge>
-                  <Menu position="bottom-end" withinPortal shadow="sm">
-                    <Menu.Target>
-                      <ActionIcon variant="subtle" color="gray" aria-label="Actions">
-                        <IconDots size={16} />
-                      </ActionIcon>
-                    </Menu.Target>
-                    <Menu.Dropdown>
-                      <Menu.Item onClick={() => onOpen(p.id)}>Open</Menu.Item>
-                      <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => remove(p)}>
-                        Delete
-                      </Menu.Item>
-                    </Menu.Dropdown>
-                  </Menu>
-                </Group>
+            <Card key={p.id} withBorder radius="md" padding="md" style={{ cursor: 'pointer' }} onClick={() => onOpen(p.id)}>
+              <Group justify="space-between" wrap="nowrap" mb="sm">
+                <Text fw={600} lineClamp={1}>
+                  {p.title}
+                </Text>
+                <Menu position="bottom-end" withinPortal shadow="sm">
+                  <Menu.Target>
+                    <ActionIcon variant="subtle" color="gray" aria-label="Actions" onClick={(e) => e.stopPropagation()}>
+                      <IconDots size={16} />
+                    </ActionIcon>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    <Menu.Item onClick={(e) => { e.stopPropagation(); onOpen(p.id); }}>Open</Menu.Item>
+                    <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={(e) => { e.stopPropagation(); remove(p); }}>
+                      Delete
+                    </Menu.Item>
+                  </Menu.Dropdown>
+                </Menu>
               </Group>
-            </Paper>
+              <Group justify="space-between" wrap="nowrap">
+                <Badge variant="light" color={STATUS_COLOR[p.status]} style={{ textTransform: 'none' }}>
+                  {p.status}
+                </Badge>
+                <Text size="xs" c="dimmed">
+                  {new Date(p.updatedAt).toLocaleDateString()}
+                </Text>
+              </Group>
+            </Card>
           ))}
-        </Stack>
+        </SimpleGrid>
       )}
 
       <NewProposalModal opened={opened} onClose={ctl.close} dealId={dealId} onCreated={onOpen} />

@@ -13,6 +13,7 @@ import {
   Modal,
   NumberInput,
   Paper,
+  Popover,
   SegmentedControl,
   Select,
   SimpleGrid,
@@ -22,7 +23,7 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconChevronLeft, IconChevronRight, IconClipboard, IconClipboardCopy, IconCheck, IconCopy, IconEye, IconGripVertical, IconLayoutGrid, IconLock, IconPalette, IconPlus, IconTrash, IconUpload, IconX } from '@tabler/icons-react';
+import { IconChevronLeft, IconChevronRight, IconClipboard, IconClipboardCopy, IconCheck, IconCopy, IconEye, IconGripVertical, IconLayoutGrid, IconLock, IconPalette, IconPlus, IconSlideshow, IconTrash, IconUpload, IconX } from '@tabler/icons-react';
 import type { CanvasElement, CanvasPage, ElementType, ProposalDocFile, ProposalImageFile, ProposalTheme } from '@/lib/api/proposals';
 import { RichTextBody } from '@/components/common/RichTextBody';
 import { ElementView, ProposalRenderer, type MediaPick, type ProposalRenderCtx } from './ProposalRenderer';
@@ -370,6 +371,47 @@ export function ProposalCanvasEditor({
               Paste
             </Button>
           )}
+          <Popover position="bottom-end" withArrow shadow="md" width={288}>
+            <Popover.Target>
+              <Button variant="default" size="xs" leftSection={<IconSlideshow size={16} />}>
+                Present
+              </Button>
+            </Popover.Target>
+            <Popover.Dropdown>
+              <Stack gap="sm">
+                <Text size="xs" fw={600} tt="uppercase" c="dimmed">
+                  Presentation
+                </Text>
+                <Select
+                  label="Recipient view"
+                  description="How the customer sees it on the shared link."
+                  data={[
+                    { value: 'slides', label: 'Slides (one page at a time)' },
+                    { value: 'scroll', label: 'Scroll (continuous)' },
+                  ]}
+                  value={theme.present ?? 'slides'}
+                  onChange={(v) => onThemeChange({ ...theme, present: (v as 'slides' | 'scroll') ?? 'slides' })}
+                  allowDeselect={false}
+                />
+                <Select
+                  label="Page transition"
+                  data={[
+                    { value: 'fade', label: 'Fade' },
+                    { value: 'slide', label: 'Slide' },
+                    { value: 'none', label: 'None' },
+                  ]}
+                  value={theme.transition ?? 'fade'}
+                  onChange={(v) => onThemeChange({ ...theme, transition: (v as 'none' | 'fade' | 'slide') ?? 'fade' })}
+                  allowDeselect={false}
+                />
+                <Switch
+                  label="Animate elements in"
+                  checked={theme.animate ?? true}
+                  onChange={(e) => onThemeChange({ ...theme, animate: e.currentTarget.checked })}
+                />
+              </Stack>
+            </Popover.Dropdown>
+          </Popover>
           <Button variant="default" size="xs" leftSection={<IconEye size={16} />} onClick={previewCtl.open}>
             Preview
           </Button>
@@ -515,8 +557,8 @@ export function ProposalCanvasEditor({
           )}
         </div>
 
-        {/* Sidebar */}
-        <Stack gap="md" style={{ flex: '0 0 280px', minWidth: 250, maxHeight: 'calc(100vh - 250px)', overflowY: 'auto' }}>
+        {/* Sidebar — its own full-height column so the controls always have room */}
+        <Stack gap="md" style={{ flex: '0 0 320px', minWidth: 280, alignSelf: 'stretch' }}>
           <Card withBorder radius="md" padding="sm">
             <Text size="sm" fw={600} mb={2}>
               Add element
@@ -1199,37 +1241,6 @@ function ThemeModal({
         <Select label="Heading font" data={fonts} value={theme.fontHeading} onChange={(v) => set({ fontHeading: v ?? theme.fontHeading })} allowDeselect={false} />
         <Select label="Body font" data={fonts} value={theme.fontBody} onChange={(v) => set({ fontBody: v ?? theme.fontBody })} allowDeselect={false} />
         <NumberInput label="Margin guide (%)" description="Safe area shown when Margins is on." min={0} max={20} value={theme.margin ?? 6} onChange={(v) => set({ margin: Number(v) || 0 })} />
-
-        <Text size="xs" fw={600} tt="uppercase" c="dimmed" mt="xs">
-          Presentation
-        </Text>
-        <Select
-          label="Recipient view"
-          description="How the customer sees it on the shared link."
-          data={[
-            { value: 'slides', label: 'Slides (one page at a time)' },
-            { value: 'scroll', label: 'Scroll (continuous)' },
-          ]}
-          value={theme.present ?? 'slides'}
-          onChange={(v) => set({ present: (v as 'slides' | 'scroll') ?? 'slides' })}
-          allowDeselect={false}
-        />
-        <Select
-          label="Page transition"
-          data={[
-            { value: 'fade', label: 'Fade' },
-            { value: 'slide', label: 'Slide' },
-            { value: 'none', label: 'None' },
-          ]}
-          value={theme.transition ?? 'fade'}
-          onChange={(v) => set({ transition: (v as 'none' | 'fade' | 'slide') ?? 'fade' })}
-          allowDeselect={false}
-        />
-        <Switch
-          label="Animate elements in"
-          checked={theme.animate ?? true}
-          onChange={(e) => set({ animate: e.currentTarget.checked })}
-        />
         <Button onClick={onClose}>Done</Button>
       </Stack>
     </Modal>
