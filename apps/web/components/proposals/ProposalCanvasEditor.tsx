@@ -19,7 +19,7 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconEye, IconLayout2, IconLayoutGrid, IconPalette, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
+import { IconCopy, IconEye, IconLayout2, IconLayoutGrid, IconLock, IconPalette, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
 import type { CanvasElement, CanvasPage, ElementType, Orientation, ProposalTheme } from '@/lib/api/proposals';
 import { RichTextBody } from '@/components/common/RichTextBody';
 import { ElementView, ProposalRenderer, type ProposalRenderCtx } from './ProposalRenderer';
@@ -131,6 +131,8 @@ export interface ProposalCanvasEditorProps {
   ctx: ProposalRenderCtx;
   imageFields?: FieldOption[];
   documentFields?: FieldOption[];
+  /** When true (deal builder), elements the template marked as locked can't be moved/edited/deleted. */
+  enforceLocks?: boolean;
 }
 
 export function ProposalCanvasEditor({
@@ -143,14 +145,17 @@ export function ProposalCanvasEditor({
   ctx,
   imageFields = [],
   documentFields = [],
+  enforceLocks = false,
 }: ProposalCanvasEditorProps) {
   const [pageId, setPageId] = useState<string | null>(pages[0]?.id ?? null);
   const [selId, setSelId] = useState<string | null>(null);
   const [themeOpen, themeCtl] = useDisclosure(false);
   const [previewOpen, previewCtl] = useDisclosure(false);
   const [showGrid, setShowGrid] = useState(true);
+  const [showMargins, setShowMargins] = useState(false);
   const [snap, setSnap] = useState(true);
   const pageRef = useRef<HTMLDivElement>(null);
+  const margin = theme.margin ?? 6;
 
   const activeId = pageId && pages.some((p) => p.id === pageId) ? pageId : pages[0]?.id ?? null;
   const page = useMemo(() => pages.find((p) => p.id === activeId) ?? null, [pages, activeId]);
@@ -200,6 +205,15 @@ export function ProposalCanvasEditor({
     setPageId(np.id);
     setSelId(null);
   };
+  const duplicatePage = (pid: string) => {
+    const src = pages.find((p) => p.id === pid);
+    if (!src) return;
+    const copy: CanvasPage = { id: uid(), elements: src.elements.map((e) => ({ ...e, id: uid(), props: { ...e.props }, style: { ...e.style } })) };
+    const idx = pages.findIndex((p) => p.id === pid);
+    onPagesChange([...pages.slice(0, idx + 1), copy, ...pages.slice(idx + 1)]);
+    setPageId(copy.id);
+    setSelId(null);
+  };
   const removePage = (pid: string) => {
     const next = pages.filter((p) => p.id !== pid);
     const safe = next.length ? next : [{ id: uid(), elements: [] }];
@@ -228,6 +242,7 @@ export function ProposalCanvasEditor({
           />
           <Switch size="xs" label="12-col grid" checked={showGrid} onChange={(e) => setShowGrid(e.currentTarget.checked)} thumbIcon={<IconLayoutGrid size={10} />} />
           <Switch size="xs" label="Snap to grid" checked={snap} onChange={(e) => setSnap(e.currentTarget.checked)} />
+          <Switch size="xs" label="Margins" checked={showMargins} onChange={(e) => setShowMargins(e.currentTarget.checked)} />
         </Group>
         <Group gap="xs">
           <Menu position="bottom-end" withinPortal shadow="sm">
@@ -261,7 +276,12 @@ export function ProposalCanvasEditor({
             key={p.id}
             size="xs"
             variant={p.id === activeId ? 'filled' : 'default'}
-            rightSection={pages.length > 1 ? <IconX size={12} onClick={(ev) => { ev.stopPropagation(); removePage(p.id); }} /> : null}
+            rightSection={
+              <Group gap={4} wrap="nowrap">
+                <IconCopy size={12} title="Duplicate page" onClick={(ev) => { ev.stopPropagation(); duplicatePage(p.id); }} />
+                {pages.length > 1 && <IconX size={12} title="Delete page" onClick={(ev) => { ev.stopPropagation(); removePage(p.id); }} />}
+              </Group>
+            }
             onClick={() => { setPageId(p.id); setSelId(null); }}
           >
             Page {i + 1}
@@ -300,11 +320,24 @@ export function ProposalCanvasEditor({
                   ))}
                 </div>
               )}
+              {/* Safe-area margin guide */}
+              {showMargins && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: `${margin}% ${margin}%`,
+                    border: '1px dashed rgba(217,85,44,0.5)',
+                    borderRadius: 4,
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
               {page?.elements.map((el) => (
                 <EditableElement
                   key={el.id}
                   el={el}
                   selected={el.id === selId}
+                  locked={enforceLocks && !!el.props.locked}
                   theme={theme}
                   ctx={ctx}
                   pageRef={pageRef}
@@ -357,6 +390,7 @@ export function ProposalCanvasEditor({
               <ElementSettings
                 el={sel}
                 fonts={fonts}
+                showLock={!enforceLocks}
                 onProp={(k, v) => setProp(sel.id, k, v)}
                 onStyle={(patch) => setStyle(sel.id, patch)}
                 onGeom={(patch) => updateElement(sel.id, patch)}
@@ -388,6 +422,7 @@ export function ProposalCanvasEditor({
 function EditableElement({
   el,
   selected,
+  locked,
   theme,
   ctx,
   pageRef,
@@ -398,6 +433,7 @@ function EditableElement({
 }: {
   el: CanvasElement;
   selected: boolean;
+  locked: boolean;
   theme: ProposalTheme;
   ctx: ProposalRenderCtx;
   pageRef: React.RefObject<HTMLDivElement | null>;
@@ -411,6 +447,7 @@ function EditableElement({
   const showTag = (el.type === 'image' || el.type === 'document') && !!label;
 
   const start = (mode: 'move' | 'resize') => (e: React.PointerEvent) => {
+    if (locked) return;
     e.stopPropagation();
     e.preventDefault();
     onSelect();
@@ -449,15 +486,33 @@ function EditableElement({
         height: `${el.h}%`,
         outline: selected ? `2px solid ${theme.primaryColor}` : '1px dashed transparent',
         outlineOffset: 1,
-        cursor: 'move',
+        cursor: locked ? 'not-allowed' : 'move',
         boxSizing: 'border-box',
       }}
-      onMouseEnter={(e) => { if (!selected) e.currentTarget.style.outline = '1px dashed var(--mantine-color-gray-4)'; }}
-      onMouseLeave={(e) => { if (!selected) e.currentTarget.style.outline = '1px dashed transparent'; }}
+      onMouseEnter={(e) => { if (!selected && !locked) e.currentTarget.style.outline = '1px dashed var(--mantine-color-gray-4)'; }}
+      onMouseLeave={(e) => { if (!selected && !locked) e.currentTarget.style.outline = '1px dashed transparent'; }}
     >
       <div style={{ width: '100%', height: '100%', pointerEvents: 'none' }}>
         <ElementView element={el} theme={theme} ctx={ctx} />
       </div>
+      {locked && (
+        <span
+          style={{
+            position: 'absolute',
+            top: 2,
+            right: 2,
+            display: 'inline-flex',
+            background: 'rgba(0,0,0,0.45)',
+            color: '#fff',
+            padding: 2,
+            borderRadius: 4,
+            pointerEvents: 'none',
+          }}
+          title="Locked by the template"
+        >
+          <IconLock size={11} />
+        </span>
+      )}
       {showTag && (
         <span
           style={{
@@ -503,6 +558,7 @@ function EditableElement({
 function ElementSettings({
   el,
   fonts,
+  showLock,
   onProp,
   onStyle,
   onGeom,
@@ -513,6 +569,7 @@ function ElementSettings({
 }: {
   el: CanvasElement;
   fonts: string[];
+  showLock: boolean;
   onProp: (key: string, value: unknown) => void;
   onStyle: (patch: Partial<NonNullable<CanvasElement['style']>>) => void;
   onGeom: (patch: Partial<CanvasElement>) => void;
@@ -525,6 +582,15 @@ function ElementSettings({
   const textLike = el.type === 'text' || el.type === 'heading';
   return (
     <Stack gap="sm">
+      {showLock && (
+        <Switch
+          size="xs"
+          label="Lock in proposals"
+          description="Salespeople can't move, edit or delete this element."
+          checked={!!el.props.locked}
+          onChange={(e) => onProp('locked', e.currentTarget.checked)}
+        />
+      )}
       {/* Content */}
       {el.type === 'heading' && (
         <TextInput size="xs" label="Text" value={(el.props.text as string) ?? ''} onChange={(e) => onProp('text', e.currentTarget.value)} />
@@ -651,6 +717,7 @@ function ThemeModal({
         <ColorInput label="Accent (text) color" value={theme.accentColor} onChange={(v) => set({ accentColor: v })} />
         <Select label="Heading font" data={fonts} value={theme.fontHeading} onChange={(v) => set({ fontHeading: v ?? theme.fontHeading })} allowDeselect={false} />
         <Select label="Body font" data={fonts} value={theme.fontBody} onChange={(v) => set({ fontBody: v ?? theme.fontBody })} allowDeselect={false} />
+        <NumberInput label="Margin guide (%)" description="Safe area shown when Margins is on." min={0} max={20} value={theme.margin ?? 6} onChange={(v) => set({ margin: Number(v) || 0 })} />
         <Button onClick={onClose}>Done</Button>
       </Stack>
     </Modal>

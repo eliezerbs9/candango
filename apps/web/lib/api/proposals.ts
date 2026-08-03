@@ -62,6 +62,8 @@ export interface ProposalTheme {
   fontBody: string;
   coverStyle: 'solid' | 'image';
   orientation?: Orientation;
+  /** Optional safe-area margin (percent of the page) shown as a design guide in the editor. */
+  margin?: number;
 }
 
 export interface ProposalTemplate {

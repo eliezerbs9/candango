@@ -284,6 +284,7 @@ function ProposalBuilder({ id, onBack }: { id: string; onBack: () => void }) {
         ctx={ctx}
         imageFields={imageFields}
         documentFields={documentFields}
+        enforceLocks
       />
     </Stack>
   );
