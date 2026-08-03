@@ -13,11 +13,13 @@ export function AddressFields({
   value,
   onChange,
   withName = true,
+  hideLabel = false,
 }: {
   label: string;
   value: Address;
   onChange: (v: Address) => void;
   withName?: boolean;
+  hideLabel?: boolean;
 }) {
   const set = (k: keyof Address, val: string) => onChange({ ...value, [k]: val });
 
@@ -51,9 +53,11 @@ export function AddressFields({
 
   return (
     <Stack gap={6}>
-      <Text size="sm" fw={500}>
-        {label}
-      </Text>
+      {!hideLabel && (
+        <Text size="sm" fw={500}>
+          {label}
+        </Text>
+      )}
       {withName && (
         <TextInput placeholder="Name / attention" value={value.name ?? ''} onChange={(e) => set('name', e.currentTarget.value)} />
       )}

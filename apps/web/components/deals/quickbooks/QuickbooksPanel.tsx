@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Alert, Anchor, Badge, Button, Card, Divider, Group, Stack, Text } from '@mantine/core';
+import { Alert, Anchor, Badge, Button, Card, Group, SimpleGrid, Stack, Text } from '@mantine/core';
 import Link from 'next/link';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -275,43 +275,46 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
           </Alert>
         )}
 
-        {/* Estimates */}
-        <Group justify="space-between">
-          <Text fw={500}>Estimates</Text>
-          {mode !== 'link' && (
-            <Button size="xs" variant="subtle" leftSection={<IconPlus size={14} />} onClick={() => { setEstEditing(null); estCtl.open(); }}>
-              New estimate
-            </Button>
-          )}
-        </Group>
-        <DocList
-          docs={estimateDocs}
-          statuses={ESTIMATE_STATUSES}
-          onSetStatus={(id, status) => setEstStatus.mutate({ id, status }, { onError: fail })}
-          onOpen={(doc) => setView({ doc, kind: 'Estimate' })}
-          isStatusLocked={(d) => d.status === 'closed' || isReadOnlyDoc(d)}
-          emptyText={mode === 'link' ? 'Link the deal to add estimates.' : 'No estimates yet.'}
-          connected={connected}
-          actions={estimateActions}
-        />
-
-        {/* Invoices — created only by converting estimates; shown read-only if kept after a disconnect */}
-        {showInvoices && (
-          <>
-            <Divider />
-            <Text fw={500}>Invoices</Text>
+        {/* Estimates + invoices, side by side when both are shown */}
+        <SimpleGrid cols={{ base: 1, md: showInvoices ? 2 : 1 }} spacing="lg">
+          <Stack gap="sm">
+            <Group justify="space-between">
+              <Text fw={500}>Estimates</Text>
+              {mode !== 'link' && (
+                <Button size="xs" variant="subtle" leftSection={<IconPlus size={14} />} onClick={() => { setEstEditing(null); estCtl.open(); }}>
+                  New estimate
+                </Button>
+              )}
+            </Group>
             <DocList
-              docs={invoiceDocs}
-              statuses={INVOICE_STATUSES}
-              onSetStatus={(id, status) => setInvStatus.mutate({ id, status }, { onSuccess: () => stageCtl.open(), onError: fail })}
-              onOpen={(doc) => setView({ doc, kind: 'Invoice' })}
-              isStatusLocked={(d) => isReadOnlyDoc(d)}
-              emptyText="No invoices yet — convert an estimate (⋯ → Convert to invoice)."
+              docs={estimateDocs}
+              statuses={ESTIMATE_STATUSES}
+              onSetStatus={(id, status) => setEstStatus.mutate({ id, status }, { onError: fail })}
+              onOpen={(doc) => setView({ doc, kind: 'Estimate' })}
+              isStatusLocked={(d) => d.status === 'closed' || isReadOnlyDoc(d)}
+              emptyText={mode === 'link' ? 'Link the deal to add estimates.' : 'No estimates yet.'}
               connected={connected}
-              actions={mode === 'qbo' ? invoiceActions : undefined}
+              actions={estimateActions}
             />
-          </>
-        )}
+          </Stack>
+
+          {/* Invoices — created only by converting estimates; shown read-only if kept after a disconnect */}
+          {showInvoices && (
+            <Stack gap="sm">
+              <Text fw={500}>Invoices</Text>
+              <DocList
+                docs={invoiceDocs}
+                statuses={INVOICE_STATUSES}
+                onSetStatus={(id, status) => setInvStatus.mutate({ id, status }, { onSuccess: () => stageCtl.open(), onError: fail })}
+                onOpen={(doc) => setView({ doc, kind: 'Invoice' })}
+                isStatusLocked={(d) => isReadOnlyDoc(d)}
+                emptyText="No invoices yet — convert an estimate (⋯ → Convert to invoice)."
+                connected={connected}
+                actions={mode === 'qbo' ? invoiceActions : undefined}
+              />
+            </Stack>
+          )}
+        </SimpleGrid>
 
         {hasKeptQboDocs ? (
           <Alert variant="light" color="gray" icon={<IconInfoCircle size={16} />}>

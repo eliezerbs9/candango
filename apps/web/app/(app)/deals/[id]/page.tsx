@@ -14,16 +14,18 @@ import {
   Group,
   Loader,
   NumberInput,
+  Paper,
   SimpleGrid,
   Stack,
   Tabs,
   Text,
+  ThemeIcon,
   TextInput,
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconArrowLeft, IconMail } from '@tabler/icons-react';
+import { IconArrowLeft, IconMail, IconReceipt2, IconTruckDelivery } from '@tabler/icons-react';
 import { ComposeEmail } from '@/components/email/ComposeEmail';
 import { StatusBadge } from '@/components/primitives/StatusBadge';
 import { Money } from '@/components/primitives/Money';
@@ -323,15 +325,45 @@ export default function DealDetailPage() {
           <Stack gap="lg">
             {qb?.connected && (
               <Card withBorder radius="md" padding="lg">
-                <Group justify="space-between" mb="sm">
+                <Group justify="space-between" mb="md">
                   <Text fw={600}>Addresses</Text>
                   <Badge size="xs" variant="light" color="blue" style={{ textTransform: 'none' }}>
                     QuickBooks
                   </Badge>
                 </Group>
                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
-                  <AddressFields label="Ship to (work site)" value={form.shipTo} onChange={(v) => setForm({ ...form, shipTo: v })} />
-                  <AddressFields label="Bill to (payer)" value={form.billTo} onChange={(v) => setForm({ ...form, billTo: v })} />
+                  <Paper withBorder radius="md" p="md">
+                    <Group gap="sm" mb="sm" wrap="nowrap">
+                      <ThemeIcon variant="light" color="teal" radius="md" size="lg">
+                        <IconTruckDelivery size={18} />
+                      </ThemeIcon>
+                      <div>
+                        <Text fw={600} size="sm">
+                          Ship to
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          Where the work happens
+                        </Text>
+                      </div>
+                    </Group>
+                    <AddressFields hideLabel label="Ship to" value={form.shipTo} onChange={(v) => setForm({ ...form, shipTo: v })} />
+                  </Paper>
+                  <Paper withBorder radius="md" p="md">
+                    <Group gap="sm" mb="sm" wrap="nowrap">
+                      <ThemeIcon variant="light" color="orange" radius="md" size="lg">
+                        <IconReceipt2 size={18} />
+                      </ThemeIcon>
+                      <div>
+                        <Text fw={600} size="sm">
+                          Bill to
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          Who pays the invoice
+                        </Text>
+                      </div>
+                    </Group>
+                    <AddressFields hideLabel label="Bill to" value={form.billTo} onChange={(v) => setForm({ ...form, billTo: v })} />
+                  </Paper>
                 </SimpleGrid>
                 {saveBar}
               </Card>
