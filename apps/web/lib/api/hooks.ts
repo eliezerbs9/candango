@@ -125,13 +125,19 @@ import {
 } from './customFields';
 import { getFileUrl, getUploadStatus, uploadFile } from './uploads';
 import {
+  createProposal,
   createProposalTemplate,
+  deleteProposal,
   deleteProposalTemplate,
+  getDealProposals,
   getProposalMeta,
+  getProposalRender,
   getProposalTemplate,
   getProposalTemplates,
   seedProposalTemplates,
+  updateProposal,
   updateProposalTemplate,
+  type ProposalBody,
   type ProposalTemplateBody,
 } from './proposals';
 import { getBilling, openPortal, startCheckout } from './billing';
@@ -1213,6 +1219,56 @@ export function useSeedProposalTemplates() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({ mutationFn: () => seedProposalTemplates(token!), onSuccess: () => invalidateProposalTemplates(qc) });
+}
+
+// --- Proposals (per deal) ---
+
+export function useDealProposals(dealId: string | null) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['proposals', dealId],
+    queryFn: () => getDealProposals(token!, dealId!),
+    enabled: !!token && !!dealId,
+  });
+}
+
+export function useProposalRender(id: string | null) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['proposal-render', id],
+    queryFn: () => getProposalRender(token!, id!),
+    enabled: !!token && !!id,
+  });
+}
+
+export function useCreateProposal() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ProposalBody) => createProposal(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['proposals'] }),
+  });
+}
+
+export function useUpdateProposal() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: ProposalBody }) => updateProposal(token!, id, body),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: ['proposals'] });
+      qc.invalidateQueries({ queryKey: ['proposal-render', id] });
+    },
+  });
+}
+
+export function useDeleteProposal() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteProposal(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['proposals'] }),
+  });
 }
 
 export function useCustomFieldSchema(entity: string) {

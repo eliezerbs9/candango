@@ -31,6 +31,7 @@ import { CreatableSelect } from '@/components/common/CreatableSelect';
 import { usePersonCreate } from '@/components/contacts/PersonCreateModal';
 import { AddressFields, type Address } from '@/components/deals/AddressFields';
 import { CustomFieldsEditor } from '@/components/deals/CustomFieldsEditor';
+import { DealProposals } from '@/components/proposals/DealProposals';
 import { DealTimeline } from '@/components/deals/DealTimeline';
 import { QuickbooksPanel } from '@/components/deals/quickbooks/QuickbooksPanel';
 import { ApiError } from '@/lib/api/client';
@@ -232,6 +233,7 @@ export default function DealDetailPage() {
         <Tabs.List>
           <Tabs.Tab value="overview">Overview</Tabs.Tab>
           {dealFields.length > 0 && <Tabs.Tab value="fields">Custom fields</Tabs.Tab>}
+          <Tabs.Tab value="proposals">Proposals</Tabs.Tab>
           <Tabs.Tab value="billing">{qb?.connected ? 'Estimates & invoices' : 'Estimates'}</Tabs.Tab>
         </Tabs.List>
 
@@ -310,6 +312,11 @@ export default function DealDetailPage() {
             </Card>
           </Tabs.Panel>
         )}
+
+        {/* Proposals */}
+        <Tabs.Panel value="proposals" pt="lg">
+          <DealProposals dealId={deal.id} />
+        </Tabs.Panel>
 
         {/* Estimates & invoices (+ QuickBooks addresses) */}
         <Tabs.Panel value="billing" pt="lg">

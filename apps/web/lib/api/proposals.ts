@@ -75,3 +75,61 @@ export function deleteProposalTemplate(token: string, id: string) {
 export function seedProposalTemplates(token: string) {
   return apiFetch<ProposalTemplate[]>('/proposal-templates/seed-defaults', { method: 'POST', token });
 }
+
+// ── Proposals (per-deal instances) ─────────────────────────────────────────────
+export type ProposalStatus = 'draft' | 'sent' | 'viewed' | 'accepted' | 'denied' | 'deferred';
+
+export interface Proposal {
+  id: string;
+  dealId: string;
+  templateId: string | null;
+  title: string;
+  theme: ProposalTheme;
+  content: ProposalRow[];
+  estimateIds: string[];
+  status: ProposalStatus;
+  shareToken: string;
+  feedback: string | null;
+  sentAt: string | null;
+  viewedAt: string | null;
+  respondedAt: string | null;
+  updatedAt: string;
+}
+
+/** A proposal + the resolved render data (variables, signed file URLs, pricing). */
+export interface ProposalRenderData extends Proposal {
+  variables: Record<string, string>;
+  imagesByField: Record<string, string[]>;
+  documentsByField: Record<string, { name: string; url: string }[]>;
+  pricing: { currency: string; rows: { description: string; amount: number }[]; total: number };
+}
+
+export interface ProposalBody {
+  dealId?: string;
+  templateId?: string;
+  title?: string;
+  estimateIds?: string[];
+  content?: ProposalRow[];
+  theme?: ProposalTheme;
+  status?: ProposalStatus;
+}
+
+export function getDealProposals(token: string, dealId: string) {
+  return apiFetch<Proposal[]>(`/proposals?dealId=${encodeURIComponent(dealId)}`, { token });
+}
+
+export function getProposalRender(token: string, id: string) {
+  return apiFetch<ProposalRenderData>(`/proposals/${id}/render`, { token });
+}
+
+export function createProposal(token: string, body: ProposalBody) {
+  return apiFetch<Proposal>('/proposals', { method: 'POST', token, body: JSON.stringify(body) });
+}
+
+export function updateProposal(token: string, id: string, body: ProposalBody) {
+  return apiFetch<Proposal>(`/proposals/${id}`, { method: 'PATCH', token, body: JSON.stringify(body) });
+}
+
+export function deleteProposal(token: string, id: string) {
+  return apiFetch<void>(`/proposals/${id}`, { method: 'DELETE', token });
+}
