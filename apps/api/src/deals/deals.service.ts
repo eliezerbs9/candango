@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -274,6 +274,57 @@ export class DealsService {
     return people;
   }
 
+  private isBlank(v: unknown): boolean {
+    if (v === null || v === undefined) return true;
+    if (typeof v === 'string') return v.trim() === '';
+    if (Array.isArray(v)) return v.length === 0;
+    return false;
+  }
+
+  /**
+   * Enforce required custom fields on a deal at a gate: `stage` (moving into `stageId`) or `win`.
+   * A field is due when its `requiredFromStageId` is at/before the deal's stage (same pipeline), and
+   * on the `win` gate additionally when it is `required` or `requiredForWon`. Throws listing any blanks.
+   */
+  private async assertRequiredFields(
+    orgId: string,
+    params: { stageId: string; pipelineId: string; customFields: Record<string, unknown>; gate: 'stage' | 'win' },
+  ) {
+    const defs = await this.prisma.customFieldDefinition.findMany({
+      where: { orgId, entity: 'deal' },
+      select: { key: true, label: true, required: true, requiredForWon: true, requiredFromStageId: true },
+    });
+    const relevant = defs.filter((d) => d.required || d.requiredForWon || d.requiredFromStageId);
+    if (relevant.length === 0) return;
+
+    const reqStageIds = relevant.map((d) => d.requiredFromStageId).filter((s): s is string => !!s);
+    const stages = reqStageIds.length
+      ? await this.prisma.stage.findMany({
+          where: { id: { in: [...reqStageIds, params.stageId] } },
+          select: { id: true, position: true, pipelineId: true },
+        })
+      : [];
+    const stageById = new Map(stages.map((s) => [s.id, s]));
+    const curPos = stageById.get(params.stageId)?.position ?? -1;
+
+    const missing: string[] = [];
+    for (const d of relevant) {
+      let due = false;
+      if (d.requiredFromStageId) {
+        const rs = stageById.get(d.requiredFromStageId);
+        // Compare position only within the deal's own pipeline.
+        if (rs && rs.pipelineId === params.pipelineId && curPos >= rs.position) due = true;
+      }
+      if (params.gate === 'win' && (d.required || d.requiredForWon)) due = true;
+      if (due && this.isBlank(params.customFields[d.key])) missing.push(d.label);
+    }
+    if (missing.length) {
+      throw new BadRequestException(
+        `Fill required field${missing.length > 1 ? 's' : ''} first: ${missing.join(', ')}`,
+      );
+    }
+  }
+
   async update(orgId: string, id: string, dto: UpdateDealDto, currentUserId?: string) {
     const before = await this.get(orgId, id);
     const data: Prisma.DealUncheckedUpdateInput = {
@@ -297,6 +348,16 @@ export class DealsService {
       data.stageId = dto.stageId;
       data.stageChangedAt = new Date(); // moving stage resets the rotting timer
     }
+    // Gate a stage change on the deal's required custom fields for the target stage.
+    if (dto.stageId && dto.stageId !== before.stageId) {
+      const rec = await this.prisma.deal.findFirstOrThrow({ where: { id }, select: { pipelineId: true, customFields: true } });
+      await this.assertRequiredFields(orgId, {
+        stageId: dto.stageId,
+        pipelineId: rec.pipelineId,
+        customFields: (dto.customFields ?? rec.customFields ?? {}) as Record<string, unknown>,
+        gate: 'stage',
+      });
+    }
     const deal = await this.prisma.deal.update({ where: { id }, data });
     if (dto.stageId && dto.stageId !== before.stageId) {
       await this.logStage(orgId, id, before.stageId, dto.stageId, currentUserId);
@@ -319,6 +380,16 @@ export class DealsService {
 
   async win(orgId: string, id: string, userId: string) {
     await this.get(orgId, id);
+    const rec = await this.prisma.deal.findFirstOrThrow({
+      where: { id },
+      select: { stageId: true, pipelineId: true, customFields: true },
+    });
+    await this.assertRequiredFields(orgId, {
+      stageId: rec.stageId,
+      pipelineId: rec.pipelineId,
+      customFields: (rec.customFields ?? {}) as Record<string, unknown>,
+      gate: 'win',
+    });
     const deal = await this.prisma.deal.update({ where: { id }, data: { status: 'won' } });
     await this.logStatusNote(orgId, id, userId, '✅ Deal marked won');
     this.emit(orgId, 'deal.won', deal);
