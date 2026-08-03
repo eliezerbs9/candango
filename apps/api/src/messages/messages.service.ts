@@ -5,6 +5,7 @@ import { extractBody, gmailClientFor } from './gmail-read.util';
 import { SendMessageDto } from './dto/send.dto';
 import { randomUUID } from 'node:crypto';
 import { buildCaptureAddress, buildDealCaptureAddress, newCaptureToken } from './capture.util';
+import { buildTemplateContext, renderTemplate } from '../email-templates/template-vars';
 
 type MessageRow = {
   id: string;
@@ -134,7 +135,46 @@ export class MessagesService {
   }
 
   /** Send an email via Gmail and record it as an outbound (Sent) message. */
+  /**
+   * Resolve any {{variables}} the user put in the subject/body (typed by hand or via the insert
+   * palette) against the deal + sender + workspace context — the same rendering a template gets, so
+   * a manually-composed email fills in just like one started from a template. No-op when there are
+   * no braces. The signature (appended client-side) is already resolved, so it's untouched.
+   */
+  private async resolveVariables(
+    orgId: string,
+    userId: string,
+    dto: SendMessageDto,
+  ): Promise<{ subject: string; body: string }> {
+    if (!/\{\{/.test(`${dto.subject}\n${dto.body}`)) return { subject: dto.subject, body: dto.body };
+    const deal = dto.dealId
+      ? await this.prisma.deal.findFirst({
+          where: { id: dto.dealId, orgId },
+          select: {
+            title: true,
+            value: true,
+            currency: true,
+            primaryPerson: { select: { firstName: true, lastName: true, name: true, emails: true, phones: true } },
+            company: { select: { name: true } },
+          },
+        })
+      : null;
+    const [user, org] = await Promise.all([
+      this.prisma.user.findFirst({ where: { id: userId, orgId }, select: { name: true, email: true, phone: true } }),
+      this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true } }),
+    ]);
+    const ctx = buildTemplateContext({
+      person: deal?.primaryPerson ?? null,
+      company: deal?.company ?? null,
+      deal: deal ? { title: deal.title, value: deal.value, currency: deal.currency } : null,
+      sender: user,
+      workspace: org,
+    });
+    return { subject: renderTemplate(dto.subject, ctx), body: renderTemplate(dto.body, ctx) };
+  }
+
   async send(orgId: string, userId: string, dto: SendMessageDto) {
+    const { subject, body } = await this.resolveVariables(orgId, userId, dto);
     const conn = await this.prisma.mailboxConnection.findUnique({ where: { userId } });
     if (!conn || conn.status !== 'connected' || !conn.refreshToken) {
       throw new BadRequestException('Connect your Google account to send email');
@@ -177,8 +217,8 @@ export class MessagesService {
       bcc,
       replyTo,
       messageId: rfcMessageId,
-      subject: dto.subject,
-      body: dto.body,
+      subject,
+      body,
       html: dto.html,
       inReplyTo: dto.inReplyTo,
       attachments: dto.attachments,
@@ -208,10 +248,10 @@ export class MessagesService {
         threadId: sent.data.threadId ?? null,
         fromAddress: from,
         toAddresses: dto.to as Prisma.InputJsonValue,
-        subject: dto.subject,
-        snippet: (dto.html ? dto.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : dto.body).slice(0, 200),
-        bodyHtml: dto.html ? dto.body : null,
-        bodyText: dto.html ? null : dto.body,
+        subject,
+        snippet: (dto.html ? body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : body).slice(0, 200),
+        bodyHtml: dto.html ? body : null,
+        bodyText: dto.html ? null : body,
         folder: 'sent',
         labels: ['SENT'], // the next Gmail sync refreshes with the real labels (e.g. + INBOX for self-emails)
         personId,
