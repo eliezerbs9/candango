@@ -650,33 +650,45 @@ export function ProposalCanvasEditor({
       </Group>
 
       <ThemeModal opened={themeOpen} onClose={themeCtl.close} theme={theme} fonts={fonts} onChange={onThemeChange} />
-      <Modal opened={previewOpen} onClose={previewCtl.close} title="Preview" fullScreen>
-        <Stack gap="md">
-          {previewDeals && onPreviewDealChange && (
-            <Group justify="center">
+      <Modal
+        opened={previewOpen}
+        onClose={previewCtl.close}
+        title={
+          previewDeals && onPreviewDealChange ? (
+            <Group gap="sm" wrap="nowrap">
+              <Text fw={600}>Preview</Text>
               <Select
-                label="Fill with a real deal"
-                description="Preview actual variables, images and pricing."
-                placeholder="Example data"
+                size="xs"
+                placeholder="Fill with a real deal…"
                 clearable
                 searchable
                 data={previewDeals}
                 value={previewDealId ?? null}
                 onChange={onPreviewDealChange}
-                w={300}
+                w={240}
               />
             </Group>
-          )}
-          <Paper p="xl" radius="md" bg="var(--mantine-color-gray-2)">
-            <div style={{ maxWidth: theme.orientation === 'landscape' ? 1100 : 720, margin: '0 auto' }}>
-              {(theme.present ?? 'slides') === 'slides' ? (
-                <ProposalSlides pages={pages} theme={theme} ctx={previewCtx ?? ctx} />
-              ) : (
-                <ProposalRenderer layout={pages} theme={theme} paged ctx={previewCtx ?? ctx} />
-              )}
+          ) : (
+            'Preview'
+          )
+        }
+        fullScreen
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 92px)' }}>
+          {(theme.present ?? 'slides') === 'slides' ? (
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <ProposalSlides pages={pages} theme={theme} ctx={previewCtx ?? ctx} fill />
             </div>
-          </Paper>
-        </Stack>
+          ) : (
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+              <Paper p="xl" radius="md" bg="var(--mantine-color-gray-2)">
+                <div style={{ maxWidth: theme.orientation === 'landscape' ? 1100 : 720, margin: '0 auto' }}>
+                  <ProposalRenderer layout={pages} theme={theme} paged ctx={previewCtx ?? ctx} />
+                </div>
+              </Paper>
+            </div>
+          )}
+        </div>
       </Modal>
     </Stack>
   );
