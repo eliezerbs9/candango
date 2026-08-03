@@ -124,6 +124,16 @@ import {
   updateCustomField,
 } from './customFields';
 import { getFileUrl, getUploadStatus, uploadFile } from './uploads';
+import {
+  createProposalTemplate,
+  deleteProposalTemplate,
+  getProposalMeta,
+  getProposalTemplate,
+  getProposalTemplates,
+  seedProposalTemplates,
+  updateProposalTemplate,
+  type ProposalTemplateBody,
+} from './proposals';
 import { getBilling, openPortal, startCheckout } from './billing';
 import {
   disconnectGoogle,
@@ -1144,6 +1154,65 @@ export function useFileUrl(key: string | null) {
 export function useUploadFile() {
   const token = useToken();
   return useMutation({ mutationFn: ({ entity, file }: { entity: string; file: File }) => uploadFile(token!, entity, file) });
+}
+
+// --- Proposal templates ---
+
+export function useProposalMeta() {
+  const token = useToken();
+  return useQuery({ queryKey: ['proposal-meta'], queryFn: () => getProposalMeta(token!), enabled: !!token, staleTime: Infinity });
+}
+
+export function useProposalTemplates() {
+  const token = useToken();
+  return useQuery({ queryKey: ['proposal-templates'], queryFn: () => getProposalTemplates(token!), enabled: !!token });
+}
+
+export function useProposalTemplate(id: string | null) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['proposal-template', id],
+    queryFn: () => getProposalTemplate(token!, id!),
+    enabled: !!token && !!id,
+  });
+}
+
+const invalidateProposalTemplates = (qc: ReturnType<typeof useQueryClient>) => {
+  qc.invalidateQueries({ queryKey: ['proposal-templates'] });
+  qc.invalidateQueries({ queryKey: ['proposal-template'] });
+};
+
+export function useCreateProposalTemplate() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ProposalTemplateBody) => createProposalTemplate(token!, body),
+    onSuccess: () => invalidateProposalTemplates(qc),
+  });
+}
+
+export function useUpdateProposalTemplate() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: ProposalTemplateBody }) => updateProposalTemplate(token!, id, body),
+    onSuccess: () => invalidateProposalTemplates(qc),
+  });
+}
+
+export function useDeleteProposalTemplate() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteProposalTemplate(token!, id),
+    onSuccess: () => invalidateProposalTemplates(qc),
+  });
+}
+
+export function useSeedProposalTemplates() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: () => seedProposalTemplates(token!), onSuccess: () => invalidateProposalTemplates(qc) });
 }
 
 export function useCustomFieldSchema(entity: string) {

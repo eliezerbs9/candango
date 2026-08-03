@@ -28,6 +28,7 @@ import { EmailTemplatesModule } from './email-templates/email-templates.module';
 import { EmailAutomationsModule } from './email-automations/email-automations.module';
 import { PublicEmailModule } from './public-email/public-email.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { ProposalsModule } from './proposals/proposals.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -76,6 +77,7 @@ import { HealthController } from './health.controller';
     EmailAutomationsModule,
     PublicEmailModule,
     UploadsModule,
+    ProposalsModule,
   ],
   controllers: [HealthController],
 })

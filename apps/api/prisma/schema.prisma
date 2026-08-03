@@ -66,6 +66,8 @@ model Organization {
   quickbooksCustomerLinks QuickBooksCustomerLink[]
   dealEstimates  DealEstimate[]
   dealInvoices   DealInvoice[]
+  proposalTemplates ProposalTemplate[]
+  proposals      Proposal[]
 }
 
 model User {
@@ -237,6 +239,7 @@ model Deal {
   stageEvents  DealStageEvent[]
   estimates    DealEstimate[]
   invoices     DealInvoice[]
+  proposals    Proposal[]
 
   @@unique([orgId, refNumber])
   @@index([orgId, stageId])
@@ -877,4 +880,52 @@ model AutomationRun {
 
   @@unique([automationId, dealId])
   @@index([orgId])
+}
+
+/// A reusable proposal template: a theme + a layout of rows→columns(areas)→block.
+/// `systemKey` marks a protected starter (always seeded, editable, never deletable).
+model ProposalTemplate {
+  id              String    @id @default(cuid())
+  orgId           String
+  name            String
+  theme           Json      @default("{}") // { primaryColor, accentColor, fontHeading, fontBody, coverStyle }
+  layout          Json      @default("[]") // rows: [{ id, columns: [{ id, width, block: { type, props } | null }] }]
+  systemKey       String? // non-null = protected built-in starter
+  createdByUserId String?
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  proposals    Proposal[]
+
+  @@unique([orgId, systemKey])
+  @@index([orgId])
+}
+
+/// A proposal built from a template for a deal, shared with the client via a public token.
+model Proposal {
+  id              String    @id @default(cuid())
+  orgId           String
+  dealId          String
+  templateId      String?
+  title           String
+  theme           Json      @default("{}")
+  content         Json      @default("[]") // resolved layout snapshot (stable once sent)
+  estimateIds     String[]  @default([]) // the DealEstimate ids included in the pricing block
+  status          String    @default("draft") // draft | sent | viewed | accepted | denied | deferred
+  shareToken      String    @unique @default(cuid()) // public presentation link token
+  feedback        String? // client's message on deny / decide-later
+  createdByUserId String?
+  sentAt          DateTime?
+  viewedAt        DateTime?
+  respondedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization      @relation(fields: [orgId], references: [id])
+  deal         Deal              @relation(fields: [dealId], references: [id])
+  template     ProposalTemplate? @relation(fields: [templateId], references: [id])
+
+  @@index([orgId, dealId])
 }
