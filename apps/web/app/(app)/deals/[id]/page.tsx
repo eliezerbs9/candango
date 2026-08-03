@@ -14,6 +14,7 @@ import {
   Group,
   Loader,
   NumberInput,
+  SimpleGrid,
   Stack,
   Text,
   TextInput,
@@ -36,6 +37,7 @@ import {
   useAllStages,
   useCompanies,
   useCreateCompany,
+  useCustomFields,
   useCreatePerson,
   useArchiveDeal,
   useDeal,
@@ -75,6 +77,7 @@ export default function DealDetailPage() {
   const createPerson = useCreatePerson();
   const { data: qb } = useQuickbooksStatus();
   const { data: dealEstimates = [] } = useDealEstimates(id);
+  const { data: dealFields = [] } = useCustomFields('deal');
   const [emailOpen, emailCtl] = useDisclosure(false);
   const [winConvertOpen, winConvertCtl] = useDisclosure(false);
 
@@ -216,13 +219,27 @@ export default function DealDetailPage() {
       <WinConvertModal dealId={deal.id} currency={deal.currency} opened={winConvertOpen} onClose={winConvertCtl.close} />
 
       <Grid gutter="lg">
-        {/* Timeline (main) */}
-        <Grid.Col span={{ base: 12, md: 7 }}>
-          <DealTimeline dealId={deal.id} />
+        {/* Left: custom fields (above) + activity */}
+        <Grid.Col span={{ base: 12, md: 8 }}>
+          <Stack gap="lg">
+            {dealFields.length > 0 && (
+              <Card withBorder radius="md" padding="md">
+                <CustomFieldsEditor
+                  entity="deal"
+                  values={form.customFields}
+                  onChange={(k, val) => setForm({ ...form, customFields: { ...form.customFields, [k]: val } })}
+                />
+                <Button onClick={save} loading={update.isPending} mt="md" size="xs">
+                  Save changes
+                </Button>
+              </Card>
+            )}
+            <DealTimeline dealId={deal.id} />
+          </Stack>
         </Grid.Col>
 
-        {/* Details (sidebar) */}
-        <Grid.Col span={{ base: 12, md: 5 }}>
+        {/* Right: core details (narrower) */}
+        <Grid.Col span={{ base: 12, md: 4 }}>
           <Card withBorder radius="md" padding="lg">
             <Stack gap="sm">
               <Text fw={600}>Details</Text>
@@ -271,19 +288,29 @@ export default function DealDetailPage() {
                 onChange={(v) => setForm({ ...form, primaryPersonId: v })}
                 onCreate={personCreate.prompt}
               />
-              <CustomFieldsEditor
-                entity="deal"
-                values={form.customFields}
-                onChange={(k, val) => setForm({ ...form, customFields: { ...form.customFields, [k]: val } })}
-              />
-              <Divider label="Addresses" labelPosition="left" />
-              <AddressFields label="Ship to (work site)" value={form.shipTo} onChange={(v) => setForm({ ...form, shipTo: v })} />
-              <AddressFields label="Bill to (payer)" value={form.billTo} onChange={(v) => setForm({ ...form, billTo: v })} />
-
               <Button onClick={save} loading={update.isPending} mt="xs">
                 Save changes
               </Button>
             </Stack>
+          </Card>
+        </Grid.Col>
+
+        {/* Full-width: QuickBooks addresses (Ship to / Bill to), then billing */}
+        <Grid.Col span={12}>
+          <Card withBorder radius="md" padding="lg">
+            <Group justify="space-between" mb="sm">
+              <Text fw={600}>Addresses</Text>
+              <Badge size="xs" variant="light" color="blue" style={{ textTransform: 'none' }}>
+                QuickBooks
+              </Badge>
+            </Group>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
+              <AddressFields label="Ship to (work site)" value={form.shipTo} onChange={(v) => setForm({ ...form, shipTo: v })} />
+              <AddressFields label="Bill to (payer)" value={form.billTo} onChange={(v) => setForm({ ...form, billTo: v })} />
+            </SimpleGrid>
+            <Button onClick={save} loading={update.isPending} mt="md" size="xs">
+              Save changes
+            </Button>
           </Card>
         </Grid.Col>
 
