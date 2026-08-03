@@ -84,7 +84,7 @@ function ProposalThumb({ proposal }: { proposal: Proposal }) {
           style={{ position: 'absolute', left: `${el.x}%`, top: `${el.y}%`, width: `${el.w}%`, height: `${el.h}%`, background: 'var(--mantine-color-gray-2)', borderRadius: 2 }}
         />
       ))}
-      {(!page || page.elements.length === 0) && (
+      {(page?.elements?.length ?? 0) === 0 && (
         <Text size="xs" c="dimmed" ta="center" mt="lg">
           Empty
         </Text>

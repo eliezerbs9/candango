@@ -74,9 +74,21 @@ export default function PublicProposalPage() {
   const responded = RESPONDED.includes(status);
   const isCanvas = Array.isArray(data.content) && !!(data.content[0] as CanvasPage | undefined)?.elements;
   const useSlides = (data.theme?.present ?? 'slides') === 'slides' && isCanvas;
+  const landscape = (data.theme?.orientation ?? 'portrait') === 'landscape';
+  const fullscreen = useSlides && !responded; // one slide filling the screen, with swipe/dots
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--mantine-color-gray-1)', paddingBottom: responded ? 40 : 96 }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        height: fullscreen ? '100dvh' : undefined,
+        background: 'var(--mantine-color-gray-1)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: fullscreen ? 'hidden' : undefined,
+        paddingBottom: fullscreen ? 0 : responded ? 40 : 96,
+      }}
+    >
       {/* Header */}
       <Group justify="space-between" px="lg" py="sm" wrap="nowrap" style={{ background: '#fff', borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
         <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
@@ -97,18 +109,24 @@ export default function PublicProposalPage() {
         )}
       </Group>
 
-      {/* Proposal — rendered at the template's orientation, scaled to the screen */}
-      <div style={{ maxWidth: (data.theme?.orientation ?? 'portrait') === 'landscape' ? 1000 : 760, margin: '0 auto', padding: '24px 16px' }}>
-        {useSlides ? (
-          <ProposalSlides pages={data.content as CanvasPage[]} theme={data.theme} ctx={buildDealCtx(data)} />
-        ) : (
-          <ProposalRenderer layout={data.content} theme={data.theme} ctx={buildDealCtx(data)} paged />
-        )}
-      </div>
+      {/* Proposal — rendered at the template's orientation */}
+      {fullscreen ? (
+        <div style={{ flex: 1, minHeight: 0, padding: '10px 10px 0' }}>
+          <ProposalSlides pages={data.content as CanvasPage[]} theme={data.theme} ctx={buildDealCtx(data)} fill />
+        </div>
+      ) : (
+        <div style={{ maxWidth: landscape ? 1000 : 760, margin: '0 auto', padding: '24px 16px', width: '100%' }}>
+          {useSlides ? (
+            <ProposalSlides pages={data.content as CanvasPage[]} theme={data.theme} ctx={buildDealCtx(data)} />
+          ) : (
+            <ProposalRenderer layout={data.content} theme={data.theme} ctx={buildDealCtx(data)} paged />
+          )}
+        </div>
+      )}
 
-      {/* Sticky response bar */}
+      {/* Response bar — in-flow footer in full-screen, fixed otherwise */}
       {!responded && (
-        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: '#fff', borderTop: '1px solid var(--mantine-color-gray-3)', padding: '12px 16px' }}>
+        <div style={{ position: fullscreen ? 'static' : 'fixed', left: 0, right: 0, bottom: 0, background: '#fff', borderTop: '1px solid var(--mantine-color-gray-3)', padding: '12px 16px' }}>
           <Group justify="center" gap="sm" wrap="wrap">
             <Button color="teal" leftSection={<IconCheck size={16} />} onClick={() => choose('accepted')} loading={busy}>
               Accept

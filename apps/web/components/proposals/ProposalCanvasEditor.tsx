@@ -714,7 +714,7 @@ function EditableElement({
 }) {
   const drag = useRef<{ mode: 'move' | 'resize'; group: boolean; sx: number; sy: number; ex: number; ey: number; ew: number; eh: number } | null>(null);
   const label = el.props.label as string | undefined;
-  const showTag = (el.type === 'image' || el.type === 'document') && !!label;
+  const showTag = !!label;
 
   const selectableWhenLocked = el.type === 'image' || el.type === 'document';
   const start = (mode: 'move' | 'resize') => (e: React.PointerEvent) => {
@@ -905,6 +905,14 @@ function ElementSettings({
 
   return (
     <Stack gap="sm">
+      <TextInput
+        size="xs"
+        label="Label"
+        description="Only shown here, to help you identify this element."
+        placeholder={PALETTE.find((p) => p.type === el.type)?.label ?? el.type}
+        value={(el.props.label as string) ?? ''}
+        onChange={(e) => onProp('label', e.currentTarget.value)}
+      />
       {showLock && (
         <Switch
           size="xs"
@@ -928,7 +936,6 @@ function ElementSettings({
       )}
       {isMedia && (
         <>
-          <TextInput size="xs" label="Label" description="Only shown here, to help you edit." value={(el.props.label as string) ?? ''} onChange={(e) => onProp('label', e.currentTarget.value)} />
           {onUploadFile && (
             <div>
               <Text size="xs" fw={500} mb={2}>
