@@ -64,6 +64,12 @@ export interface ProposalTheme {
   orientation?: Orientation;
   /** Optional safe-area margin (percent of the page) shown as a design guide in the editor. */
   margin?: number;
+  /** How the recipient views it: 'slides' = one page per slide with nav; 'scroll' = continuous. */
+  present?: 'slides' | 'scroll';
+  /** Transition between slides. */
+  transition?: 'none' | 'fade' | 'slide';
+  /** Animate elements into view as each slide appears. */
+  animate?: boolean;
 }
 
 export interface ProposalTemplate {

@@ -26,6 +26,7 @@ import { IconClipboard, IconClipboardCopy, IconCheck, IconCopy, IconEye, IconGri
 import type { CanvasElement, CanvasPage, ElementType, Orientation, ProposalDocFile, ProposalImageFile, ProposalTheme } from '@/lib/api/proposals';
 import { RichTextBody } from '@/components/common/RichTextBody';
 import { ElementView, ProposalRenderer, type MediaPick, type ProposalRenderCtx } from './ProposalRenderer';
+import { ProposalSlides } from './ProposalSlides';
 
 // 12-column grid + a fine vertical unit, for the alignment overlay and snapping.
 const COL = 100 / 12; // ≈ 8.333%
@@ -601,7 +602,13 @@ export function ProposalCanvasEditor({
       <ThemeModal opened={themeOpen} onClose={themeCtl.close} theme={theme} fonts={fonts} onChange={onThemeChange} />
       <Modal opened={previewOpen} onClose={previewCtl.close} title="Preview" size="xl" centered>
         <Paper p="lg" radius="md" bg="var(--mantine-color-gray-1)">
-          <ProposalRenderer layout={pages} theme={theme} paged ctx={ctx} />
+          {(theme.present ?? 'slides') === 'slides' ? (
+            <div style={{ maxWidth: theme.orientation === 'landscape' ? 820 : 560, margin: '0 auto' }}>
+              <ProposalSlides pages={pages} theme={theme} ctx={ctx} />
+            </div>
+          ) : (
+            <ProposalRenderer layout={pages} theme={theme} paged ctx={ctx} />
+          )}
         </Paper>
       </Modal>
     </Stack>
@@ -1166,6 +1173,37 @@ function ThemeModal({
         <Select label="Heading font" data={fonts} value={theme.fontHeading} onChange={(v) => set({ fontHeading: v ?? theme.fontHeading })} allowDeselect={false} />
         <Select label="Body font" data={fonts} value={theme.fontBody} onChange={(v) => set({ fontBody: v ?? theme.fontBody })} allowDeselect={false} />
         <NumberInput label="Margin guide (%)" description="Safe area shown when Margins is on." min={0} max={20} value={theme.margin ?? 6} onChange={(v) => set({ margin: Number(v) || 0 })} />
+
+        <Text size="xs" fw={600} tt="uppercase" c="dimmed" mt="xs">
+          Presentation
+        </Text>
+        <Select
+          label="Recipient view"
+          description="How the customer sees it on the shared link."
+          data={[
+            { value: 'slides', label: 'Slides (one page at a time)' },
+            { value: 'scroll', label: 'Scroll (continuous)' },
+          ]}
+          value={theme.present ?? 'slides'}
+          onChange={(v) => set({ present: (v as 'slides' | 'scroll') ?? 'slides' })}
+          allowDeselect={false}
+        />
+        <Select
+          label="Page transition"
+          data={[
+            { value: 'fade', label: 'Fade' },
+            { value: 'slide', label: 'Slide' },
+            { value: 'none', label: 'None' },
+          ]}
+          value={theme.transition ?? 'fade'}
+          onChange={(v) => set({ transition: (v as 'none' | 'fade' | 'slide') ?? 'fade' })}
+          allowDeselect={false}
+        />
+        <Switch
+          label="Animate elements in"
+          checked={theme.animate ?? true}
+          onChange={(e) => set({ animate: e.currentTarget.checked })}
+        />
         <Button onClick={onClose}>Done</Button>
       </Stack>
     </Modal>

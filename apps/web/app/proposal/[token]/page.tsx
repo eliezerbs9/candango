@@ -8,8 +8,9 @@ import { notifications } from '@mantine/notifications';
 import { IconCheck, IconClock, IconX } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import { getPublicProposal, respondPublicProposal, type ProposalDecision } from '@/lib/api/public-proposal';
-import type { ProposalRenderData } from '@/lib/api/proposals';
+import type { CanvasPage, ProposalRenderData } from '@/lib/api/proposals';
 import { ProposalRenderer } from '@/components/proposals/ProposalRenderer';
+import { ProposalSlides } from '@/components/proposals/ProposalSlides';
 import { buildDealCtx } from '@/components/proposals/dealCtx';
 
 const RESPONDED = ['accepted', 'denied', 'deferred'];
@@ -71,6 +72,8 @@ export default function PublicProposalPage() {
   }
 
   const responded = RESPONDED.includes(status);
+  const isCanvas = Array.isArray(data.content) && !!(data.content[0] as CanvasPage | undefined)?.elements;
+  const useSlides = (data.theme?.present ?? 'slides') === 'slides' && isCanvas;
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--mantine-color-gray-1)', paddingBottom: responded ? 40 : 96 }}>
@@ -96,7 +99,11 @@ export default function PublicProposalPage() {
 
       {/* Proposal — rendered at the template's orientation, scaled to the screen */}
       <div style={{ maxWidth: (data.theme?.orientation ?? 'portrait') === 'landscape' ? 1000 : 760, margin: '0 auto', padding: '24px 16px' }}>
-        <ProposalRenderer layout={data.content} theme={data.theme} ctx={buildDealCtx(data)} paged />
+        {useSlides ? (
+          <ProposalSlides pages={data.content as CanvasPage[]} theme={data.theme} ctx={buildDealCtx(data)} />
+        ) : (
+          <ProposalRenderer layout={data.content} theme={data.theme} ctx={buildDealCtx(data)} paged />
+        )}
       </div>
 
       {/* Sticky response bar */}
