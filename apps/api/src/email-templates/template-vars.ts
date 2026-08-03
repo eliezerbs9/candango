@@ -36,16 +36,16 @@ const BOTH: TemplateScope[] = ['deal', 'marketing'];
 const DEAL_ONLY: TemplateScope[] = ['deal'];
 
 export const TEMPLATE_VARIABLES: TemplateVariable[] = [
-  { key: 'contact.first_name', label: 'Contact first name', group: 'Contact', example: 'Alex', scopes: BOTH },
-  { key: 'contact.last_name', label: 'Contact last name', group: 'Contact', example: 'Taylor', scopes: BOTH },
-  { key: 'contact.name', label: 'Contact full name', group: 'Contact', example: 'Alex Taylor', scopes: BOTH },
-  { key: 'contact.email', label: 'Contact email', group: 'Contact', example: 'alex@example.com', scopes: BOTH },
-  { key: 'contact.phone', label: 'Contact phone', group: 'Contact', example: '(555) 123-4567', scopes: BOTH },
-  { key: 'company.name', label: 'Company name', group: 'Company', example: 'Acme Inc.', scopes: BOTH },
+  { key: 'contact.first_name', label: 'Contact first name', group: 'Contact', example: 'John', scopes: BOTH },
+  { key: 'contact.last_name', label: 'Contact last name', group: 'Contact', example: 'Doe', scopes: BOTH },
+  { key: 'contact.name', label: 'Contact full name', group: 'Contact', example: 'John Doe', scopes: BOTH },
+  { key: 'contact.email', label: 'Contact email', group: 'Contact', example: 'john.doe@example.com', scopes: BOTH },
+  { key: 'contact.phone', label: 'Contact phone', group: 'Contact', example: '(555) 010-1234', scopes: BOTH },
+  { key: 'company.name', label: 'Company name', group: 'Company', example: 'Example Co.', scopes: BOTH },
   { key: 'deal.title', label: 'Deal title', group: 'Deal', example: 'your project', scopes: DEAL_ONLY },
   { key: 'deal.value', label: 'Deal value', group: 'Deal', example: '$5,000.00', scopes: DEAL_ONLY },
-  { key: 'sender.name', label: 'Your name', group: 'Sender', example: 'Jordan Lee', scopes: DEAL_ONLY },
-  { key: 'sender.email', label: 'Your email', group: 'Sender', example: 'jordan@example.com', scopes: DEAL_ONLY },
+  { key: 'sender.name', label: 'Your name', group: 'Sender', example: 'Jane Doe', scopes: DEAL_ONLY },
+  { key: 'sender.email', label: 'Your email', group: 'Sender', example: 'jane.doe@example.com', scopes: DEAL_ONLY },
   { key: 'sender.phone', label: 'Your phone', group: 'Sender', example: '(555) 987-6543', scopes: DEAL_ONLY },
   { key: 'workspace.name', label: 'Workspace name', group: 'Workspace', example: 'Your Company', scopes: BOTH },
 ];
@@ -74,10 +74,10 @@ export function allowedKeysForScope(scope: TemplateScope): Set<string> {
 
 /** Variables offered when editing the signature (sender + company only). */
 export const SIGNATURE_VARIABLES: TemplateVariable[] = [
-  { key: 'sender.name', label: 'Full name', group: 'You', example: 'Jordan Lee' },
-  { key: 'sender.first_name', label: 'First name', group: 'You', example: 'Jordan' },
-  { key: 'sender.last_name', label: 'Last name', group: 'You', example: 'Lee' },
-  { key: 'sender.email', label: 'Email', group: 'You', example: 'jordan@example.com' },
+  { key: 'sender.name', label: 'Full name', group: 'You', example: 'Jane Doe' },
+  { key: 'sender.first_name', label: 'First name', group: 'You', example: 'Jane' },
+  { key: 'sender.last_name', label: 'Last name', group: 'You', example: 'Doe' },
+  { key: 'sender.email', label: 'Email', group: 'You', example: 'jane.doe@example.com' },
   { key: 'sender.phone', label: 'Phone', group: 'You', example: '(555) 987-6543' },
   { key: 'sender.photo_70', label: 'Photo 70px', group: 'Photo', example: '' },
   { key: 'sender.photo_100', label: 'Photo 100px', group: 'Photo', example: '' },

@@ -17,6 +17,7 @@ import {
   Modal,
   NumberInput,
   Select,
+  SimpleGrid,
   Stack,
   Switch,
   Text,
@@ -261,29 +262,17 @@ export default function AutomationsSettingsPage() {
           No automations match these filters.
         </Text>
       ) : (
-        <Stack gap="sm">
-          {visible.map((a) => (
-            <Card key={a.id} withBorder radius="md" padding="md">
-              <Group justify="space-between" wrap="nowrap">
-                <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-                  <Tooltip
-                    label="Connect Google to enable deal email automations"
-                    disabled={!(a.kind !== 'marketing' && a.action === 'send_email' && !google?.mailbox)}
-                    withArrow
-                    multiline
-                    w={220}
-                  >
-                    <div>
-                      <Switch
-                        checked={a.enabled}
-                        onChange={(e) => toggle(a, e.currentTarget.checked)}
-                        disabled={!isAdmin || (a.kind !== 'marketing' && a.action === 'send_email' && !google?.mailbox)}
-                      />
-                    </div>
-                  </Tooltip>
-                  <div style={{ minWidth: 0 }}>
-                    <Group gap={6} wrap="wrap" align="center">
-                      <Text fw={500}>{a.name}</Text>
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
+          {visible.map((a) => {
+            const gmailBlocked = a.kind !== 'marketing' && a.action === 'send_email' && !google?.mailbox;
+            return (
+              <Card key={a.id} withBorder radius="md" padding="md">
+                <Stack gap="xs" style={{ height: '100%' }}>
+                  <Group justify="space-between" wrap="nowrap" align="flex-start">
+                    <Group gap={6} wrap="wrap" align="center" style={{ minWidth: 0 }}>
+                      <Text fw={600} lineClamp={1}>
+                        {a.name}
+                      </Text>
                       {a.kind === 'marketing' && (
                         <Badge size="xs" variant="light" color="grape" style={{ textTransform: 'none' }}>
                           Marketing
@@ -295,38 +284,57 @@ export default function AutomationsSettingsPage() {
                         </Badge>
                       ))}
                     </Group>
-                    <Text size="sm" c="dimmed" lineClamp={2}>
-                      {summary(a)}
-                    </Text>
-                  </div>
-                </Group>
-                {isAdmin && (
-                  <Menu position="bottom-end" withinPortal shadow="sm">
-                    <Menu.Target>
-                      <ActionIcon variant="subtle" color="gray" aria-label="Actions">
-                        <IconDots size={16} />
-                      </ActionIcon>
-                    </Menu.Target>
-                    <Menu.Dropdown>
-                      <Menu.Item
-                        leftSection={<IconPencil size={14} />}
-                        onClick={() => {
-                          setEditing(a);
-                          ctl.open();
-                        }}
-                      >
-                        Edit
-                      </Menu.Item>
-                      <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => remove(a)}>
-                        Delete
-                      </Menu.Item>
-                    </Menu.Dropdown>
-                  </Menu>
-                )}
-              </Group>
-            </Card>
-          ))}
-        </Stack>
+                    {isAdmin && (
+                      <Menu position="bottom-end" withinPortal shadow="sm">
+                        <Menu.Target>
+                          <ActionIcon variant="subtle" color="gray" aria-label="Actions">
+                            <IconDots size={16} />
+                          </ActionIcon>
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                          <Menu.Item
+                            leftSection={<IconPencil size={14} />}
+                            onClick={() => {
+                              setEditing(a);
+                              ctl.open();
+                            }}
+                          >
+                            Edit
+                          </Menu.Item>
+                          <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => remove(a)}>
+                            Delete
+                          </Menu.Item>
+                        </Menu.Dropdown>
+                      </Menu>
+                    )}
+                  </Group>
+
+                  <Text size="sm" c="dimmed" lineClamp={3} style={{ flex: 1 }}>
+                    {summary(a)}
+                  </Text>
+
+                  <Tooltip
+                    label="Connect Google to enable deal email automations"
+                    disabled={!gmailBlocked}
+                    withArrow
+                    multiline
+                    w={220}
+                  >
+                    <div>
+                      <Switch
+                        size="sm"
+                        checked={a.enabled}
+                        label={a.enabled ? 'On' : 'Off'}
+                        onChange={(e) => toggle(a, e.currentTarget.checked)}
+                        disabled={!isAdmin || gmailBlocked}
+                      />
+                    </div>
+                  </Tooltip>
+                </Stack>
+              </Card>
+            );
+          })}
+        </SimpleGrid>
       )}
 
       <AutomationModal opened={opened} onClose={ctl.close} editing={editing} triggers={triggers} allTags={allTags} />

@@ -49,7 +49,7 @@ export function SignupForm() {
       <Divider label="or" labelPosition="center" />
       <form onSubmit={handleSubmit}>
         <Stack gap="sm">
-          <TextInput label="Company name" placeholder="Acme Inc." {...form.getInputProps('orgName')} />
+          <TextInput label="Company name" placeholder="Example Co." {...form.getInputProps('orgName')} />
           <TextInput label="Work email" placeholder="you@company.com" {...form.getInputProps('email')} />
           <PasswordInput label="Password" {...form.getInputProps('password')} />
           <Button type="submit" fullWidth mt="xs" loading={loading}>

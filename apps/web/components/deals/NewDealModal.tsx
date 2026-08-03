@@ -100,7 +100,7 @@ export function NewDealModal({
       <Stack>
         <TextInput
           label="Title"
-          placeholder="Acme — 50 seats"
+          placeholder="Kitchen remodel"
           value={title}
           onChange={(e) => setTitle(e.currentTarget.value)}
           required

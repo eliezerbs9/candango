@@ -153,8 +153,8 @@ export default function GeneralSettingsPage() {
         label="Contact name format"
         description="How people's names are displayed across the app — and mirrored when they sync to QuickBooks."
         data={[
-          { value: 'first_last', label: 'First Last (e.g. Sherry Lee)' },
-          { value: 'last_first', label: 'Last, First (e.g. Lee, Sherry)' },
+          { value: 'first_last', label: 'First Last (e.g. John Doe)' },
+          { value: 'last_first', label: 'Last, First (e.g. Doe, John)' },
         ]}
         value={nameFormat}
         onChange={(v) => setNameFormat((v as 'first_last' | 'last_first') ?? 'first_last')}
