@@ -123,6 +123,7 @@ import {
   getCustomFieldSchema,
   updateCustomField,
 } from './customFields';
+import { getFileUrl, getUploadStatus, uploadFile } from './uploads';
 import { getBilling, openPortal, startCheckout } from './billing';
 import {
   disconnectGoogle,
@@ -1116,6 +1117,33 @@ export function useCustomFields(entity: string) {
     queryFn: () => getCustomFields(token!, entity),
     enabled: !!token && !!entity,
   });
+}
+
+export function useUploadStatus() {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['upload-status'],
+    queryFn: () => getUploadStatus(token!),
+    enabled: !!token,
+    staleTime: Infinity,
+  });
+}
+
+/** Resolve a Spaces object key to a short-lived signed URL (re-fetched before it expires). */
+export function useFileUrl(key: string | null) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['file-url', key],
+    queryFn: () => getFileUrl(token!, key!),
+    enabled: !!token && !!key,
+    staleTime: 50 * 60 * 1000, // signed URL lives 1h
+  });
+}
+
+/** Presign + upload a file to Spaces, returning the stored key. */
+export function useUploadFile() {
+  const token = useToken();
+  return useMutation({ mutationFn: ({ entity, file }: { entity: string; file: File }) => uploadFile(token!, entity, file) });
 }
 
 export function useCustomFieldSchema(entity: string) {

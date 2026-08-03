@@ -16,26 +16,19 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconFile, IconPhoto, IconX } from '@tabler/icons-react';
-import { useCustomFields } from '@/lib/api/hooks';
+import { useCustomFields, useFileUrl, useUploadFile, useUploadStatus } from '@/lib/api/hooks';
 import type { CustomFieldDef } from '@/lib/api/customFields';
 
-const IMAGE_MAX = 4 * 1024 * 1024; // 4 MB per image
-const DOC_MAX = 8 * 1024 * 1024; // 8 MB per document
+const IMAGE_MAX = 10 * 1024 * 1024; // 10 MB per image
+const DOC_MAX = 25 * 1024 * 1024; // 25 MB per document
 const DOC_ACCEPT = '.pdf,.doc,.docx,.txt,.rtf,.xls,.xlsx,.csv,.ppt,.pptx,application/pdf';
 
+/** A stored document reference (the file itself lives in object storage under `key`). */
 interface StoredDoc {
   name: string;
   type: string;
-  url: string; // data URL
+  key: string;
 }
-
-const readDataUrl = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result as string);
-    r.onerror = reject;
-    r.readAsDataURL(file);
-  });
 
 export function CustomFieldsEditor({
   entity,
@@ -55,17 +48,19 @@ export function CustomFieldsEditor({
         Custom fields
       </Text>
       {fields.map((f) => (
-        <FieldInput key={f.id} field={f} value={values?.[f.key]} onChange={(v) => onChange(f.key, v)} />
+        <FieldInput key={f.id} entity={entity} field={f} value={values?.[f.key]} onChange={(v) => onChange(f.key, v)} />
       ))}
     </Stack>
   );
 }
 
 function FieldInput({
+  entity,
   field: f,
   value: v,
   onChange,
 }: {
+  entity: string;
   field: CustomFieldDef;
   value: unknown;
   onChange: (value: unknown) => void;
@@ -107,10 +102,10 @@ function FieldInput({
     );
   }
   if (f.type === 'image') {
-    return <ImageField label={f.label} required={required} value={(v as string[]) ?? []} onChange={onChange} />;
+    return <ImageField entity={entity} label={f.label} required={required} value={(v as string[]) ?? []} onChange={onChange} />;
   }
   if (f.type === 'document') {
-    return <DocumentField label={f.label} required={required} value={(v as StoredDoc[]) ?? []} onChange={onChange} />;
+    return <DocumentField entity={entity} label={f.label} required={required} value={(v as StoredDoc[]) ?? []} onChange={onChange} />;
   }
   return (
     <TextInput
@@ -122,51 +117,61 @@ function FieldInput({
   );
 }
 
+function NotConfigured({ label, required }: { label: string; required: boolean }) {
+  return (
+    <div>
+      <FieldLabel label={label} required={required} />
+      <Text size="xs" c="dimmed">
+        File uploads aren&apos;t set up for this workspace yet.
+      </Text>
+    </div>
+  );
+}
+
 function ImageField({
+  entity,
   label,
   required,
   value,
   onChange,
 }: {
+  entity: string;
   label: string;
   required: boolean;
   value: string[];
   onChange: (v: string[]) => void;
 }) {
+  const status = useUploadStatus();
+  const upload = useUploadFile();
+  if (status.data && !status.data.configured) return <NotConfigured label={label} required={required} />;
+
   const add = async (files: File[]) => {
-    const ok = files.filter((file) => {
+    const keys: string[] = [];
+    for (const file of files) {
       if (file.size > IMAGE_MAX) {
-        notifications.show({ message: `${file.name} is larger than 4 MB`, color: 'red' });
-        return false;
+        notifications.show({ message: `${file.name} is larger than 10 MB`, color: 'red' });
+        continue;
       }
-      return true;
-    });
-    const urls = await Promise.all(ok.map(readDataUrl));
-    onChange([...value, ...urls]);
+      try {
+        keys.push(await upload.mutateAsync({ entity, file }));
+      } catch {
+        notifications.show({ message: `Could not upload ${file.name}`, color: 'red' });
+      }
+    }
+    if (keys.length) onChange([...value, ...keys]);
   };
+
   return (
     <div>
       <FieldLabel label={label} required={required} />
       <Group gap="xs" mb={6}>
-        {value.map((url, i) => (
-          <div key={i} style={{ position: 'relative' }}>
-            <Image src={url} w={72} h={72} radius="sm" fit="cover" />
-            <ActionIcon
-              size="xs"
-              color="red"
-              variant="filled"
-              style={{ position: 'absolute', top: -6, right: -6 }}
-              onClick={() => onChange(value.filter((_, idx) => idx !== i))}
-              aria-label="Remove image"
-            >
-              <IconX size={12} />
-            </ActionIcon>
-          </div>
+        {value.map((key, i) => (
+          <SignedImage key={key} objectKey={key} onRemove={() => onChange(value.filter((_, idx) => idx !== i))} />
         ))}
       </Group>
       <FileButton multiple accept="image/*" onChange={add}>
         {(props) => (
-          <Button {...props} size="xs" variant="default" leftSection={<IconPhoto size={14} />}>
+          <Button {...props} size="xs" variant="default" leftSection={<IconPhoto size={14} />} loading={upload.isPending}>
             Add images
           </Button>
         )}
@@ -175,64 +180,104 @@ function ImageField({
   );
 }
 
+function SignedImage({ objectKey, onRemove }: { objectKey: string; onRemove: () => void }) {
+  const { data } = useFileUrl(objectKey);
+  return (
+    <div style={{ position: 'relative' }}>
+      {data?.url ? (
+        <Image src={data.url} w={72} h={72} radius="sm" fit="cover" />
+      ) : (
+        <Paper w={72} h={72} radius="sm" withBorder />
+      )}
+      <ActionIcon
+        size="xs"
+        color="red"
+        variant="filled"
+        style={{ position: 'absolute', top: -6, right: -6 }}
+        onClick={onRemove}
+        aria-label="Remove image"
+      >
+        <IconX size={12} />
+      </ActionIcon>
+    </div>
+  );
+}
+
 function DocumentField({
+  entity,
   label,
   required,
   value,
   onChange,
 }: {
+  entity: string;
   label: string;
   required: boolean;
   value: StoredDoc[];
   onChange: (v: StoredDoc[]) => void;
 }) {
+  const status = useUploadStatus();
+  const upload = useUploadFile();
+  if (status.data && !status.data.configured) return <NotConfigured label={label} required={required} />;
+
   const add = async (files: File[]) => {
-    const ok = files.filter((file) => {
+    const docs: StoredDoc[] = [];
+    for (const file of files) {
       if (file.size > DOC_MAX) {
-        notifications.show({ message: `${file.name} is larger than 8 MB`, color: 'red' });
-        return false;
+        notifications.show({ message: `${file.name} is larger than 25 MB`, color: 'red' });
+        continue;
       }
-      return true;
-    });
-    const docs = await Promise.all(
-      ok.map(async (file) => ({ name: file.name, type: file.type || 'application/octet-stream', url: await readDataUrl(file) })),
-    );
-    onChange([...value, ...docs]);
+      try {
+        const key = await upload.mutateAsync({ entity, file });
+        docs.push({ name: file.name, type: file.type || 'application/octet-stream', key });
+      } catch {
+        notifications.show({ message: `Could not upload ${file.name}`, color: 'red' });
+      }
+    }
+    if (docs.length) onChange([...value, ...docs]);
   };
+
   return (
     <div>
       <FieldLabel label={label} required={required} />
       <Stack gap={4} mb={6}>
         {value.map((doc, i) => (
-          <Paper key={i} withBorder radius="sm" px="xs" py={4}>
-            <Group justify="space-between" wrap="nowrap" gap="xs">
-              <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
-                <IconFile size={14} />
-                <Anchor href={doc.url} download={doc.name} size="sm" lineClamp={1}>
-                  {doc.name}
-                </Anchor>
-              </Group>
-              <ActionIcon
-                size="sm"
-                color="red"
-                variant="subtle"
-                onClick={() => onChange(value.filter((_, idx) => idx !== i))}
-                aria-label="Remove document"
-              >
-                <IconX size={14} />
-              </ActionIcon>
-            </Group>
-          </Paper>
+          <SignedDoc key={doc.key} doc={doc} onRemove={() => onChange(value.filter((_, idx) => idx !== i))} />
         ))}
       </Stack>
       <FileButton multiple accept={DOC_ACCEPT} onChange={add}>
         {(props) => (
-          <Button {...props} size="xs" variant="default" leftSection={<IconFile size={14} />}>
+          <Button {...props} size="xs" variant="default" leftSection={<IconFile size={14} />} loading={upload.isPending}>
             Add documents
           </Button>
         )}
       </FileButton>
     </div>
+  );
+}
+
+function SignedDoc({ doc, onRemove }: { doc: StoredDoc; onRemove: () => void }) {
+  const { data } = useFileUrl(doc.key);
+  return (
+    <Paper withBorder radius="sm" px="xs" py={4}>
+      <Group justify="space-between" wrap="nowrap" gap="xs">
+        <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+          <IconFile size={14} />
+          {data?.url ? (
+            <Anchor href={data.url} target="_blank" rel="noreferrer" size="sm" lineClamp={1}>
+              {doc.name}
+            </Anchor>
+          ) : (
+            <Text size="sm" lineClamp={1}>
+              {doc.name}
+            </Text>
+          )}
+        </Group>
+        <ActionIcon size="sm" color="red" variant="subtle" onClick={onRemove} aria-label="Remove document">
+          <IconX size={14} />
+        </ActionIcon>
+      </Group>
+    </Paper>
   );
 }
 
