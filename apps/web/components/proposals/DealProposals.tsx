@@ -19,7 +19,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconArrowLeft, IconDeviceFloppy, IconDots, IconLink, IconPlus, IconSend, IconTrash } from '@tabler/icons-react';
+import { IconArrowLeft, IconDots, IconLink, IconPlus, IconSend, IconTrash } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import {
   useCreateProposal,
@@ -34,8 +34,10 @@ import {
   useTemplateVariables,
   useUpdateProposal,
 } from '@/lib/api/hooks';
-import type { CanvasPage, Proposal, ProposalStatus, ProposalTheme } from '@/lib/api/proposals';
+import type { CanvasPage, Proposal, ProposalBody, ProposalStatus, ProposalTheme } from '@/lib/api/proposals';
+import { useAutosave } from '@/lib/useAutosave';
 import { ProposalCanvasEditor, toCanvasPages, type FieldOption } from './ProposalCanvasEditor';
+import { SaveStatus } from './SaveStatus';
 import { buildDealCtx } from './dealCtx';
 
 const fail = (e: unknown) =>
@@ -224,15 +226,31 @@ function ProposalBuilder({ id, onBack }: { id: string; onBack: () => void }) {
   const [estimateIds, setEstimateIds] = useState<string[]>([]);
   const [pages, setPages] = useState<CanvasPage[]>([]);
   const [theme, setTheme] = useState<ProposalTheme | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
+  // Hydrate local editor state once; later render refetches (fresh pricing/images) must not clobber edits.
   useEffect(() => {
-    if (!data) return;
+    if (!data || hydrated) return;
     setTitle(data.title);
     setEstimateIds(data.estimateIds);
     setTheme({ orientation: 'portrait', ...data.theme });
     const p = toCanvasPages(data.content);
     setPages(p.length ? p : [{ id: `${Date.now()}`, elements: [] }]);
-  }, [data]);
+    setHydrated(true);
+  }, [data, hydrated]);
+
+  const status = useAutosave(
+    { title: title.trim(), estimateIds, content: pages, theme },
+    async (v) => {
+      try {
+        await update.mutateAsync({ id, body: v as ProposalBody });
+      } catch (e) {
+        fail(e);
+        throw e;
+      }
+    },
+    hydrated && !!theme,
+  );
 
   const ctx = useMemo(() => (data ? buildDealCtx(data) : null), [data]);
   const imageFields: FieldOption[] = useMemo(
@@ -243,13 +261,6 @@ function ProposalBuilder({ id, onBack }: { id: string; onBack: () => void }) {
     () => dealFields.filter((f) => f.type === 'document').map((f) => ({ value: f.key, label: f.label })),
     [dealFields],
   );
-
-  const save = () =>
-    theme &&
-    update.mutate(
-      { id, body: { title: title.trim(), estimateIds, content: pages, theme } },
-      { onSuccess: () => notifications.show({ message: 'Proposal saved', color: 'green' }), onError: fail },
-    );
 
   if (isLoading || !data || !theme || !ctx) {
     return (
@@ -266,6 +277,7 @@ function ProposalBuilder({ id, onBack }: { id: string; onBack: () => void }) {
           All proposals
         </Button>
         <Group gap="xs">
+          <SaveStatus status={status} />
           <Badge variant="light" color={STATUS_COLOR[data.status]} style={{ textTransform: 'none' }}>
             {data.status}
           </Badge>
@@ -275,9 +287,6 @@ function ProposalBuilder({ id, onBack }: { id: string; onBack: () => void }) {
           <Button size="xs" variant="default" leftSection={<IconSend size={14} />} onClick={send} loading={sendMut.isPending}>
             Send
           </Button>
-          <Button size="xs" leftSection={<IconDeviceFloppy size={14} />} onClick={save} loading={update.isPending}>
-            Save
-          </Button>
         </Group>
       </Group>
 
@@ -286,7 +295,7 @@ function ProposalBuilder({ id, onBack }: { id: string; onBack: () => void }) {
           <TextInput label="Title" value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
           <MultiSelect
             label="Estimates"
-            description="Save to refresh pricing blocks."
+            description="Pricing blocks refresh automatically."
             data={estimates.map((e) => ({
               value: e.id,
               label: `${e.docNumber ? `#${e.docNumber}` : 'Estimate'} · ${money(e.totalAmount, e.currency)}`,

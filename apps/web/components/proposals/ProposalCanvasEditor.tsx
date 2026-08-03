@@ -22,7 +22,7 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconClipboard, IconClipboardCopy, IconCheck, IconCopy, IconEye, IconLayout2, IconLayoutGrid, IconLock, IconPalette, IconPlus, IconTrash, IconUpload, IconX } from '@tabler/icons-react';
+import { IconClipboard, IconClipboardCopy, IconCheck, IconCopy, IconEye, IconGripVertical, IconLayout2, IconLayoutGrid, IconLock, IconPalette, IconPlus, IconTrash, IconUpload, IconX } from '@tabler/icons-react';
 import type { CanvasElement, CanvasPage, ElementType, Orientation, ProposalDocFile, ProposalImageFile, ProposalTheme } from '@/lib/api/proposals';
 import { RichTextBody } from '@/components/common/RichTextBody';
 import { ElementView, ProposalRenderer, type MediaPick, type ProposalRenderCtx } from './ProposalRenderer';
@@ -173,6 +173,7 @@ export function ProposalCanvasEditor({
   const pageRef = useRef<HTMLDivElement>(null);
   const groupBase = useRef<Map<string, { x: number; y: number }>>(new Map());
   const marqueeStart = useRef<{ x: number; y: number } | null>(null);
+  const pageDragFrom = useRef<number | null>(null);
   const margin = theme.margin ?? 6;
 
   const activeId = pageId && pages.some((p) => p.id === pageId) ? pageId : pages[0]?.id ?? null;
@@ -328,6 +329,13 @@ export function ProposalCanvasEditor({
     onPagesChange(safe);
     if (pid === activeId) setPageId(safe[0].id);
   };
+  const movePage = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || from >= pages.length || to >= pages.length) return;
+    const next = [...pages];
+    const [m] = next.splice(from, 1);
+    next.splice(to, 0, m);
+    onPagesChange(next);
+  };
 
   const insertVar = (key: string) => {
     if (!sel) return;
@@ -389,6 +397,11 @@ export function ProposalCanvasEditor({
             key={p.id}
             size="xs"
             variant={p.id === activeId ? 'filled' : 'default'}
+            draggable
+            onDragStart={() => { pageDragFrom.current = i; }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => { if (pageDragFrom.current !== null) movePage(pageDragFrom.current, i); pageDragFrom.current = null; }}
+            leftSection={<IconGripVertical size={12} style={{ opacity: 0.5 }} />}
             rightSection={
               <Group gap={4} wrap="nowrap">
                 <IconCopy size={12} title="Duplicate page" onClick={(ev) => { ev.stopPropagation(); duplicatePage(p.id); }} />
@@ -396,6 +409,7 @@ export function ProposalCanvasEditor({
               </Group>
             }
             onClick={() => { setPageId(p.id); setSelId(null); }}
+            style={{ cursor: 'grab' }}
           >
             Page {i + 1}
           </Button>
@@ -406,8 +420,18 @@ export function ProposalCanvasEditor({
       </Group>
 
       <Group align="flex-start" gap="lg" wrap="wrap">
-        {/* Canvas */}
-        <div style={{ flex: '1 1 560px', minWidth: 300, display: 'flex', justifyContent: 'center' }}>
+        {/* Canvas — a "studio" stage backdrop with the page floating on it */}
+        <div
+          style={{
+            flex: '1 1 560px',
+            minWidth: 300,
+            display: 'flex',
+            justifyContent: 'center',
+            background: 'radial-gradient(circle at 50% 0%, #33343a 0%, #202126 100%)',
+            borderRadius: 14,
+            padding: '32px 20px',
+          }}
+        >
           <div style={{ width: '100%', maxWidth: theme.orientation === 'landscape' ? 860 : 640 }}>
             <div
               ref={pageRef}
@@ -419,10 +443,9 @@ export function ProposalCanvasEditor({
                 width: '100%',
                 aspectRatio: theme.orientation === 'landscape' ? '11 / 8.5' : '8.5 / 11',
                 background: '#fff',
-                border: '1px solid var(--mantine-color-gray-3)',
                 borderRadius: 8,
                 overflow: 'hidden',
-                boxShadow: '0 1px 8px rgba(0,0,0,0.08)',
+                boxShadow: '0 10px 34px rgba(0,0,0,0.38)',
               }}
             >
               {/* 12-column reference grid */}

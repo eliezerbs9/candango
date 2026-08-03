@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Anchor, Button, Center, Group, Loader, Stack, TextInput } from '@mantine/core';
+import { Anchor, Center, Group, Loader, Stack, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconArrowLeft, IconDeviceFloppy } from '@tabler/icons-react';
+import { IconArrowLeft } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
+import { useAutosave } from '@/lib/useAutosave';
+import { compressImage } from '@/lib/imageCompress';
+import { SaveStatus } from '@/components/proposals/SaveStatus';
 import {
   useCustomFields,
   useFileUrls,
@@ -52,6 +55,7 @@ export default function ProposalTemplateEditor() {
   const [name, setName] = useState('');
   const [theme, setTheme] = useState<ProposalTheme | null>(null);
   const [pages, setPages] = useState<CanvasPage[]>([]);
+  const [hydrated, setHydrated] = useState(false);
 
   // Resolve template-owned uploaded files (image/document "fixed" source) so they render in the editor/preview.
   const fixedKeys = useMemo(() => collectFixedKeys(pages), [pages]);
@@ -60,7 +64,10 @@ export default function ProposalTemplateEditor() {
     () => buildPreviewCtx(Object.fromEntries(variables.map((v) => [v.key, v.example])), fileUrlByKey, org?.logoUrl),
     [variables, fileUrlByKey, org?.logoUrl],
   );
-  const onUploadFile = async (file: File) => ({ key: await upload.mutateAsync({ entity: 'proposal', file }), name: file.name });
+  const onUploadFile = async (file: File) => {
+    const f = file.type.startsWith('image/') ? await compressImage(file) : file;
+    return { key: await upload.mutateAsync({ entity: 'proposal', file: f }), name: file.name };
+  };
   const imageFields: FieldOption[] = useMemo(
     () => dealFields.filter((f) => f.type === 'image').map((f) => ({ value: f.key, label: f.label })),
     [dealFields],
@@ -71,12 +78,26 @@ export default function ProposalTemplateEditor() {
   );
 
   useEffect(() => {
-    if (!template) return;
+    if (!template || hydrated) return;
     setName(template.name);
     setTheme({ orientation: 'portrait', ...template.theme });
     const p = toCanvasPages(template.layout);
     setPages(p.length ? p : [{ id: uid(), elements: [] }]);
-  }, [template]);
+    setHydrated(true);
+  }, [template, hydrated]);
+
+  const status = useAutosave(
+    { name: name.trim(), theme, layout: pages },
+    async (v) => {
+      try {
+        await update.mutateAsync({ id, body: v as { name: string; theme: ProposalTheme; layout: CanvasPage[] } });
+      } catch (e) {
+        fail(e);
+        throw e;
+      }
+    },
+    hydrated && !!theme,
+  );
 
   if (isLoading || !template || !theme) {
     return (
@@ -85,12 +106,6 @@ export default function ProposalTemplateEditor() {
       </Center>
     );
   }
-
-  const save = () =>
-    update.mutate(
-      { id: template.id, body: { name: name.trim(), theme, layout: pages } },
-      { onSuccess: () => notifications.show({ message: 'Template saved', color: 'green' }), onError: fail },
-    );
 
   return (
     <Stack gap="md">
@@ -102,9 +117,7 @@ export default function ProposalTemplateEditor() {
 
       <Group justify="space-between" align="flex-end" wrap="wrap">
         <TextInput label="Template name" value={name} onChange={(e) => setName(e.currentTarget.value)} style={{ flex: '1 1 240px' }} />
-        <Button size="sm" leftSection={<IconDeviceFloppy size={16} />} onClick={save} loading={update.isPending}>
-          Save
-        </Button>
+        <SaveStatus status={status} />
       </Group>
 
       <ProposalCanvasEditor
