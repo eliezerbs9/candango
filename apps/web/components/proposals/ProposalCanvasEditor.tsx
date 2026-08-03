@@ -162,7 +162,8 @@ export function ProposalCanvasEditor({
   enforceLocks = false,
 }: ProposalCanvasEditorProps) {
   const [pageId, setPageId] = useState<string | null>(pages[0]?.id ?? null);
-  const [selId, setSelId] = useState<string | null>(null);
+  const [selIds, setSelIds] = useState<string[]>([]);
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [themeOpen, themeCtl] = useDisclosure(false);
   const [previewOpen, previewCtl] = useDisclosure(false);
   const [showGrid, setShowGrid] = useState(true);
@@ -170,11 +171,17 @@ export function ProposalCanvasEditor({
   const [snap, setSnap] = useState(true);
   const [clipboard, setClipboard] = useState<CanvasElement | null>(null);
   const pageRef = useRef<HTMLDivElement>(null);
+  const groupBase = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const marqueeStart = useRef<{ x: number; y: number } | null>(null);
   const margin = theme.margin ?? 6;
 
   const activeId = pageId && pages.some((p) => p.id === pageId) ? pageId : pages[0]?.id ?? null;
   const page = useMemo(() => pages.find((p) => p.id === activeId) ?? null, [pages, activeId]);
+  const selId = selIds.length === 1 ? selIds[0] : null; // element settings show for a single selection
   const sel = page?.elements.find((e) => e.id === selId) ?? null;
+  const setSelId = (id: string | null) => setSelIds(id ? [id] : []);
+  const selectEl = (id: string, additive: boolean) =>
+    setSelIds((cur) => (additive ? (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]) : [id]));
 
   const setPageElements = (fn: (els: CanvasElement[]) => CanvasElement[]) =>
     page && onPagesChange(pages.map((p) => (p.id === page.id ? { ...p, elements: fn(p.elements) } : p)));
@@ -234,6 +241,70 @@ export function ProposalCanvasEditor({
     const copy = cloneEl(clipboard);
     setPageElements((els) => [...els, copy]);
     setSelId(copy.id);
+  };
+  const removeSelected = () => {
+    setPageElements((els) => els.filter((e) => !selIds.includes(e.id)));
+    setSelIds([]);
+  };
+  const duplicateSelected = () => {
+    const copies = (page?.elements ?? []).filter((e) => selIds.includes(e.id)).map((e) => cloneEl(e));
+    if (!copies.length) return;
+    setPageElements((els) => [...els, ...copies]);
+    setSelIds(copies.map((c) => c.id));
+  };
+
+  // ── Group move: capture each selected element's start position, then translate them together ──
+  const beginGroupDrag = () => {
+    const m = new Map<string, { x: number; y: number }>();
+    page?.elements.forEach((e) => { if (selIds.includes(e.id)) m.set(e.id, { x: e.x, y: e.y }); });
+    groupBase.current = m;
+  };
+  const groupDragMove = (dxPct: number, dyPct: number) => {
+    const base = groupBase.current;
+    setPageElements((els) =>
+      els.map((e) => {
+        const b = base.get(e.id);
+        if (!b) return e;
+        return {
+          ...e,
+          x: clamp(snap ? snapTo(b.x + dxPct, COL) : b.x + dxPct, 0, 100 - e.w),
+          y: clamp(snap ? snapTo(b.y + dyPct, ROW) : b.y + dyPct, 0, 100 - e.h),
+        };
+      }),
+    );
+  };
+
+  // ── Marquee (drag a box on empty canvas to select the elements it touches) ──
+  const pctPoint = (clientX: number, clientY: number) => {
+    const rect = pageRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    return { x: clamp(((clientX - rect.left) / rect.width) * 100, 0, 100), y: clamp(((clientY - rect.top) / rect.height) * 100, 0, 100) };
+  };
+  const onMarqueeMove = (e: PointerEvent) => {
+    const s = marqueeStart.current;
+    const p = pctPoint(e.clientX, e.clientY);
+    if (!s || !p) return;
+    setMarquee({ x0: s.x, y0: s.y, x1: p.x, y1: p.y });
+    const box = { x0: Math.min(s.x, p.x), y0: Math.min(s.y, p.y), x1: Math.max(s.x, p.x), y1: Math.max(s.y, p.y) };
+    const hit = (page?.elements ?? [])
+      .filter((el) => el.x < box.x1 && el.x + el.w > box.x0 && el.y < box.y1 && el.y + el.h > box.y0)
+      .map((el) => el.id);
+    setSelIds(hit);
+  };
+  const onMarqueeUp = () => {
+    marqueeStart.current = null;
+    setMarquee(null);
+    window.removeEventListener('pointermove', onMarqueeMove);
+    window.removeEventListener('pointerup', onMarqueeUp);
+  };
+  const onPagePointerDown = (e: React.PointerEvent) => {
+    if (e.target !== e.currentTarget) return; // clicked an element, not the empty page
+    setSelIds([]);
+    const p = pctPoint(e.clientX, e.clientY);
+    if (!p) return;
+    marqueeStart.current = p;
+    window.addEventListener('pointermove', onMarqueeMove);
+    window.addEventListener('pointerup', onMarqueeUp);
   };
 
   const addPage = () => {
@@ -340,7 +411,7 @@ export function ProposalCanvasEditor({
           <div style={{ width: '100%', maxWidth: theme.orientation === 'landscape' ? 860 : 640 }}>
             <div
               ref={pageRef}
-              onPointerDown={() => setSelId(null)}
+              onPointerDown={onPagePointerDown}
               onDragOver={(e) => e.preventDefault()}
               onDrop={onCanvasDrop}
               style={{
@@ -378,17 +449,35 @@ export function ProposalCanvasEditor({
                 <EditableElement
                   key={el.id}
                   el={el}
-                  selected={el.id === selId}
+                  selected={selIds.includes(el.id)}
+                  isGroup={selIds.includes(el.id) && selIds.length > 1}
                   locked={enforceLocks && !!el.props.locked}
                   theme={theme}
                   ctx={ctx}
                   pageRef={pageRef}
                   snap={snap}
-                  onSelect={() => setSelId(el.id)}
+                  onSelect={(additive) => selectEl(el.id, additive)}
+                  onGroupStart={beginGroupDrag}
+                  onGroupMove={groupDragMove}
                   onChange={(patch) => updateElement(el.id, patch)}
                   onRemove={() => removeElement(el.id)}
                 />
               ))}
+              {/* Marquee selection box */}
+              {marquee && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: `${Math.min(marquee.x0, marquee.x1)}%`,
+                    top: `${Math.min(marquee.y0, marquee.y1)}%`,
+                    width: `${Math.abs(marquee.x1 - marquee.x0)}%`,
+                    height: `${Math.abs(marquee.y1 - marquee.y0)}%`,
+                    border: `1px solid ${theme.primaryColor}`,
+                    background: 'rgba(217,85,44,0.08)',
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -459,9 +548,28 @@ export function ProposalCanvasEditor({
                 onUploadFile={onUploadFile}
               />
             </Card>
+          ) : selIds.length > 1 ? (
+            <Card withBorder radius="md" padding="sm">
+              <Group justify="space-between" mb="xs">
+                <Text size="sm" fw={600}>
+                  {selIds.length} selected
+                </Text>
+                <Group gap={2} wrap="nowrap">
+                  <ActionIcon variant="subtle" color="gray" onClick={duplicateSelected} aria-label="Duplicate selected" title="Duplicate">
+                    <IconCopy size={16} />
+                  </ActionIcon>
+                  <ActionIcon variant="subtle" color="red" onClick={removeSelected} aria-label="Delete selected" title="Delete">
+                    <IconTrash size={16} />
+                  </ActionIcon>
+                </Group>
+              </Group>
+              <Text size="xs" c="dimmed">
+                Drag any of them to move the group together. Shift-click to add or remove from the selection.
+              </Text>
+            </Card>
           ) : (
             <Text size="xs" c="dimmed">
-              Add or select an element to edit it. Drag to move; drag the corner to resize.
+              Add or select an element to edit it. Drag to move; drag the corner to resize. Shift-click or drag a box to select several.
             </Text>
           )}
         </Stack>
@@ -481,27 +589,33 @@ export function ProposalCanvasEditor({
 function EditableElement({
   el,
   selected,
+  isGroup,
   locked,
   theme,
   ctx,
   pageRef,
   snap,
   onSelect,
+  onGroupStart,
+  onGroupMove,
   onChange,
   onRemove,
 }: {
   el: CanvasElement;
   selected: boolean;
+  isGroup: boolean;
   locked: boolean;
   theme: ProposalTheme;
   ctx: ProposalRenderCtx;
   pageRef: React.RefObject<HTMLDivElement | null>;
   snap: boolean;
-  onSelect: () => void;
+  onSelect: (additive: boolean) => void;
+  onGroupStart: () => void;
+  onGroupMove: (dxPct: number, dyPct: number) => void;
   onChange: (patch: Partial<CanvasElement>) => void;
   onRemove: () => void;
 }) {
-  const drag = useRef<{ mode: 'move' | 'resize'; sx: number; sy: number; ex: number; ey: number; ew: number; eh: number } | null>(null);
+  const drag = useRef<{ mode: 'move' | 'resize'; group: boolean; sx: number; sy: number; ex: number; ey: number; ew: number; eh: number } | null>(null);
   const label = el.props.label as string | undefined;
   const showTag = (el.type === 'image' || el.type === 'document') && !!label;
 
@@ -511,14 +625,21 @@ function EditableElement({
       // A locked media element can still be selected so the salesperson picks its files.
       if (selectableWhenLocked) {
         e.stopPropagation();
-        onSelect();
+        onSelect(false);
       }
       return;
     }
     e.stopPropagation();
+    // Shift-click toggles selection without starting a drag.
+    if (mode === 'move' && e.shiftKey) {
+      onSelect(true);
+      return;
+    }
     e.preventDefault();
-    onSelect();
-    drag.current = { mode, sx: e.clientX, sy: e.clientY, ex: el.x, ey: el.y, ew: el.w, eh: el.h };
+    const group = mode === 'move' && isGroup; // move the whole selection together
+    if (!selected) onSelect(false);
+    else if (group) onGroupStart();
+    drag.current = { mode, group, sx: e.clientX, sy: e.clientY, ex: el.x, ey: el.y, ew: el.w, eh: el.h };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   };
@@ -530,7 +651,9 @@ function EditableElement({
     const dyp = ((e.clientY - d.sy) / rect.height) * 100;
     const sx = (v: number) => (snap ? snapTo(v, COL) : v);
     const sy = (v: number) => (snap ? snapTo(v, ROW) : v);
-    if (d.mode === 'move') {
+    if (d.group) {
+      onGroupMove(dxp, dyp);
+    } else if (d.mode === 'move') {
       onChange({ x: clamp(sx(d.ex + dxp), 0, 100 - el.w), y: clamp(sy(d.ey + dyp), 0, 100 - el.h) });
     } else {
       onChange({ w: clamp(sx(d.ew + dxp), 5, 100 - el.x), h: clamp(sy(d.eh + dyp), 2, 100 - el.y) });
@@ -598,7 +721,7 @@ function EditableElement({
           {label}
         </span>
       )}
-      {selected && !locked && (
+      {selected && !locked && !isGroup && (
         <>
           <ActionIcon
             size="xs"

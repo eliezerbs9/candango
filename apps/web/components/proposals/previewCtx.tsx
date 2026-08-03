@@ -4,7 +4,7 @@ import type { ProposalRenderCtx } from './ProposalRenderer';
  * A render context that fills a template with example data — for the settings preview (no real deal).
  * `fileUrlByKey` resolves template-owned uploaded files (image/document "fixed" source).
  */
-export function buildPreviewCtx(exampleByKey: Record<string, string>, fileUrlByKey: Record<string, string> = {}): ProposalRenderCtx {
+export function buildPreviewCtx(exampleByKey: Record<string, string>, fileUrlByKey: Record<string, string> = {}, logoUrl?: string | null): ProposalRenderCtx {
   const today = new Intl.DateTimeFormat('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }).format(new Date());
   const resolveText = (s: string) =>
     s.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, k: string) => (k === 'date.today' ? today : exampleByKey[k] ?? k));
@@ -63,11 +63,14 @@ export function buildPreviewCtx(exampleByKey: Record<string, string>, fileUrlByK
         </div>
       );
     },
-    logo: () => (
-      <div style={{ width: '100%', height: '100%', minHeight: 40, background: '#e9ecef', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#868e96', fontSize: 12 }}>
-        Logo
-      </div>
-    ),
+    logo: ({ fit = 'contain' } = {}) =>
+      logoUrl ? (
+        <img src={logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: fit }} />
+      ) : (
+        <div style={{ width: '100%', height: '100%', minHeight: 40, background: '#e9ecef', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#868e96', fontSize: 12 }}>
+          Logo
+        </div>
+      ),
     pricing: () => (
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
         <thead>

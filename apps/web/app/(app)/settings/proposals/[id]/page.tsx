@@ -10,6 +10,7 @@ import { ApiError } from '@/lib/api/client';
 import {
   useCustomFields,
   useFileUrls,
+  useOrganization,
   useProposalMeta,
   useProposalTemplate,
   useTemplateVariables,
@@ -44,6 +45,7 @@ export default function ProposalTemplateEditor() {
   const { data: meta } = useProposalMeta();
   const { data: variables = [] } = useTemplateVariables();
   const { data: dealFields = [] } = useCustomFields('deal');
+  const { data: org } = useOrganization();
   const update = useUpdateProposalTemplate();
   const upload = useUploadFile();
 
@@ -55,8 +57,8 @@ export default function ProposalTemplateEditor() {
   const fixedKeys = useMemo(() => collectFixedKeys(pages), [pages]);
   const fileUrlByKey = useFileUrls(fixedKeys);
   const ctx = useMemo(
-    () => buildPreviewCtx(Object.fromEntries(variables.map((v) => [v.key, v.example])), fileUrlByKey),
-    [variables, fileUrlByKey],
+    () => buildPreviewCtx(Object.fromEntries(variables.map((v) => [v.key, v.example])), fileUrlByKey, org?.logoUrl),
+    [variables, fileUrlByKey, org?.logoUrl],
   );
   const onUploadFile = async (file: File) => ({ key: await upload.mutateAsync({ entity: 'proposal', file }), name: file.name });
   const imageFields: FieldOption[] = useMemo(
