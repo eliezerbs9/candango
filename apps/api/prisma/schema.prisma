@@ -636,8 +636,11 @@ model CustomFieldDefinition {
   entity    String   // deal | person | company
   key       String   // stable key used in the record's custom_fields jsonb
   label     String
-  type      String   @default("text") // text | number | date | select
+  type      String   @default("text") // text | number | date | select | image | document
   options   String[] // choices when type = select
+  required           Boolean @default(false) // always required
+  requiredFromStageId String? // (deals) becomes required once the deal reaches this stage or later
+  requiredForWon     Boolean @default(false) // (deals) required to mark the deal Won
   position  Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

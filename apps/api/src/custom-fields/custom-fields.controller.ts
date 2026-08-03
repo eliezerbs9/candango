@@ -27,6 +27,12 @@ export class CustomFieldsController {
     return this.svc.list(u.orgId, entity);
   }
 
+  /** Full field catalog for an entity: essential + integration (if connected) + custom fields. */
+  @Get('schema')
+  schema(@CurrentUser() u: AuthContext, @Query('entity') entity: string) {
+    return this.svc.schema(u.orgId, entity || 'deal');
+  }
+
   @Post()
   @UseGuards(AdminGuard)
   create(@CurrentUser() u: AuthContext, @Body() dto: CreateCustomFieldDto) {

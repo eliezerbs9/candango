@@ -20,6 +20,7 @@ import {
   IconMail,
   IconMailOff,
   IconPhone,
+  IconReceipt,
 } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
@@ -129,6 +130,11 @@ export default function PersonDetailPage() {
               <DetailRow icon={<IconBuilding size={16} />} label="Companies">
                 {person.companies.length ? person.companies.map((c) => c.name).join(', ') : <Dim />}
               </DetailRow>
+              {person.qbCustomerId && (
+                <DetailRow icon={<IconReceipt size={16} />} label="QuickBooks customer ID">
+                  {person.qbCustomerId}
+                </DetailRow>
+              )}
             </Stack>
           </Card>
 

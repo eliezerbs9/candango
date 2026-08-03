@@ -1,7 +1,8 @@
-import { IsArray, IsIn, IsInt, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, MinLength } from 'class-validator';
+import { CUSTOM_FIELD_TYPES } from '../system-fields';
 
 const ENTITIES = ['deal', 'person', 'company'] as const;
-const TYPES = ['text', 'number', 'date', 'select'] as const;
+const TYPES = CUSTOM_FIELD_TYPES;
 
 export class CreateCustomFieldDto {
   @IsIn(ENTITIES)
@@ -19,6 +20,18 @@ export class CreateCustomFieldDto {
   @IsArray()
   @IsString({ each: true })
   options?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  required?: boolean;
+
+  @IsOptional()
+  @IsString()
+  requiredFromStageId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  requiredForWon?: boolean;
 
   @IsOptional()
   @IsInt()
@@ -39,6 +52,18 @@ export class UpdateCustomFieldDto {
   @IsArray()
   @IsString({ each: true })
   options?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  required?: boolean;
+
+  @IsOptional()
+  @IsString()
+  requiredFromStageId?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  requiredForWon?: boolean;
 
   @IsOptional()
   @IsInt()

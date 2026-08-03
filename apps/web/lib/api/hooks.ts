@@ -116,7 +116,13 @@ import {
   replayDelivery,
   updateWebhook,
 } from './webhooks';
-import { createCustomField, deleteCustomField, getCustomFields } from './customFields';
+import {
+  createCustomField,
+  deleteCustomField,
+  getCustomFields,
+  getCustomFieldSchema,
+  updateCustomField,
+} from './customFields';
 import { getBilling, openPortal, startCheckout } from './billing';
 import {
   disconnectGoogle,
@@ -151,7 +157,7 @@ import {
   sendDealDoc,
   type LinkAccountInput,
 } from './quickbooks';
-import type { CustomFieldType } from './customFields';
+import type { CustomFieldBody } from './customFields';
 import type { ApiDeal, ConvertToInvoiceInput, CreateDocInput } from './types';
 
 function useToken() {
@@ -1112,13 +1118,35 @@ export function useCustomFields(entity: string) {
   });
 }
 
+export function useCustomFieldSchema(entity: string) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['custom-fields-schema', entity],
+    queryFn: () => getCustomFieldSchema(token!, entity),
+    enabled: !!token && !!entity,
+  });
+}
+
+const invalidateFields = (qc: ReturnType<typeof useQueryClient>) => {
+  qc.invalidateQueries({ queryKey: ['custom-fields'] });
+  qc.invalidateQueries({ queryKey: ['custom-fields-schema'] });
+};
+
 export function useCreateCustomField() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { entity: string; label: string; type?: CustomFieldType; options?: string[] }) =>
-      createCustomField(token!, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['custom-fields'] }),
+    mutationFn: (body: CustomFieldBody) => createCustomField(token!, body),
+    onSuccess: () => invalidateFields(qc),
+  });
+}
+
+export function useUpdateCustomField() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Partial<CustomFieldBody> }) => updateCustomField(token!, id, body),
+    onSuccess: () => invalidateFields(qc),
   });
 }
 
@@ -1127,7 +1155,7 @@ export function useDeleteCustomField() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteCustomField(token!, id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['custom-fields'] }),
+    onSuccess: () => invalidateFields(qc),
   });
 }
 

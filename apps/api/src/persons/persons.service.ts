@@ -180,8 +180,13 @@ export class PersonsService {
       orgId,
       deals.map((d) => ({ id: d.id, title: d.title })),
     );
+    const qbLink = await this.prisma.quickBooksCustomerLink.findFirst({
+      where: { orgId, clientType: 'person', clientId: id },
+      select: { qbCustomerId: true },
+    });
     return {
       ...person,
+      qbCustomerId: qbLink?.qbCustomerId ?? null,
       deals: deals.map((d) => ({
         id: d.id,
         refNumber: d.refNumber,

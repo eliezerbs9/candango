@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Anchor, Card, Center, Group, Loader, Stack, Text, ThemeIcon } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconArrowLeft, IconPhone, IconUsers, IconWorld } from '@tabler/icons-react';
+import { IconArrowLeft, IconPhone, IconReceipt, IconUsers, IconWorld } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
 import { useCompanies, useCompanyDetail, useQuickbooksStatus, useUpdateCompany } from '@/lib/api/hooks';
@@ -104,6 +104,11 @@ export default function CompanyDetailPage() {
                   <Dim />
                 )}
               </DetailRow>
+              {company.qbCustomerId && (
+                <DetailRow icon={<IconReceipt size={16} />} label="QuickBooks customer ID">
+                  {company.qbCustomerId}
+                </DetailRow>
+              )}
             </Stack>
           </Card>
         </Stack>

@@ -68,12 +68,15 @@ export interface ContactDocument {
 }
 
 export interface ApiPersonDetail extends ApiPerson {
+  /** QuickBooks customer id (when linked). */
+  qbCustomerId: string | null;
   deals: ContactDeal[];
   documents: ContactDocument[];
   messages: ContactMessage[];
 }
 
 export interface ApiCompanyDetail extends ApiCompany {
+  qbCustomerId: string | null;
   deals: ContactDeal[];
   documents: ContactDocument[];
   messages: ContactMessage[];

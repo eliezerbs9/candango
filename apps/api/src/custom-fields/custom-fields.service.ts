@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCustomFieldDto, UpdateCustomFieldDto } from './dto/custom-field.dto';
+import { INTEGRATION_FIELDS, SYSTEM_FIELDS } from './system-fields';
 
 function keyify(label: string): string {
   return (
@@ -26,6 +27,19 @@ export class CustomFieldsService {
     });
   }
 
+  /**
+   * The full field catalog for an entity: the built-in essential fields, any connected-integration
+   * fields (e.g. QuickBooks), and the org's editable custom fields. Used by the Fields settings page.
+   */
+  async schema(orgId: string, entity: string) {
+    const system = SYSTEM_FIELDS[entity] ?? [];
+    const qbConnected =
+      (await this.prisma.quickBooksConnection.count({ where: { orgId, status: 'connected' } })) > 0;
+    const integration = qbConnected ? (INTEGRATION_FIELDS[entity] ?? []) : [];
+    const custom = await this.list(orgId, entity);
+    return { system, integration, custom };
+  }
+
   async create(orgId: string, dto: CreateCustomFieldDto) {
     let key = keyify(dto.label);
     const exists = await this.prisma.customFieldDefinition.findFirst({
@@ -41,16 +55,29 @@ export class CustomFieldsService {
         label: dto.label,
         type: dto.type ?? 'text',
         options: dto.type === 'select' ? (dto.options ?? []) : [],
+        required: dto.required ?? false,
+        // Conditional-required only applies to deals.
+        requiredFromStageId: dto.entity === 'deal' ? (dto.requiredFromStageId ?? null) : null,
+        requiredForWon: dto.entity === 'deal' ? (dto.requiredForWon ?? false) : false,
         position: dto.position ?? 0,
       },
     });
   }
 
   async update(orgId: string, id: string, dto: UpdateCustomFieldDto) {
-    await this.ensure(orgId, id);
+    const existing = await this.ensure(orgId, id);
+    const isDeal = existing.entity === 'deal';
     return this.prisma.customFieldDefinition.update({
       where: { id },
-      data: { label: dto.label, type: dto.type, options: dto.options, position: dto.position },
+      data: {
+        ...(dto.label !== undefined ? { label: dto.label } : {}),
+        ...(dto.type !== undefined ? { type: dto.type } : {}),
+        ...(dto.options !== undefined ? { options: dto.options } : {}),
+        ...(dto.required !== undefined ? { required: dto.required } : {}),
+        ...(dto.requiredFromStageId !== undefined ? { requiredFromStageId: isDeal ? dto.requiredFromStageId : null } : {}),
+        ...(dto.requiredForWon !== undefined ? { requiredForWon: isDeal ? dto.requiredForWon : false } : {}),
+        ...(dto.position !== undefined ? { position: dto.position } : {}),
+      },
     });
   }
 

@@ -9,7 +9,7 @@ const SECTIONS = [
   { label: 'General', href: '/settings/general' },
   { label: 'Members', href: '/settings/members' },
   { label: 'Roles', href: '/settings/roles' },
-  { label: 'Custom Fields', href: '/settings/custom-fields' },
+  { label: 'Fields', href: '/settings/custom-fields' },
   { label: 'Invoicing', href: '/settings/invoicing' },
   { label: 'Email Templates', href: '/settings/email-templates' },
   { label: 'Automations', href: '/settings/automations' },
