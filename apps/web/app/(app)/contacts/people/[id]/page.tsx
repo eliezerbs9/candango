@@ -165,7 +165,7 @@ export default function PersonDetailPage() {
             <ContactDeals deals={person.deals} />
           </Card>
 
-          {(qb?.connected || person.documents.length > 0) && (
+          {(qb?.connected || (person.documents?.length ?? 0) > 0) && (
             <Card withBorder radius="md" padding="md">
               <Text fw={600} mb="sm">
                 Estimates &amp; invoices

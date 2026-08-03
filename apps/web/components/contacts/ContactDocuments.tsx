@@ -16,7 +16,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 /** Estimates + invoices across a contact's deals (shown when QuickBooks is connected). */
-export function ContactDocuments({ documents }: { documents: ContactDocument[] }) {
+export function ContactDocuments({ documents = [] }: { documents?: ContactDocument[] }) {
   if (documents.length === 0) {
     return (
       <Text size="sm" c="dimmed">
