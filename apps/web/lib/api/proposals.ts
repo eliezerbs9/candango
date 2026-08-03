@@ -136,11 +136,21 @@ export interface Proposal {
   updatedAt: string;
 }
 
+export interface ProposalImageFile {
+  key: string;
+  url: string;
+}
+export interface ProposalDocFile {
+  key: string;
+  name: string;
+  url: string;
+}
+
 /** A proposal + the resolved render data (variables, signed file URLs, pricing). */
 export interface ProposalRenderData extends Proposal {
   variables: Record<string, string>;
-  imagesByField: Record<string, string[]>;
-  documentsByField: Record<string, { name: string; url: string }[]>;
+  imagesByField: Record<string, ProposalImageFile[]>;
+  documentsByField: Record<string, ProposalDocFile[]>;
   pricing: { currency: string; rows: { description: string; amount: number }[]; total: number };
 }
 

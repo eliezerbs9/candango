@@ -1,8 +1,19 @@
-import type { ProposalRenderData } from '@/lib/api/proposals';
-import type { ProposalRenderCtx } from './ProposalRenderer';
+import type { ProposalDocFile, ProposalImageFile, ProposalRenderData } from '@/lib/api/proposals';
+import type { MediaPick, ProposalRenderCtx } from './ProposalRenderer';
 
 const money = (cents: number, currency: string) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency }).format((cents ?? 0) / 100);
+
+/**
+ * Order/select a field's files (stored oldest→newest) per the element's pick mode:
+ *  - manual: exactly the picked keys, in the order picked
+ *  - recent: newest first · oldest: as stored
+ */
+function selectFiles<T extends { key: string }>(all: T[], pick: MediaPick | undefined, picked: string[] | undefined): T[] {
+  if (pick === 'manual') return (picked ?? []).map((k) => all.find((f) => f.key === k)).filter((f): f is T => !!f);
+  if (pick === 'oldest') return all;
+  return [...all].reverse(); // 'recent' (default)
+}
 
 /** A render context backed by a proposal's resolved deal data (variables, signed URLs, pricing). */
 export function buildDealCtx(data: ProposalRenderData): ProposalRenderCtx {
@@ -10,10 +21,11 @@ export function buildDealCtx(data: ProposalRenderData): ProposalRenderCtx {
 
   return {
     resolveText,
-    image: ({ fieldKey, cols = 1, count = 1 }) => {
-      const urls = fieldKey ? data.imagesByField[fieldKey] ?? [] : Object.values(data.imagesByField).flat();
+    image: ({ fieldKey, cols = 1, count = 1, pick = 'recent', picked }) => {
+      const all: ProposalImageFile[] = fieldKey ? data.imagesByField[fieldKey] ?? [] : Object.values(data.imagesByField).flat();
+      const files = selectFiles(all, pick, picked);
       const c = Math.max(1, cols);
-      const slots = Math.max(1, count);
+      const slots = pick === 'manual' ? Math.max(1, files.length) : Math.max(1, count);
       return (
         <div
           style={{
@@ -26,8 +38,8 @@ export function buildDealCtx(data: ProposalRenderData): ProposalRenderCtx {
           }}
         >
           {Array.from({ length: slots }).map((_, i) =>
-            urls[i] ? (
-              <img key={i} src={urls[i]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }} />
+            files[i] ? (
+              <img key={i} src={files[i].url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }} />
             ) : (
               <div key={i} style={{ background: '#e9ecef', borderRadius: 8, minHeight: 48 }} />
             ),
@@ -35,8 +47,9 @@ export function buildDealCtx(data: ProposalRenderData): ProposalRenderCtx {
         </div>
       );
     },
-    document: ({ fieldKey }) => {
-      const docs = fieldKey ? data.documentsByField[fieldKey] ?? [] : Object.values(data.documentsByField).flat();
+    document: ({ fieldKey, pick = 'recent', picked }) => {
+      const all: ProposalDocFile[] = fieldKey ? data.documentsByField[fieldKey] ?? [] : Object.values(data.documentsByField).flat();
+      const docs = selectFiles(all, pick, picked);
       if (docs.length === 0) return null;
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

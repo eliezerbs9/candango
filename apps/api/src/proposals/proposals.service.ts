@@ -145,21 +145,25 @@ export class ProposalsService {
     });
 
     // Resolve image/document custom-field files to signed URLs (only if storage is configured).
+    // Files carry their stable object `key` (so a manual pick in a proposal survives re-render, when
+    // the signed `url` has rotated) alongside a fresh signed `url`. Kept oldest→newest (upload order).
     const cf = (deal.customFields ?? {}) as Record<string, unknown>;
-    const imagesByField: Record<string, string[]> = {};
-    const documentsByField: Record<string, { name: string; url: string }[]> = {};
+    const imagesByField: Record<string, { key: string; url: string }[]> = {};
+    const documentsByField: Record<string, { key: string; name: string; url: string }[]> = {};
     if (this.spaces.configured) {
       for (const def of fieldDefs) {
         const raw = cf[def.key];
         if (def.type === 'image' && Array.isArray(raw)) {
           imagesByField[def.key] = await Promise.all(
-            (raw as string[]).filter((k) => typeof k === 'string').map((k) => this.spaces.presignGet(k)),
+            (raw as string[])
+              .filter((k) => typeof k === 'string')
+              .map(async (k) => ({ key: k, url: await this.spaces.presignGet(k) })),
           );
         } else if (def.type === 'document' && Array.isArray(raw)) {
           documentsByField[def.key] = await Promise.all(
             (raw as { name?: string; key?: string }[])
               .filter((d) => d && typeof d.key === 'string')
-              .map(async (d) => ({ name: d.name ?? 'Document', url: await this.spaces.presignGet(d.key as string) })),
+              .map(async (d) => ({ key: d.key as string, name: d.name ?? 'Document', url: await this.spaces.presignGet(d.key as string) })),
           );
         }
       }

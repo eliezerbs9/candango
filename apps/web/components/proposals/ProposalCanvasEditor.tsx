@@ -5,6 +5,7 @@ import {
   ActionIcon,
   Button,
   Card,
+  Checkbox,
   ColorInput,
   Group,
   Menu,
@@ -13,16 +14,17 @@ import {
   Paper,
   SegmentedControl,
   Select,
+  SimpleGrid,
   Stack,
   Switch,
   Text,
   TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconCopy, IconEye, IconLayout2, IconLayoutGrid, IconLock, IconPalette, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
-import type { CanvasElement, CanvasPage, ElementType, Orientation, ProposalTheme } from '@/lib/api/proposals';
+import { IconCheck, IconCopy, IconEye, IconLayout2, IconLayoutGrid, IconLock, IconPalette, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
+import type { CanvasElement, CanvasPage, ElementType, Orientation, ProposalDocFile, ProposalImageFile, ProposalTheme } from '@/lib/api/proposals';
 import { RichTextBody } from '@/components/common/RichTextBody';
-import { ElementView, ProposalRenderer, type ProposalRenderCtx } from './ProposalRenderer';
+import { ElementView, ProposalRenderer, type MediaPick, type ProposalRenderCtx } from './ProposalRenderer';
 
 // 12-column grid + a fine vertical unit, for the alignment overlay and snapping.
 const COL = 100 / 12; // ≈ 8.333%
@@ -131,6 +133,9 @@ export interface ProposalCanvasEditorProps {
   ctx: ProposalRenderCtx;
   imageFields?: FieldOption[];
   documentFields?: FieldOption[];
+  /** The deal's actual files (deal builder only), for the per-proposal image/document picker. */
+  imageFilesByField?: Record<string, ProposalImageFile[]>;
+  documentFilesByField?: Record<string, ProposalDocFile[]>;
   /** When true (deal builder), elements the template marked as locked can't be moved/edited/deleted. */
   enforceLocks?: boolean;
 }
@@ -145,6 +150,8 @@ export function ProposalCanvasEditor({
   ctx,
   imageFields = [],
   documentFields = [],
+  imageFilesByField = {},
+  documentFilesByField = {},
   enforceLocks = false,
 }: ProposalCanvasEditorProps) {
   const [pageId, setPageId] = useState<string | null>(pages[0]?.id ?? null);
@@ -380,17 +387,23 @@ export function ProposalCanvasEditor({
           {sel ? (
             <Card withBorder radius="md" padding="sm">
               <Group justify="space-between" mb="xs">
-                <Text size="sm" fw={600}>
-                  {(sel.props.label as string) || PALETTE.find((p) => p.type === sel.type)?.label || sel.type}
-                </Text>
-                <ActionIcon variant="subtle" color="red" onClick={() => removeElement(sel.id)} aria-label="Delete element">
-                  <IconTrash size={16} />
-                </ActionIcon>
+                <Group gap={6} wrap="nowrap">
+                  {enforceLocks && !!sel.props.locked && <IconLock size={13} />}
+                  <Text size="sm" fw={600}>
+                    {(sel.props.label as string) || PALETTE.find((p) => p.type === sel.type)?.label || sel.type}
+                  </Text>
+                </Group>
+                {!(enforceLocks && sel.props.locked) && (
+                  <ActionIcon variant="subtle" color="red" onClick={() => removeElement(sel.id)} aria-label="Delete element">
+                    <IconTrash size={16} />
+                  </ActionIcon>
+                )}
               </Group>
               <ElementSettings
                 el={sel}
                 fonts={fonts}
                 showLock={!enforceLocks}
+                locked={enforceLocks && !!sel.props.locked}
                 onProp={(k, v) => setProp(sel.id, k, v)}
                 onStyle={(patch) => setStyle(sel.id, patch)}
                 onGeom={(patch) => updateElement(sel.id, patch)}
@@ -398,6 +411,8 @@ export function ProposalCanvasEditor({
                 onInsertVar={insertVar}
                 imageFields={imageFields}
                 documentFields={documentFields}
+                imageFilesByField={imageFilesByField}
+                documentFilesByField={documentFilesByField}
               />
             </Card>
           ) : (
@@ -446,8 +461,16 @@ function EditableElement({
   const label = el.props.label as string | undefined;
   const showTag = (el.type === 'image' || el.type === 'document') && !!label;
 
+  const selectableWhenLocked = el.type === 'image' || el.type === 'document';
   const start = (mode: 'move' | 'resize') => (e: React.PointerEvent) => {
-    if (locked) return;
+    if (locked) {
+      // A locked media element can still be selected so the salesperson picks its files.
+      if (selectableWhenLocked) {
+        e.stopPropagation();
+        onSelect();
+      }
+      return;
+    }
     e.stopPropagation();
     e.preventDefault();
     onSelect();
@@ -531,7 +554,7 @@ function EditableElement({
           {label}
         </span>
       )}
-      {selected && (
+      {selected && !locked && (
         <>
           <ActionIcon
             size="xs"
@@ -559,6 +582,7 @@ function ElementSettings({
   el,
   fonts,
   showLock,
+  locked,
   onProp,
   onStyle,
   onGeom,
@@ -566,10 +590,13 @@ function ElementSettings({
   onInsertVar,
   imageFields,
   documentFields,
+  imageFilesByField,
+  documentFilesByField,
 }: {
   el: CanvasElement;
   fonts: string[];
   showLock: boolean;
+  locked: boolean;
   onProp: (key: string, value: unknown) => void;
   onStyle: (patch: Partial<NonNullable<CanvasElement['style']>>) => void;
   onGeom: (patch: Partial<CanvasElement>) => void;
@@ -577,16 +604,36 @@ function ElementSettings({
   onInsertVar: (key: string) => void;
   imageFields: FieldOption[];
   documentFields: FieldOption[];
+  imageFilesByField: Record<string, ProposalImageFile[]>;
+  documentFilesByField: Record<string, ProposalDocFile[]>;
 }) {
   const s = el.style ?? {};
   const textLike = el.type === 'text' || el.type === 'heading';
+  const isMedia = el.type === 'image' || el.type === 'document';
+  const pick = (el.props.pick as MediaPick) ?? 'recent';
+  const media = isMedia ? (
+    <MediaPicker el={el} onProp={onProp} imageFilesByField={imageFilesByField} documentFilesByField={documentFilesByField} />
+  ) : null;
+
+  // Locked media element: only its file selection is editable — everything else stays as the template set it.
+  if (locked) {
+    return (
+      <Stack gap="sm">
+        <Text size="xs" c="dimmed">
+          Locked by the template — you can still choose its {el.type === 'image' ? 'photos' : 'documents'}.
+        </Text>
+        {media}
+      </Stack>
+    );
+  }
+
   return (
     <Stack gap="sm">
       {showLock && (
         <Switch
           size="xs"
           label="Lock in proposals"
-          description="Salespeople can't move, edit or delete this element."
+          description="Salespeople can't move, edit or delete it — but can still pick its files."
           checked={!!el.props.locked}
           onChange={(e) => onProp('locked', e.currentTarget.checked)}
         />
@@ -603,11 +650,11 @@ function ElementSettings({
           <RichTextBody value={(el.props.html as string) ?? ''} onChange={(html) => onProp('html', html)} minHeight={120} variables={variables} />
         </div>
       )}
-      {(el.type === 'image' || el.type === 'document') && (
+      {isMedia && (
         <>
           <TextInput size="xs" label="Label" description="Only shown here, to help you edit." value={(el.props.label as string) ?? ''} onChange={(e) => onProp('label', e.currentTarget.value)} />
           <FieldPicker
-            type={el.type}
+            type={el.type as 'image' | 'document'}
             value={(el.props.fieldKey as string) ?? ''}
             onChange={(v) => onProp('fieldKey', v)}
             options={el.type === 'image' ? imageFields : documentFields}
@@ -616,10 +663,13 @@ function ElementSettings({
       )}
       {el.type === 'image' && (
         <Group gap="xs" grow>
-          <NumberInput size="xs" label="Photos" min={1} max={12} value={(el.props.count as number) ?? 1} onChange={(v) => onProp('count', Math.max(1, Number(v) || 1))} />
+          {pick !== 'manual' && (
+            <NumberInput size="xs" label="Photos" min={1} max={12} value={(el.props.count as number) ?? 1} onChange={(v) => onProp('count', Math.max(1, Number(v) || 1))} />
+          )}
           <NumberInput size="xs" label="Columns" min={1} max={4} value={(el.props.cols as number) ?? 1} onChange={(v) => onProp('cols', Math.max(1, Number(v) || 1))} />
         </Group>
       )}
+      {media}
       {el.type === 'pricing' && (
         <Text size="xs" c="dimmed">
           Fills from the estimate(s) selected on the proposal.
@@ -672,6 +722,99 @@ function ElementSettings({
         <NumberInput size="xs" label="W %" min={5} max={100} value={Math.round(el.w)} onChange={(v) => onGeom({ w: Number(v) || 5 })} />
         <NumberInput size="xs" label="H %" min={2} max={100} value={Math.round(el.h)} onChange={(v) => onGeom({ h: Number(v) || 2 })} />
       </Group>
+    </Stack>
+  );
+}
+
+/**
+ * Choose which of a field's files fill an image/document element: newest-first, oldest-first, or a
+ * manual selection (thumbnails/checkboxes). Available even when the element is locked by the template.
+ */
+function MediaPicker({
+  el,
+  onProp,
+  imageFilesByField,
+  documentFilesByField,
+}: {
+  el: CanvasElement;
+  onProp: (key: string, value: unknown) => void;
+  imageFilesByField: Record<string, ProposalImageFile[]>;
+  documentFilesByField: Record<string, ProposalDocFile[]>;
+}) {
+  const isImage = el.type === 'image';
+  const fk = (el.props.fieldKey as string) || '';
+  const files: { key: string; url: string; name?: string }[] = isImage
+    ? fk
+      ? imageFilesByField[fk] ?? []
+      : Object.values(imageFilesByField).flat()
+    : fk
+      ? documentFilesByField[fk] ?? []
+      : Object.values(documentFilesByField).flat();
+  const pick = (el.props.pick as MediaPick) ?? 'recent';
+  const picked = (el.props.picked as string[]) ?? [];
+  const noun = isImage ? 'photos' : 'documents';
+
+  const toggle = (key: string) =>
+    onProp('picked', picked.includes(key) ? picked.filter((k) => k !== key) : [...picked, key]);
+
+  return (
+    <Stack gap={6}>
+      <Select
+        size="xs"
+        label={isImage ? 'Which photos' : 'Which documents'}
+        data={[
+          { value: 'recent', label: 'Most recent' },
+          { value: 'oldest', label: 'Oldest' },
+          { value: 'manual', label: 'Choose specific' },
+        ]}
+        value={pick}
+        onChange={(v) => onProp('pick', (v as MediaPick) ?? 'recent')}
+        allowDeselect={false}
+      />
+      {pick === 'manual' &&
+        (files.length === 0 ? (
+          <Text size="xs" c="dimmed">
+            No {noun} on this deal{fk ? ' for this field' : ''} yet.
+          </Text>
+        ) : isImage ? (
+          <SimpleGrid cols={3} spacing={6}>
+            {[...files].reverse().map((f) => {
+              const on = picked.includes(f.key);
+              return (
+                <div
+                  key={f.key}
+                  onClick={() => toggle(f.key)}
+                  style={{
+                    position: 'relative',
+                    cursor: 'pointer',
+                    aspectRatio: '1',
+                    borderRadius: 6,
+                    overflow: 'hidden',
+                    outline: on ? '2px solid var(--mantine-color-candango-6)' : '1px solid var(--mantine-color-gray-3)',
+                  }}
+                >
+                  <img src={f.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: on ? 1 : 0.6 }} />
+                  {on && (
+                    <div style={{ position: 'absolute', top: 2, right: 2, background: 'var(--mantine-color-candango-6)', color: '#fff', borderRadius: '50%', width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <IconCheck size={11} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </SimpleGrid>
+        ) : (
+          <Stack gap={4}>
+            {[...files].reverse().map((f) => (
+              <Checkbox key={f.key} size="xs" label={f.name ?? 'Document'} checked={picked.includes(f.key)} onChange={() => toggle(f.key)} />
+            ))}
+          </Stack>
+        ))}
+      {pick === 'manual' && picked.length > 0 && (
+        <Text size="xs" c="dimmed">
+          {picked.length} selected · shown in the order you pick them.
+        </Text>
+      )}
     </Stack>
   );
 }

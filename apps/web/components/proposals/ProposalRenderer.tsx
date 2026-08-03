@@ -8,15 +8,19 @@ import type { CanvasElement, CanvasPage, ProposalPage, ProposalRow, ProposalThem
  * fallback for pre-canvas templates). The image/document/pricing content resolves differently by
  * context (example placeholders / real deal data / public snapshot), so those come via a ctx.
  */
+/** How an image/document element fills from its field's files. */
+export type MediaPick = 'recent' | 'oldest' | 'manual';
 export interface ProposalImageOpts {
   fieldKey?: string;
   cols?: number;
   count?: number;
+  pick?: MediaPick;
+  picked?: string[];
 }
 export interface ProposalRenderCtx {
   resolveText: (s: string) => string;
   image: (opts: ProposalImageOpts) => React.ReactNode;
-  document: (opts: { fieldKey?: string }) => React.ReactNode;
+  document: (opts: { fieldKey?: string; pick?: MediaPick; picked?: string[] }) => React.ReactNode;
   pricing: () => React.ReactNode;
 }
 
@@ -68,11 +72,21 @@ export function ElementView({ element, theme, ctx }: { element: CanvasElement; t
             fieldKey: element.props.fieldKey as string | undefined,
             cols: element.props.cols as number | undefined,
             count: element.props.count as number | undefined,
+            pick: element.props.pick as MediaPick | undefined,
+            picked: element.props.picked as string[] | undefined,
           })}
         </div>
       );
     case 'document':
-      return <div style={base}>{ctx.document({ fieldKey: element.props.fieldKey as string | undefined })}</div>;
+      return (
+        <div style={base}>
+          {ctx.document({
+            fieldKey: element.props.fieldKey as string | undefined,
+            pick: element.props.pick as MediaPick | undefined,
+            picked: element.props.picked as string[] | undefined,
+          })}
+        </div>
+      );
     case 'pricing':
       return <div style={{ ...base, fontSize: s.fontSize ?? 14 }}>{ctx.pricing()}</div>;
     case 'divider':
