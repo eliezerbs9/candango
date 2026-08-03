@@ -48,6 +48,7 @@ export const TEMPLATE_VARIABLES: TemplateVariable[] = [
   { key: 'sender.email', label: 'Your email', group: 'Sender', example: 'jane.doe@example.com', scopes: DEAL_ONLY },
   { key: 'sender.phone', label: 'Your phone', group: 'Sender', example: '(555) 987-6543', scopes: DEAL_ONLY },
   { key: 'workspace.name', label: 'Workspace name', group: 'Workspace', example: 'Your Company', scopes: BOTH },
+  { key: 'date.today', label: "Today's date", group: 'Date', example: '08/03/2026', scopes: BOTH },
 ];
 
 const VALID_KEYS = new Set(TEMPLATE_VARIABLES.map((v) => v.key));
@@ -243,7 +244,21 @@ export interface TemplateContextSources {
   company?: { name?: string | null } | null;
   deal?: { title?: string | null; value?: number | null; currency?: string | null } | null;
   sender?: { name?: string | null; email?: string | null; phone?: string | null } | null;
-  workspace?: { name?: string | null } | null;
+  workspace?: { name?: string | null; timezone?: string | null } | null;
+}
+
+/** Today's date as MM/DD/YYYY in the given IANA timezone (falls back to the server's zone). */
+function formatToday(timezone?: string | null): string {
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone || undefined,
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric',
+    }).format(new Date());
+  } catch {
+    return new Intl.DateTimeFormat('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }).format(new Date());
+  }
 }
 
 function firstJsonValue(v: unknown): string {
@@ -283,6 +298,7 @@ export function buildTemplateContext(src: TemplateContextSources): Record<string
     'sender.email': src.sender?.email ?? '',
     'sender.phone': src.sender?.phone ?? '',
     'workspace.name': src.workspace?.name ?? '',
+    'date.today': formatToday(src.workspace?.timezone),
   };
 }
 

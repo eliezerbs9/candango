@@ -129,7 +129,7 @@ export class ProposalsService {
       deal.ownerUserId
         ? this.prisma.user.findFirst({ where: { id: deal.ownerUserId, orgId }, select: { name: true, email: true, phone: true } })
         : null,
-      this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true } }),
+      this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true, timezone: true } }),
       this.prisma.customFieldDefinition.findMany({
         where: { orgId, entity: 'deal', type: { in: ['image', 'document'] } },
         select: { key: true, type: true },

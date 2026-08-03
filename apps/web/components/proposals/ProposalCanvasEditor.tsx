@@ -3,7 +3,6 @@
 import { useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
-  Badge,
   Button,
   Card,
   ColorInput,
@@ -33,6 +32,22 @@ const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.r
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
 export type FieldOption = { value: string; label: string };
+export type EditorVariable = { key: string; label: string; group?: string };
+
+/** Group variables by their `group` (preserving first-seen order) for the insert menu. */
+function groupVars(variables: EditorVariable[]): [string, EditorVariable[]][] {
+  const order: string[] = [];
+  const map = new Map<string, EditorVariable[]>();
+  for (const v of variables) {
+    const g = v.group ?? 'Variables';
+    if (!map.has(g)) {
+      map.set(g, []);
+      order.push(g);
+    }
+    map.get(g)!.push(v);
+  }
+  return order.map((g) => [g, map.get(g)!]);
+}
 
 const PALETTE: { type: ElementType; label: string }[] = [
   { type: 'heading', label: 'Heading' },
@@ -111,7 +126,7 @@ export interface ProposalCanvasEditorProps {
   onPagesChange: (pages: CanvasPage[]) => void;
   theme: ProposalTheme;
   onThemeChange: (theme: ProposalTheme) => void;
-  variables: { key: string; label: string }[];
+  variables: EditorVariable[];
   fonts: string[];
   ctx: ProposalRenderCtx;
   imageFields?: FieldOption[];
@@ -147,6 +162,21 @@ export function ProposalCanvasEditor({
     const el = newElement(type);
     setPageElements((els) => [...els, el]);
     setSelId(el.id);
+  };
+  /** Place a dragged-in element where it was dropped (percent geometry, snapped + clamped). */
+  const addElementAt = (type: ElementType, xPct: number, yPct: number) => {
+    const el = newElement(type);
+    el.x = clamp(snap ? snapTo(xPct, COL) : xPct, 0, 100 - el.w);
+    el.y = clamp(snap ? snapTo(yPct, ROW) : yPct, 0, 100 - el.h);
+    setPageElements((els) => [...els, el]);
+    setSelId(el.id);
+  };
+  const onCanvasDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const type = e.dataTransfer.getData('text/proposal-element') as ElementType;
+    const rect = pageRef.current?.getBoundingClientRect();
+    if (!type || !rect) return;
+    addElementAt(type, ((e.clientX - rect.left) / rect.width) * 100, ((e.clientY - rect.top) / rect.height) * 100);
   };
   const applyPreset = (build: () => CanvasElement[]) => {
     if ((page?.elements.length ?? 0) > 0 && !window.confirm('Replace this page with the chosen layout?')) return;
@@ -249,6 +279,8 @@ export function ProposalCanvasEditor({
             <div
               ref={pageRef}
               onPointerDown={() => setSelId(null)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={onCanvasDrop}
               style={{
                 position: 'relative',
                 width: '100%',
@@ -289,12 +321,23 @@ export function ProposalCanvasEditor({
         {/* Sidebar */}
         <Stack gap="md" style={{ flex: '0 0 280px', minWidth: 250 }}>
           <Card withBorder radius="md" padding="sm">
-            <Text size="sm" fw={600} mb="xs">
+            <Text size="sm" fw={600} mb={2}>
               Add element
+            </Text>
+            <Text size="xs" c="dimmed" mb="xs">
+              Drag onto the page, or click to drop it in.
             </Text>
             <Group gap={6}>
               {PALETTE.map((b) => (
-                <Button key={b.type} size="xs" variant="default" onClick={() => addElement(b.type)}>
+                <Button
+                  key={b.type}
+                  size="xs"
+                  variant="default"
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData('text/proposal-element', b.type)}
+                  onClick={() => addElement(b.type)}
+                  style={{ cursor: 'grab' }}
+                >
                   {b.label}
                 </Button>
               ))}
@@ -473,7 +516,7 @@ function ElementSettings({
   onProp: (key: string, value: unknown) => void;
   onStyle: (patch: Partial<NonNullable<CanvasElement['style']>>) => void;
   onGeom: (patch: Partial<CanvasElement>) => void;
-  variables: { key: string; label: string }[];
+  variables: EditorVariable[];
   onInsertVar: (key: string) => void;
   imageFields: FieldOption[];
   documentFields: FieldOption[];
@@ -532,16 +575,27 @@ function ElementSettings({
               <SegmentedControl size="xs" fullWidth data={[{ value: 'left', label: 'L' }, { value: 'center', label: 'C' }, { value: 'right', label: 'R' }]} value={s.align ?? 'left'} onChange={(v) => onStyle({ align: v as 'left' | 'center' | 'right' })} />
             </div>
           </Group>
-          <Group gap={4} wrap="wrap">
-            <Text size="xs" c="dimmed">
-              Insert:
-            </Text>
-            {variables.slice(0, 8).map((v) => (
-              <Badge key={v.key} variant="light" color="candango" style={{ cursor: 'pointer', textTransform: 'none' }} onClick={() => onInsertVar(v.key)}>
-                {v.label}
-              </Badge>
-            ))}
-          </Group>
+          {variables.length > 0 && (
+            <Menu position="bottom-start" withinPortal shadow="sm" width={220}>
+              <Menu.Target>
+                <Button size="xs" variant="light" leftSection={<IconPlus size={12} />}>
+                  Insert variable
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown mah={320} style={{ overflowY: 'auto' }}>
+                {groupVars(variables).map(([group, vs]) => (
+                  <div key={group}>
+                    <Menu.Label>{group}</Menu.Label>
+                    {vs.map((v) => (
+                      <Menu.Item key={v.key} onClick={() => onInsertVar(v.key)}>
+                        {v.label}
+                      </Menu.Item>
+                    ))}
+                  </div>
+                ))}
+              </Menu.Dropdown>
+            </Menu>
+          )}
         </>
       )}
 
