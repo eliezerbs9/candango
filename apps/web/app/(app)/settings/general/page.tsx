@@ -150,8 +150,8 @@ export default function GeneralSettingsPage() {
       />
 
       <Select
-        label="QuickBooks customer name format"
-        description="How a contact's name is written when creating a QuickBooks customer."
+        label="Contact name format"
+        description="How people's names are displayed across the app — and mirrored when they sync to QuickBooks."
         data={[
           { value: 'first_last', label: 'First Last (e.g. Sherry Lee)' },
           { value: 'last_first', label: 'Last, First (e.g. Lee, Sherry)' },
