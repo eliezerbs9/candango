@@ -386,11 +386,12 @@ export function ProposalCanvasEditor({
                   label="Recipient view"
                   description="How the customer sees it on the shared link."
                   data={[
-                    { value: 'slides', label: 'Slides (one page at a time)' },
+                    { value: 'slides', label: 'Slides (framed deck)' },
+                    { value: 'fullscreen', label: 'Full screen (immersive)' },
                     { value: 'scroll', label: 'Scroll (continuous)' },
                   ]}
                   value={theme.present ?? 'slides'}
-                  onChange={(v) => onThemeChange({ ...theme, present: (v as 'slides' | 'scroll') ?? 'slides' })}
+                  onChange={(v) => onThemeChange({ ...theme, present: (v as 'slides' | 'fullscreen' | 'scroll') ?? 'slides' })}
                   allowDeselect={false}
                 />
                 <Select
@@ -675,7 +676,7 @@ export function ProposalCanvasEditor({
         fullScreen
       >
         <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 92px)' }}>
-          {(theme.present ?? 'slides') === 'slides' ? (
+          {(theme.present ?? 'slides') === 'fullscreen' ? (
             <div style={{ flex: 1, minHeight: 0 }}>
               <ProposalSlides pages={pages} theme={theme} ctx={previewCtx ?? ctx} fill />
             </div>
@@ -683,7 +684,11 @@ export function ProposalCanvasEditor({
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
               <Paper p="xl" radius="md" bg="var(--mantine-color-gray-2)">
                 <div style={{ maxWidth: theme.orientation === 'landscape' ? 1100 : 720, margin: '0 auto' }}>
-                  <ProposalRenderer layout={pages} theme={theme} paged ctx={previewCtx ?? ctx} />
+                  {(theme.present ?? 'slides') === 'scroll' ? (
+                    <ProposalRenderer layout={pages} theme={theme} paged ctx={previewCtx ?? ctx} />
+                  ) : (
+                    <ProposalSlides pages={pages} theme={theme} ctx={previewCtx ?? ctx} />
+                  )}
                 </div>
               </Paper>
             </div>

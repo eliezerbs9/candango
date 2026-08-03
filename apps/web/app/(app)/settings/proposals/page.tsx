@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -32,9 +32,12 @@ import {
   useProposalMeta,
   useProposalTemplates,
   useSeedProposalTemplates,
+  useTemplateVariables,
 } from '@/lib/api/hooks';
 import type { ProposalTemplate, ProposalTheme } from '@/lib/api/proposals';
 import { PAGE_PRESETS } from '@/components/proposals/ProposalCanvasEditor';
+import { ProposalMiniPreview } from '@/components/proposals/ProposalMiniPreview';
+import { buildPreviewCtx } from '@/components/proposals/previewCtx';
 
 const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
@@ -47,6 +50,8 @@ export default function ProposalTemplatesPage() {
   const router = useRouter();
   const { data: templates = [], isLoading } = useProposalTemplates();
   const { data: meta } = useProposalMeta();
+  const { data: variables = [] } = useTemplateVariables();
+  const thumbCtx = useMemo(() => buildPreviewCtx(Object.fromEntries(variables.map((v) => [v.key, v.example]))), [variables]);
   const create = useCreateProposalTemplate();
   const del = useDeleteProposalTemplate();
   const seed = useSeedProposalTemplates();
@@ -184,39 +189,9 @@ export default function ProposalTemplatesPage() {
                   </Menu.Dropdown>
                 </Menu>
               </Group>
-              {/* Mini page thumbnail (first page) */}
+              {/* First-page preview (example / John Doe data) */}
               <Link href={`/settings/proposals/${t.id}`} style={{ textDecoration: 'none' }}>
-                <div
-                  style={{
-                    position: 'relative',
-                    width: '100%',
-                    aspectRatio: t.theme?.orientation === 'landscape' ? '11 / 8.5' : '8.5 / 11',
-                    background: '#fff',
-                    border: '1px solid var(--mantine-color-gray-3)',
-                    borderRadius: 6,
-                    overflow: 'hidden',
-                  }}
-                >
-                  {(t.layout?.[0]?.elements ?? []).map((el) => (
-                    <div
-                      key={el.id}
-                      style={{
-                        position: 'absolute',
-                        left: `${el.x}%`,
-                        top: `${el.y}%`,
-                        width: `${el.w}%`,
-                        height: `${el.h}%`,
-                        background: 'var(--mantine-color-gray-2)',
-                        borderRadius: 2,
-                      }}
-                    />
-                  ))}
-                  {(t.layout?.[0]?.elements ?? []).length === 0 && (
-                    <Text size="xs" c="dimmed" ta="center" mt="xl">
-                      Empty — click to design
-                    </Text>
-                  )}
-                </div>
+                <ProposalMiniPreview layout={t.layout} theme={t.theme} ctx={thumbCtx} />
               </Link>
             </Card>
           ))}

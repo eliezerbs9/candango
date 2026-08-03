@@ -37,8 +37,10 @@ import {
 import type { CanvasPage, Proposal, ProposalBody, ProposalStatus, ProposalTheme } from '@/lib/api/proposals';
 import { useAutosave } from '@/lib/useAutosave';
 import { ProposalCanvasEditor, toCanvasPages, type FieldOption } from './ProposalCanvasEditor';
+import { ProposalMiniPreview } from './ProposalMiniPreview';
 import { SaveStatus } from './SaveStatus';
 import { buildDealCtx } from './dealCtx';
+import { buildPreviewCtx } from './previewCtx';
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
@@ -61,42 +63,12 @@ export function DealProposals({ dealId }: { dealId: string }) {
   return <ProposalList dealId={dealId} onOpen={setSelected} />;
 }
 
-/** A tiny first-page preview (element boxes) for a proposal card. */
-function ProposalThumb({ proposal }: { proposal: Proposal }) {
-  const page = Array.isArray(proposal.content) ? (proposal.content[0] as CanvasPage | undefined) : undefined;
-  const landscape = proposal.theme?.orientation === 'landscape';
-  return (
-    <div
-      style={{
-        position: 'relative',
-        width: '100%',
-        aspectRatio: landscape ? '11 / 8.5' : '8.5 / 11',
-        maxHeight: 190,
-        background: '#fff',
-        border: '1px solid var(--mantine-color-gray-3)',
-        borderRadius: 6,
-        overflow: 'hidden',
-      }}
-    >
-      {(page?.elements ?? []).map((el) => (
-        <div
-          key={el.id}
-          style={{ position: 'absolute', left: `${el.x}%`, top: `${el.y}%`, width: `${el.w}%`, height: `${el.h}%`, background: 'var(--mantine-color-gray-2)', borderRadius: 2 }}
-        />
-      ))}
-      {(page?.elements?.length ?? 0) === 0 && (
-        <Text size="xs" c="dimmed" ta="center" mt="lg">
-          Empty
-        </Text>
-      )}
-    </div>
-  );
-}
-
 function ProposalList({ dealId, onOpen }: { dealId: string; onOpen: (id: string) => void }) {
   const { data: proposals = [], isLoading } = useDealProposals(dealId);
+  const { data: variables = [] } = useTemplateVariables();
   const del = useDeleteProposal();
   const [opened, ctl] = useDisclosure(false);
+  const thumbCtx = useMemo(() => buildPreviewCtx(Object.fromEntries(variables.map((v) => [v.key, v.example]))), [variables]);
 
   const remove = (p: Proposal) => {
     if (!window.confirm(`Delete proposal "${p.title}"?`)) return;
@@ -141,7 +113,7 @@ function ProposalList({ dealId, onOpen }: { dealId: string; onOpen: (id: string)
                 </Menu>
               </Group>
 
-              <ProposalThumb proposal={p} />
+              <ProposalMiniPreview layout={p.content} theme={p.theme} ctx={thumbCtx} />
 
               <Group justify="space-between" wrap="nowrap" mt="sm">
                 <Badge variant="light" color={STATUS_COLOR[p.status]} style={{ textTransform: 'none' }}>

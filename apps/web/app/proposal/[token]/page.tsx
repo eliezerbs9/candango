@@ -73,9 +73,10 @@ export default function PublicProposalPage() {
 
   const responded = RESPONDED.includes(status);
   const isCanvas = Array.isArray(data.content) && !!(data.content[0] as CanvasPage | undefined)?.elements;
-  const useSlides = (data.theme?.present ?? 'slides') === 'slides' && isCanvas;
+  const mode = data.theme?.present ?? 'slides';
   const landscape = (data.theme?.orientation ?? 'portrait') === 'landscape';
-  const fullscreen = useSlides && !responded; // one slide filling the screen, with swipe/dots
+  const fullscreen = mode === 'fullscreen' && isCanvas && !responded; // one slide filling the screen
+  const deck = isCanvas && (mode === 'slides' || (mode === 'fullscreen' && responded)); // framed slide deck
 
   return (
     <div
@@ -116,7 +117,7 @@ export default function PublicProposalPage() {
         </div>
       ) : (
         <div style={{ maxWidth: landscape ? 1000 : 760, margin: '0 auto', padding: '24px 16px', width: '100%' }}>
-          {useSlides ? (
+          {deck ? (
             <ProposalSlides pages={data.content as CanvasPage[]} theme={data.theme} ctx={buildDealCtx(data)} />
           ) : (
             <ProposalRenderer layout={data.content} theme={data.theme} ctx={buildDealCtx(data)} paged />

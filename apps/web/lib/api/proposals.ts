@@ -64,8 +64,13 @@ export interface ProposalTheme {
   orientation?: Orientation;
   /** Optional safe-area margin (percent of the page) shown as a design guide in the editor. */
   margin?: number;
-  /** How the recipient views it: 'slides' = one page per slide with nav; 'scroll' = continuous. */
-  present?: 'slides' | 'scroll';
+  /**
+   * How the recipient views it:
+   *  - 'slides' = one page per slide in a framed deck with nav
+   *  - 'fullscreen' = immersive, one slide fitted to the whole screen
+   *  - 'scroll' = continuous
+   */
+  present?: 'slides' | 'fullscreen' | 'scroll';
   /** Transition between slides. */
   transition?: 'none' | 'fade' | 'slide';
   /** Animate elements into view as each slide appears. */
