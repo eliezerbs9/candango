@@ -245,6 +245,13 @@ export default function DealDetailPage() {
                     : undefined
                 }
               />
+              <TextInput
+                type="date"
+                label="Expected close"
+                value={form.expectedCloseDate}
+                onChange={(e) => setForm({ ...form, expectedCloseDate: e.currentTarget.value })}
+              />
+              <Divider label="People" labelPosition="left" />
               <CreatableSelect
                 label="Company"
                 placeholder="Search or create a company"
@@ -263,12 +270,6 @@ export default function DealDetailPage() {
                 value={form.primaryPersonId}
                 onChange={(v) => setForm({ ...form, primaryPersonId: v })}
                 onCreate={personCreate.prompt}
-              />
-              <TextInput
-                type="date"
-                label="Expected close"
-                value={form.expectedCloseDate}
-                onChange={(e) => setForm({ ...form, expectedCloseDate: e.currentTarget.value })}
               />
               <CustomFieldsEditor
                 entity="deal"

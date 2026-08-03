@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Anchor, Badge, Button, Checkbox, Group, Paper, ScrollArea, Stack, Text, Textarea, ThemeIcon, Timeline } from '@mantine/core';
+import { Anchor, Badge, Button, Card, Checkbox, Group, Paper, ScrollArea, Stack, Text, Textarea, ThemeIcon, Timeline } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import {
@@ -85,7 +85,9 @@ export function DealTimeline({ dealId }: { dealId: string }) {
   };
 
   return (
-    <Stack gap="md">
+    <Card withBorder radius="md" padding="md">
+      <Stack gap="md">
+      <Text fw={600}>Activity</Text>
       {/* Composer */}
       <Paper withBorder radius="md" p="sm">
         <Textarea
@@ -115,8 +117,8 @@ export function DealTimeline({ dealId }: { dealId: string }) {
           No history yet. Add a note or log an activity.
         </Text>
       ) : (
-        // Cap the height so a long history scrolls instead of stretching the page.
-        <ScrollArea.Autosize mah="60vh" type="hover" offsetScrollbars>
+        // Cap the height so a long history scrolls inside the card instead of stretching the page.
+        <ScrollArea.Autosize mah="clamp(240px, calc(100vh - 430px), 640px)" type="hover" offsetScrollbars>
           <Timeline active={-1} bulletSize={26} lineWidth={2} pr="xs">
             {items.map((it) => (
               <Timeline.Item key={`${it.kind}-${itemKey(it)}`} bullet={bullet(it)} title={titleOf(it, toggleActivity, openEditActivity)}>
@@ -131,7 +133,8 @@ export function DealTimeline({ dealId }: { dealId: string }) {
       )}
 
       <ActivityForm opened={actOpen} onClose={actCtl.close} defaultDealId={dealId} activity={editing} />
-    </Stack>
+      </Stack>
+    </Card>
   );
 }
 
