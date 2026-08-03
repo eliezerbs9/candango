@@ -25,7 +25,16 @@ export class SpacesService {
     this.bucket = config.get<string>('SPACES_BUCKET') ?? '';
 
     if (endpoint && accessKeyId && secretAccessKey && this.bucket) {
-      this.client = new S3Client({ endpoint, region, credentials: { accessKeyId, secretAccessKey }, forcePathStyle: false });
+      this.client = new S3Client({
+        endpoint,
+        region,
+        credentials: { accessKeyId, secretAccessKey },
+        forcePathStyle: false,
+        // DO Spaces (and other non-AWS S3) reject the SDK's default flexible-checksum headers on a
+        // presigned PUT — they get signed but the browser never sends them → SignatureDoesNotMatch.
+        requestChecksumCalculation: 'WHEN_REQUIRED',
+        responseChecksumValidation: 'WHEN_REQUIRED',
+      });
     } else {
       this.client = null;
       this.logger.log('Spaces not configured — file uploads disabled (set SPACES_* env vars).');
