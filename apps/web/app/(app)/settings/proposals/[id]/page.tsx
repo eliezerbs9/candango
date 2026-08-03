@@ -10,11 +10,14 @@ import { ApiError } from '@/lib/api/client';
 import { useAutosave } from '@/lib/useAutosave';
 import { compressImage } from '@/lib/imageCompress';
 import { SaveStatus } from '@/components/proposals/SaveStatus';
+import { buildDealCtx } from '@/components/proposals/dealCtx';
 import {
   useCustomFields,
+  useDeals,
   useFileUrls,
   useOrganization,
   useProposalMeta,
+  useProposalPreviewData,
   useProposalTemplate,
   useTemplateVariables,
   useUpdateProposalTemplate,
@@ -56,13 +59,25 @@ export default function ProposalTemplateEditor() {
   const [theme, setTheme] = useState<ProposalTheme | null>(null);
   const [pages, setPages] = useState<CanvasPage[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [previewDealId, setPreviewDealId] = useState<string | null>(null);
+
+  const { data: deals = [] } = useDeals();
+  const { data: dealPreview } = useProposalPreviewData(previewDealId);
 
   // Resolve template-owned uploaded files (image/document "fixed" source) so they render in the editor/preview.
   const fixedKeys = useMemo(() => collectFixedKeys(pages), [pages]);
   const fileUrlByKey = useFileUrls(fixedKeys);
+  // The canvas always uses example data; the Preview modal can switch to a real deal.
   const ctx = useMemo(
     () => buildPreviewCtx(Object.fromEntries(variables.map((v) => [v.key, v.example])), fileUrlByKey, org?.logoUrl),
     [variables, fileUrlByKey, org?.logoUrl],
+  );
+  const previewCtx = useMemo(
+    () =>
+      dealPreview
+        ? { ...buildDealCtx(dealPreview), fileUrl: (k: string) => dealPreview.fixedFilesByKey?.[k] ?? fileUrlByKey[k] }
+        : undefined,
+    [dealPreview, fileUrlByKey],
   );
   const onUploadFile = async (file: File) => {
     const f = file.type.startsWith('image/') ? await compressImage(file) : file;
@@ -131,6 +146,10 @@ export default function ProposalTemplateEditor() {
         imageFields={imageFields}
         documentFields={documentFields}
         onUploadFile={onUploadFile}
+        previewDeals={deals.map((d) => ({ value: d.id, label: d.title }))}
+        previewDealId={previewDealId}
+        onPreviewDealChange={setPreviewDealId}
+        previewCtx={previewCtx}
       />
     </Stack>
   );

@@ -152,8 +152,8 @@ export interface ProposalDocFile {
   url: string;
 }
 
-/** A proposal + the resolved render data (variables, signed file URLs, pricing). */
-export interface ProposalRenderData extends Proposal {
+/** The resolved render data (no proposal fields) — enough to build a render context. */
+export interface ProposalRenderCore {
   variables: Record<string, string>;
   imagesByField: Record<string, ProposalImageFile[]>;
   documentsByField: Record<string, ProposalDocFile[]>;
@@ -162,6 +162,9 @@ export interface ProposalRenderData extends Proposal {
   fixedFilesByKey: Record<string, string>;
   pricing: { currency: string; rows: { description: string; amount: number }[]; total: number };
 }
+
+/** A proposal + the resolved render data (variables, signed file URLs, pricing). */
+export interface ProposalRenderData extends Proposal, ProposalRenderCore {}
 
 export interface ProposalBody {
   dealId?: string;
@@ -179,6 +182,11 @@ export function getDealProposals(token: string, dealId: string) {
 
 export function getProposalRender(token: string, id: string) {
   return apiFetch<ProposalRenderData>(`/proposals/${id}/render`, { token });
+}
+
+/** Real render data for a deal, to preview a template against actual data. */
+export function getProposalPreviewData(token: string, dealId: string) {
+  return apiFetch<ProposalRenderCore>(`/proposals/preview-data?dealId=${encodeURIComponent(dealId)}`, { token });
 }
 
 export function createProposal(token: string, body: ProposalBody) {

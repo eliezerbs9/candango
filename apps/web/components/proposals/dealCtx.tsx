@@ -1,4 +1,4 @@
-import type { ProposalDocFile, ProposalImageFile, ProposalRenderData } from '@/lib/api/proposals';
+import type { ProposalDocFile, ProposalImageFile, ProposalRenderCore } from '@/lib/api/proposals';
 import type { MediaPick, ProposalRenderCtx } from './ProposalRenderer';
 
 const money = (cents: number, currency: string) =>
@@ -15,8 +15,8 @@ function selectFiles<T extends { key: string }>(all: T[], pick: MediaPick | unde
   return [...all].reverse(); // 'recent' (default)
 }
 
-/** A render context backed by a proposal's resolved deal data (variables, signed URLs, pricing). */
-export function buildDealCtx(data: ProposalRenderData): ProposalRenderCtx {
+/** A render context backed by resolved deal data (variables, signed URLs, pricing). */
+export function buildDealCtx(data: ProposalRenderCore): ProposalRenderCtx {
   const resolveText = (s: string) => s.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, k: string) => data.variables[k] ?? '');
 
   return {

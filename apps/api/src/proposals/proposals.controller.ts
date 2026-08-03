@@ -14,6 +14,12 @@ export class ProposalsController {
     return this.svc.list(u.orgId, dealId);
   }
 
+  /** Real render data for a deal — used to preview a template against actual variables/images/pricing. */
+  @Get('preview-data')
+  previewData(@CurrentUser() u: AuthContext, @Query('dealId') dealId: string) {
+    return this.svc.previewData(u.orgId, dealId);
+  }
+
   @Get(':id')
   get(@CurrentUser() u: AuthContext, @Param('id') id: string) {
     return this.svc.get(u.orgId, id);

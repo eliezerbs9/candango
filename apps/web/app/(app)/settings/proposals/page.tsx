@@ -14,6 +14,8 @@ import {
   Menu,
   Modal,
   Paper,
+  SegmentedControl,
+  Select,
   SimpleGrid,
   Stack,
   Text,
@@ -31,7 +33,10 @@ import {
   useProposalTemplates,
   useSeedProposalTemplates,
 } from '@/lib/api/hooks';
-import type { ProposalTemplate } from '@/lib/api/proposals';
+import type { ProposalTemplate, ProposalTheme } from '@/lib/api/proposals';
+import { PAGE_PRESETS } from '@/components/proposals/ProposalCanvasEditor';
+
+const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
@@ -48,15 +53,22 @@ export default function ProposalTemplatesPage() {
 
   const [opened, ctl] = useDisclosure(false);
   const [name, setName] = useState('');
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [layoutKey, setLayoutKey] = useState('blank');
 
   const submit = () => {
     if (!name.trim()) return;
+    // Orientation + starting layout are chosen once, at creation, and can't change afterwards.
+    const preset = PAGE_PRESETS.find((p) => p.key === layoutKey) ?? PAGE_PRESETS[0];
+    const firstPage = { id: uid(), elements: preset.build() };
     create.mutate(
-      { name: name.trim(), theme: meta?.defaultTheme, layout: [] },
+      { name: name.trim(), theme: { ...(meta?.defaultTheme as ProposalTheme), orientation }, layout: [firstPage] },
       {
         onSuccess: (t) => {
           ctl.close();
           setName('');
+          setLayoutKey('blank');
+          setOrientation('portrait');
           router.push(`/settings/proposals/${t.id}`);
         },
         onError: fail,
@@ -220,6 +232,30 @@ export default function ProposalTemplatesPage() {
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
             data-autofocus
+          />
+          <div>
+            <Text size="sm" fw={500} mb={4}>
+              Orientation
+            </Text>
+            <SegmentedControl
+              fullWidth
+              data={[
+                { value: 'portrait', label: 'Portrait' },
+                { value: 'landscape', label: 'Landscape' },
+              ]}
+              value={orientation}
+              onChange={(v) => setOrientation(v as 'portrait' | 'landscape')}
+            />
+            <Text size="xs" c="dimmed" mt={4}>
+              Chosen once — it can’t change after the template is created.
+            </Text>
+          </div>
+          <Select
+            label="Starting layout"
+            data={PAGE_PRESETS.map((p) => ({ value: p.key, label: p.label }))}
+            value={layoutKey}
+            onChange={(v) => setLayoutKey(v ?? 'blank')}
+            allowDeselect={false}
           />
           <Button onClick={submit} loading={create.isPending}>
             Create &amp; edit

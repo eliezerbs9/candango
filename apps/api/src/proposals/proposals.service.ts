@@ -186,6 +186,12 @@ export class ProposalsService {
     };
   }
 
+  /** Render data for a chosen deal (all its estimates), to preview a template against real data. */
+  async previewData(orgId: string, dealId: string) {
+    const estimates = await this.prisma.dealEstimate.findMany({ where: { orgId, dealId, deletedAt: null }, select: { id: true } });
+    return this.renderData(orgId, dealId, estimates.map((e) => e.id));
+  }
+
   /** Shared render-data builder (also used by the public page). */
   async renderData(orgId: string, dealId: string, estimateIds: string[], content?: Prisma.JsonValue) {
     const deal = await this.prisma.deal.findFirst({

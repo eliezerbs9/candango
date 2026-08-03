@@ -22,8 +22,8 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconClipboard, IconClipboardCopy, IconCheck, IconCopy, IconEye, IconGripVertical, IconLayout2, IconLayoutGrid, IconLock, IconPalette, IconPlus, IconTrash, IconUpload, IconX } from '@tabler/icons-react';
-import type { CanvasElement, CanvasPage, ElementType, Orientation, ProposalDocFile, ProposalImageFile, ProposalTheme } from '@/lib/api/proposals';
+import { IconChevronLeft, IconChevronRight, IconClipboard, IconClipboardCopy, IconCheck, IconCopy, IconEye, IconGripVertical, IconLayoutGrid, IconLock, IconPalette, IconPlus, IconTrash, IconUpload, IconX } from '@tabler/icons-react';
+import type { CanvasElement, CanvasPage, ElementType, ProposalDocFile, ProposalImageFile, ProposalTheme } from '@/lib/api/proposals';
 import { RichTextBody } from '@/components/common/RichTextBody';
 import { ElementView, ProposalRenderer, type MediaPick, type ProposalRenderCtx } from './ProposalRenderer';
 import { ProposalSlides } from './ProposalSlides';
@@ -118,8 +118,8 @@ const heading = (x: number, y: number, w: number, h: number, text: string): Canv
 const textEl = (x: number, y: number, w: number, h: number, html: string): CanvasElement => ({ id: uid(), type: 'text', x, y, w, h, props: { html }, style: { fontSize: 15 } });
 const imageEl = (x: number, y: number, w: number, h: number, label: string): CanvasElement => ({ id: uid(), type: 'image', x, y, w, h, props: { label, cols: 1, count: 1 } });
 
-/** Page-level layout presets — apply a common structure to the current page. */
-const PAGE_PRESETS: { key: string; label: string; build: () => CanvasElement[] }[] = [
+/** Page-level layout presets — a starting structure chosen when the template is created. */
+export const PAGE_PRESETS: { key: string; label: string; build: () => CanvasElement[] }[] = [
   { key: 'blank', label: 'Blank', build: () => [] },
   { key: 'title', label: 'Title + content', build: () => [heading(6, 6, 88, 9, 'Heading'), textEl(6, 18, 88, 66, '<p>Content…</p>')] },
   { key: '2col', label: 'Two columns', build: () => [heading(6, 6, 88, 8, 'Heading'), textEl(6, 16, 42, 66, '<p>Left column…</p>'), textEl(52, 16, 42, 66, '<p>Right column…</p>')] },
@@ -143,6 +143,12 @@ export interface ProposalCanvasEditorProps {
   documentFilesByField?: Record<string, ProposalDocFile[]>;
   /** Upload a file (settings editor only) for template-owned "fixed" image/document elements. */
   onUploadFile?: (file: File) => Promise<{ key: string; name: string }>;
+  /** Preview modal: pick a real deal to fill variables/images/pricing (settings editor only). */
+  previewDeals?: FieldOption[];
+  previewDealId?: string | null;
+  onPreviewDealChange?: (id: string | null) => void;
+  /** Context used by the Preview modal when a deal is chosen (falls back to the canvas ctx). */
+  previewCtx?: ProposalRenderCtx;
   /** When true (deal builder), elements the template marked as locked can't be moved/edited/deleted. */
   enforceLocks?: boolean;
 }
@@ -160,6 +166,10 @@ export function ProposalCanvasEditor({
   imageFilesByField = {},
   documentFilesByField = {},
   onUploadFile,
+  previewDeals,
+  previewDealId,
+  onPreviewDealChange,
+  previewCtx,
   enforceLocks = false,
 }: ProposalCanvasEditorProps) {
   const [pageId, setPageId] = useState<string | null>(pages[0]?.id ?? null);
@@ -168,7 +178,7 @@ export function ProposalCanvasEditor({
   const [themeOpen, themeCtl] = useDisclosure(false);
   const [previewOpen, previewCtl] = useDisclosure(false);
   const [showGrid, setShowGrid] = useState(true);
-  const [showMargins, setShowMargins] = useState(false);
+  const [showMargins, setShowMargins] = useState(true);
   const [snap, setSnap] = useState(true);
   const [clipboard, setClipboard] = useState<CanvasElement | null>(null);
   const pageRef = useRef<HTMLDivElement>(null);
@@ -206,11 +216,6 @@ export function ProposalCanvasEditor({
     const rect = pageRef.current?.getBoundingClientRect();
     if (!type || !rect) return;
     addElementAt(type, ((e.clientX - rect.left) / rect.width) * 100, ((e.clientY - rect.top) / rect.height) * 100);
-  };
-  const applyPreset = (build: () => CanvasElement[]) => {
-    if ((page?.elements.length ?? 0) > 0 && !window.confirm('Replace this page with the chosen layout?')) return;
-    setPageElements(() => build());
-    setSelId(null);
   };
   const updateElement = (elId: string, patch: Partial<CanvasElement>) =>
     setPageElements((els) => els.map((e) => (e.id === elId ? { ...e, ...patch } : e)));
@@ -344,39 +349,22 @@ export function ProposalCanvasEditor({
     else if (sel.type === 'text') setProp(sel.id, 'html', `${(sel.props.html as string) ?? ''}{{${key}}}`);
   };
 
+  const activeIndex = pages.findIndex((p) => p.id === activeId);
+  const goPage = (d: number) => {
+    const ni = clamp(activeIndex + d, 0, pages.length - 1);
+    setPageId(pages[ni].id);
+    setSelIds([]);
+  };
+
   return (
     <Stack gap="md">
       <Group justify="space-between" align="center" wrap="wrap">
         <Group gap="lg">
-          <SegmentedControl
-            size="xs"
-            data={[
-              { value: 'portrait', label: 'Portrait' },
-              { value: 'landscape', label: 'Landscape' },
-            ]}
-            value={theme.orientation ?? 'portrait'}
-            onChange={(v) => onThemeChange({ ...theme, orientation: v as Orientation })}
-          />
           <Switch size="xs" label="12-col grid" checked={showGrid} onChange={(e) => setShowGrid(e.currentTarget.checked)} thumbIcon={<IconLayoutGrid size={10} />} />
           <Switch size="xs" label="Snap to grid" checked={snap} onChange={(e) => setSnap(e.currentTarget.checked)} />
           <Switch size="xs" label="Margins" checked={showMargins} onChange={(e) => setShowMargins(e.currentTarget.checked)} />
         </Group>
         <Group gap="xs">
-          <Menu position="bottom-end" withinPortal shadow="sm">
-            <Menu.Target>
-              <Button variant="default" size="xs" leftSection={<IconLayout2 size={16} />}>
-                Layout
-              </Button>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Label>Apply a page layout</Menu.Label>
-              {PAGE_PRESETS.map((p) => (
-                <Menu.Item key={p.key} onClick={() => applyPreset(p.build)}>
-                  {p.label}
-                </Menu.Item>
-              ))}
-            </Menu.Dropdown>
-          </Menu>
           {clipboard && (
             <Button variant="light" size="xs" leftSection={<IconClipboard size={16} />} onClick={pasteElement}>
               Paste
@@ -426,14 +414,16 @@ export function ProposalCanvasEditor({
           style={{
             flex: '1 1 560px',
             minWidth: 300,
-            display: 'flex',
-            justifyContent: 'center',
+            position: 'relative',
             background: 'radial-gradient(circle at 50% 0%, #33343a 0%, #202126 100%)',
             borderRadius: 14,
-            padding: '32px 20px',
+            height: 'calc(100vh - 250px)',
+            minHeight: 380,
+            overflow: 'hidden',
           }}
         >
-          <div style={{ width: '100%', maxWidth: theme.orientation === 'landscape' ? 860 : 640 }}>
+          <div style={{ height: '100%', overflowY: 'auto', display: 'flex', justifyContent: 'center', padding: '32px 20px' }}>
+            <div style={{ width: '100%', maxWidth: theme.orientation === 'landscape' ? 860 : 640 }}>
             <div
               ref={pageRef}
               onPointerDown={onPagePointerDown}
@@ -503,11 +493,30 @@ export function ProposalCanvasEditor({
                 />
               )}
             </div>
+            </div>
           </div>
+          {pages.length > 1 && (
+            <Group
+              gap={6}
+              justify="center"
+              wrap="nowrap"
+              style={{ position: 'absolute', bottom: 14, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.62)', borderRadius: 999, padding: '2px 6px' }}
+            >
+              <ActionIcon variant="transparent" c="gray.1" size="sm" disabled={activeIndex <= 0} onClick={() => goPage(-1)} aria-label="Previous page">
+                <IconChevronLeft size={16} />
+              </ActionIcon>
+              <Text size="xs" c="gray.1">
+                {activeIndex + 1} / {pages.length}
+              </Text>
+              <ActionIcon variant="transparent" c="gray.1" size="sm" disabled={activeIndex >= pages.length - 1} onClick={() => goPage(1)} aria-label="Next page">
+                <IconChevronRight size={16} />
+              </ActionIcon>
+            </Group>
+          )}
         </div>
 
         {/* Sidebar */}
-        <Stack gap="md" style={{ flex: '0 0 280px', minWidth: 250 }}>
+        <Stack gap="md" style={{ flex: '0 0 280px', minWidth: 250, maxHeight: 'calc(100vh - 250px)', overflowY: 'auto' }}>
           <Card withBorder radius="md" padding="sm">
             <Text size="sm" fw={600} mb={2}>
               Add element
@@ -600,16 +609,33 @@ export function ProposalCanvasEditor({
       </Group>
 
       <ThemeModal opened={themeOpen} onClose={themeCtl.close} theme={theme} fonts={fonts} onChange={onThemeChange} />
-      <Modal opened={previewOpen} onClose={previewCtl.close} title="Preview" size="xl" centered>
-        <Paper p="lg" radius="md" bg="var(--mantine-color-gray-1)">
-          {(theme.present ?? 'slides') === 'slides' ? (
-            <div style={{ maxWidth: theme.orientation === 'landscape' ? 820 : 560, margin: '0 auto' }}>
-              <ProposalSlides pages={pages} theme={theme} ctx={ctx} />
-            </div>
-          ) : (
-            <ProposalRenderer layout={pages} theme={theme} paged ctx={ctx} />
+      <Modal opened={previewOpen} onClose={previewCtl.close} title="Preview" fullScreen>
+        <Stack gap="md">
+          {previewDeals && onPreviewDealChange && (
+            <Group justify="center">
+              <Select
+                label="Fill with a real deal"
+                description="Preview actual variables, images and pricing."
+                placeholder="Example data"
+                clearable
+                searchable
+                data={previewDeals}
+                value={previewDealId ?? null}
+                onChange={onPreviewDealChange}
+                w={300}
+              />
+            </Group>
           )}
-        </Paper>
+          <Paper p="xl" radius="md" bg="var(--mantine-color-gray-2)">
+            <div style={{ maxWidth: theme.orientation === 'landscape' ? 1100 : 720, margin: '0 auto' }}>
+              {(theme.present ?? 'slides') === 'slides' ? (
+                <ProposalSlides pages={pages} theme={theme} ctx={previewCtx ?? ctx} />
+              ) : (
+                <ProposalRenderer layout={pages} theme={theme} paged ctx={previewCtx ?? ctx} />
+              )}
+            </div>
+          </Paper>
+        </Stack>
       </Modal>
     </Stack>
   );

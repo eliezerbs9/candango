@@ -131,6 +131,7 @@ import {
   deleteProposalTemplate,
   getDealProposals,
   getProposalMeta,
+  getProposalPreviewData,
   getProposalRender,
   getProposalTemplate,
   getProposalTemplates,
@@ -1259,6 +1260,16 @@ export function useProposalRender(id: string | null) {
     queryKey: ['proposal-render', id],
     queryFn: () => getProposalRender(token!, id!),
     enabled: !!token && !!id,
+  });
+}
+
+export function useProposalPreviewData(dealId: string | null) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['proposal-preview-data', dealId],
+    queryFn: () => getProposalPreviewData(token!, dealId!),
+    enabled: !!token && !!dealId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
