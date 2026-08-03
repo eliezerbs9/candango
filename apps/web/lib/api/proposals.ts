@@ -18,10 +18,41 @@ export interface ProposalRow {
   columns: ProposalColumn[];
 }
 
-/** A template/proposal is an ordered list of pages; each page is a stack of rows. */
+/** Legacy flow page (pre free-canvas) — still rendered for old templates. */
 export interface ProposalPage {
   id: string;
   rows: ProposalRow[];
+}
+
+// ── Free-canvas model ──────────────────────────────────────────────────────────
+export type Orientation = 'portrait' | 'landscape';
+export type ElementType = 'text' | 'heading' | 'image' | 'document' | 'pricing' | 'divider';
+
+export interface ElementStyle {
+  fontSize?: number; // px
+  fontWeight?: number;
+  color?: string;
+  align?: 'left' | 'center' | 'right';
+  background?: string;
+  radius?: number;
+  padding?: number;
+}
+
+/** An absolutely-positioned element. x/y/w/h are percentages (0–100) of the page. */
+export interface CanvasElement {
+  id: string;
+  type: ElementType;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  props: Record<string, unknown>;
+  style?: ElementStyle;
+}
+
+export interface CanvasPage {
+  id: string;
+  elements: CanvasElement[];
 }
 
 export interface ProposalTheme {
@@ -30,13 +61,14 @@ export interface ProposalTheme {
   fontHeading: string;
   fontBody: string;
   coverStyle: 'solid' | 'image';
+  orientation?: Orientation;
 }
 
 export interface ProposalTemplate {
   id: string;
   name: string;
   theme: ProposalTheme;
-  layout: ProposalPage[];
+  layout: CanvasPage[];
   systemKey: string | null;
   system: boolean;
   updatedAt: string;
@@ -51,7 +83,7 @@ export interface ProposalMeta {
 export interface ProposalTemplateBody {
   name?: string;
   theme?: ProposalTheme;
-  layout?: ProposalPage[];
+  layout?: CanvasPage[];
 }
 
 export function getProposalMeta(token: string) {
@@ -91,7 +123,7 @@ export interface Proposal {
   templateId: string | null;
   title: string;
   theme: ProposalTheme;
-  content: ProposalPage[];
+  content: CanvasPage[];
   estimateIds: string[];
   status: ProposalStatus;
   shareToken: string;
@@ -115,7 +147,7 @@ export interface ProposalBody {
   templateId?: string;
   title?: string;
   estimateIds?: string[];
-  content?: ProposalPage[];
+  content?: CanvasPage[];
   theme?: ProposalTheme;
   status?: ProposalStatus;
 }

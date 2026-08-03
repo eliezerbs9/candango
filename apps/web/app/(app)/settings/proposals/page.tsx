@@ -172,32 +172,39 @@ export default function ProposalTemplatesPage() {
                   </Menu.Dropdown>
                 </Menu>
               </Group>
-              {/* Tiny layout skeleton preview */}
+              {/* Mini page thumbnail (first page) */}
               <Link href={`/settings/proposals/${t.id}`} style={{ textDecoration: 'none' }}>
-                <Paper withBorder radius="sm" p="xs" bg="var(--mantine-color-gray-0)">
-                  <Stack gap={4}>
-                    {(t.layout ?? [])
-                      .flatMap((p) => p.rows ?? [])
-                      .slice(0, 5)
-                      .map((r) => (
-                        <Group key={r.id} gap={4} wrap="nowrap">
-                          {r.columns.map((c) => (
-                            <Paper
-                              key={c.id}
-                              withBorder
-                              radius={2}
-                              style={{ flex: c.width, height: 14, background: 'var(--mantine-color-gray-1)' }}
-                            />
-                          ))}
-                        </Group>
-                      ))}
-                    {(t.layout ?? []).flatMap((p) => p.rows ?? []).length === 0 && (
-                      <Text size="xs" c="dimmed">
-                        Empty — click to design
-                      </Text>
-                    )}
-                  </Stack>
-                </Paper>
+                <div
+                  style={{
+                    position: 'relative',
+                    width: '100%',
+                    aspectRatio: t.theme?.orientation === 'landscape' ? '11 / 8.5' : '8.5 / 11',
+                    background: '#fff',
+                    border: '1px solid var(--mantine-color-gray-3)',
+                    borderRadius: 6,
+                    overflow: 'hidden',
+                  }}
+                >
+                  {(t.layout?.[0]?.elements ?? []).map((el) => (
+                    <div
+                      key={el.id}
+                      style={{
+                        position: 'absolute',
+                        left: `${el.x}%`,
+                        top: `${el.y}%`,
+                        width: `${el.w}%`,
+                        height: `${el.h}%`,
+                        background: 'var(--mantine-color-gray-2)',
+                        borderRadius: 2,
+                      }}
+                    />
+                  ))}
+                  {(t.layout?.[0]?.elements ?? []).length === 0 && (
+                    <Text size="xs" c="dimmed" ta="center" mt="xl">
+                      Empty — click to design
+                    </Text>
+                  )}
+                </div>
               </Link>
             </Card>
           ))}

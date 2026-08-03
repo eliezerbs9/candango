@@ -1,30 +1,72 @@
 'use client';
 
-import type { ReactNode } from 'react';
-import type { ProposalPage, ProposalRow, ProposalTheme } from '@/lib/api/proposals';
-
-/** Accept the current pages shape or a legacy flat rows[] (wrap as one page). */
-export function toPages(layout: unknown): ProposalPage[] {
-  const arr = Array.isArray(layout) ? layout : [];
-  if (arr.length === 0) return [];
-  if (arr[0] && typeof arr[0] === 'object' && 'rows' in (arr[0] as object)) return arr as ProposalPage[];
-  if (arr[0] && typeof arr[0] === 'object' && 'columns' in (arr[0] as object)) {
-    return [{ id: 'p1', rows: arr as ProposalRow[] }];
-  }
-  return [];
-}
+import type { CSSProperties } from 'react';
+import type { CanvasElement, CanvasPage, ProposalPage, ProposalRow, ProposalTheme } from '@/lib/api/proposals';
 
 /**
- * Renders a proposal layout (rows → columns/areas → block) with a theme. The image/document/pricing
- * blocks resolve differently by context (example placeholders in the settings preview; real deal
- * data in the builder; the frozen snapshot on the public page), so those are supplied as render
- * helpers — keeping this component shared across all three.
+ * Renders a proposal — free-canvas pages of absolutely-positioned elements (with a legacy flow
+ * fallback for pre-canvas templates). The image/document/pricing content resolves differently by
+ * context (example placeholders / real deal data / public snapshot), so those come via a ctx.
  */
 export interface ProposalRenderCtx {
   resolveText: (s: string) => string;
-  image: (fieldKey?: string) => ReactNode;
-  document: (fieldKey?: string) => ReactNode;
-  pricing: () => ReactNode;
+  image: (fieldKey?: string) => React.ReactNode;
+  document: (fieldKey?: string) => React.ReactNode;
+  pricing: () => React.ReactNode;
+}
+
+const isCanvasPage = (p: unknown): p is CanvasPage => !!p && Array.isArray((p as CanvasPage).elements);
+const pageAspect = (o?: string) => (o === 'landscape' ? '11 / 8.5' : '8.5 / 11');
+
+function normalize(layout: unknown): (CanvasPage | ProposalPage)[] {
+  const arr = Array.isArray(layout) ? layout : [];
+  if (arr.length === 0) return [];
+  if (arr[0] && typeof arr[0] === 'object' && 'columns' in (arr[0] as object)) {
+    return [{ id: 'p1', rows: arr as ProposalRow[] }]; // very old flat rows
+  }
+  return arr as (CanvasPage | ProposalPage)[];
+}
+
+/** Renders one element's content, filling its positioned box. Shared with the editor for WYSIWYG. */
+export function ElementView({ element, theme, ctx }: { element: CanvasElement; theme: ProposalTheme; ctx: ProposalRenderCtx }) {
+  const s = element.style ?? {};
+  const base: CSSProperties = {
+    width: '100%',
+    height: '100%',
+    overflow: 'hidden',
+    color: s.color ?? theme.accentColor,
+    textAlign: s.align ?? 'left',
+    background: s.background,
+    borderRadius: s.radius,
+    padding: s.padding ?? 0,
+    boxSizing: 'border-box',
+  };
+  switch (element.type) {
+    case 'heading':
+      return (
+        <div style={{ ...base, fontFamily: `${theme.fontHeading}, sans-serif`, fontSize: s.fontSize ?? 28, fontWeight: s.fontWeight ?? 800, lineHeight: 1.15 }}>
+          {ctx.resolveText(String(element.props.text ?? ''))}
+        </div>
+      );
+    case 'text':
+      return (
+        <div
+          style={{ ...base, fontSize: s.fontSize ?? 15, fontWeight: s.fontWeight ?? 400, lineHeight: 1.5 }}
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{ __html: ctx.resolveText(String(element.props.html ?? '')) }}
+        />
+      );
+    case 'image':
+      return <div style={base}>{ctx.image(element.props.fieldKey as string | undefined)}</div>;
+    case 'document':
+      return <div style={base}>{ctx.document(element.props.fieldKey as string | undefined)}</div>;
+    case 'pricing':
+      return <div style={{ ...base, fontSize: s.fontSize ?? 14 }}>{ctx.pricing()}</div>;
+    case 'divider':
+      return <div style={{ width: '100%', borderTop: `2px solid ${s.color ?? '#dee2e6'}` }} />;
+    default:
+      return null;
+  }
 }
 
 export function ProposalRenderer({
@@ -33,80 +75,70 @@ export function ProposalRenderer({
   ctx,
   paged = false,
 }: {
-  layout: ProposalPage[] | ProposalRow[];
+  layout: unknown;
   theme: ProposalTheme;
   ctx: ProposalRenderCtx;
-  /** When true, each page is a separate sheet (borders + gap) — for the presentation view. */
   paged?: boolean;
 }) {
-  const pages = toPages(layout);
+  const pages = normalize(layout);
   return (
     <div style={{ fontFamily: `${theme.fontBody}, sans-serif`, color: theme.accentColor, lineHeight: 1.5 }}>
-      {pages.map((page) => (
-        <div
-          key={page.id}
-          style={
-            paged
-              ? { background: '#fff', borderRadius: 10, padding: 40, marginBottom: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }
-              : { marginBottom: 8 }
-          }
-        >
-          {page.rows.map((row) => (
-            <div key={row.id} style={{ display: 'flex', gap: 16, alignItems: 'flex-start', marginBottom: 16 }}>
-              {row.columns.map((c) => (
-                <div key={c.id} style={{ flex: c.width, minWidth: 0 }}>
-                  {c.block && <Block type={c.block.type} props={c.block.props} theme={theme} ctx={ctx} />}
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      ))}
+      {pages.map((page, i) =>
+        isCanvasPage(page) ? (
+          <div
+            key={page.id}
+            style={{
+              position: 'relative',
+              width: '100%',
+              aspectRatio: pageAspect(theme.orientation),
+              background: '#fff',
+              borderRadius: paged ? 10 : 0,
+              boxShadow: paged ? '0 1px 6px rgba(0,0,0,0.1)' : undefined,
+              marginBottom: paged ? 24 : 0,
+              overflow: 'hidden',
+            }}
+          >
+            {page.elements.map((el) => (
+              <div key={el.id} style={{ position: 'absolute', left: `${el.x}%`, top: `${el.y}%`, width: `${el.w}%`, height: `${el.h}%` }}>
+                <ElementView element={el} theme={theme} ctx={ctx} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <LegacyFlow key={(page as ProposalPage).id ?? i} page={page as ProposalPage} theme={theme} ctx={ctx} />
+        ),
+      )}
     </div>
   );
 }
 
-function Block({
-  type,
-  props,
-  theme,
-  ctx,
-}: {
-  type: string;
-  props: Record<string, unknown>;
-  theme: ProposalTheme;
-  ctx: ProposalRenderCtx;
-}) {
-  if (type === 'cover') {
-    return (
-      <div
-        style={{
-          background: theme.coverStyle === 'image' ? 'var(--mantine-color-gray-2)' : theme.primaryColor,
-          color: theme.coverStyle === 'image' ? theme.accentColor : '#fff',
-          padding: '40px 32px',
-          borderRadius: 10,
-        }}
-      >
-        <div style={{ fontFamily: `${theme.fontHeading}, sans-serif`, fontSize: 30, fontWeight: 800, lineHeight: 1.15 }}>
-          {ctx.resolveText((props.title as string) ?? '')}
+/** Renders a pre-canvas flow page (rows → columns → block). */
+function LegacyFlow({ page, theme, ctx }: { page: ProposalPage; theme: ProposalTheme; ctx: ProposalRenderCtx }) {
+  const block = (type: string, props: Record<string, unknown>) => {
+    if (type === 'cover')
+      return (
+        <div style={{ background: theme.primaryColor, color: '#fff', padding: '40px 32px', borderRadius: 10 }}>
+          <div style={{ fontFamily: `${theme.fontHeading}, sans-serif`, fontSize: 30, fontWeight: 800 }}>{ctx.resolveText(String(props.title ?? ''))}</div>
+          {props.subtitle ? <div style={{ marginTop: 8, opacity: 0.92 }}>{ctx.resolveText(String(props.subtitle))}</div> : null}
         </div>
-        {props.subtitle ? (
-          <div style={{ marginTop: 8, fontSize: 16, opacity: 0.92 }}>{ctx.resolveText((props.subtitle as string) ?? '')}</div>
-        ) : null}
-      </div>
-    );
-  }
-  if (type === 'text') {
-    return (
-      <div
-        style={{ fontSize: 15 }}
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: ctx.resolveText((props.html as string) ?? '') }}
-      />
-    );
-  }
-  if (type === 'image') return <>{ctx.image(props.fieldKey as string | undefined)}</>;
-  if (type === 'document') return <>{ctx.document(props.fieldKey as string | undefined)}</>;
-  if (type === 'pricing') return <>{ctx.pricing()}</>;
-  return null;
+      );
+    if (type === 'text') return <div dangerouslySetInnerHTML={{ __html: ctx.resolveText(String(props.html ?? '')) }} />;
+    if (type === 'image') return <>{ctx.image(props.fieldKey as string | undefined)}</>;
+    if (type === 'document') return <>{ctx.document(props.fieldKey as string | undefined)}</>;
+    if (type === 'pricing') return <>{ctx.pricing()}</>;
+    return null;
+  };
+  return (
+    <>
+      {page.rows.map((row) => (
+        <div key={row.id} style={{ display: 'flex', gap: 16, alignItems: 'flex-start', marginBottom: 16 }}>
+          {row.columns.map((c) => (
+            <div key={c.id} style={{ flex: c.width, minWidth: 0 }}>
+              {c.block && block(c.block.type, c.block.props)}
+            </div>
+          ))}
+        </div>
+      ))}
+    </>
+  );
 }
