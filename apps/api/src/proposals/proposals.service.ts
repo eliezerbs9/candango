@@ -6,6 +6,24 @@ import { SpacesService } from '../uploads/spaces.service';
 import { buildTemplateContext } from '../email-templates/template-vars';
 import { CreateProposalDto, UpdateProposalDto } from './dto/proposal.dto';
 
+/** Walk a proposal's layout (pages → elements) and collect object keys of "fixed" image/document files. */
+function collectFixedFileKeys(content: unknown): string[] {
+  const keys: string[] = [];
+  const pages = Array.isArray(content) ? content : [];
+  for (const page of pages) {
+    const elements = (page as { elements?: unknown })?.elements;
+    if (!Array.isArray(elements)) continue;
+    for (const el of elements) {
+      const props = (el as { props?: Record<string, unknown> })?.props;
+      if (!props || props.source !== 'fixed' || !Array.isArray(props.files)) continue;
+      for (const f of props.files as { key?: unknown }[]) {
+        if (f && typeof f.key === 'string') keys.push(f.key);
+      }
+    }
+  }
+  return keys;
+}
+
 const shape = (p: {
   id: string;
   dealId: string;
@@ -106,11 +124,14 @@ export class ProposalsService {
   async render(orgId: string, id: string) {
     const proposal = await this.prisma.proposal.findFirst({ where: { id, orgId } });
     if (!proposal) throw new NotFoundException('Proposal not found');
-    return { ...shape(proposal), ...(await this.renderData(orgId, proposal.dealId, proposal.estimateIds)) };
+    return {
+      ...shape(proposal),
+      ...(await this.renderData(orgId, proposal.dealId, proposal.estimateIds, proposal.content)),
+    };
   }
 
   /** Shared render-data builder (also used by the public page). */
-  async renderData(orgId: string, dealId: string, estimateIds: string[]) {
+  async renderData(orgId: string, dealId: string, estimateIds: string[], content?: Prisma.JsonValue) {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, orgId },
       select: {
@@ -186,7 +207,14 @@ export class ProposalsService {
       total: estimates.reduce((sum, e) => sum + e.totalAmount, 0),
     };
 
-    return { variables, imagesByField, documentsByField, logoUrl: org?.logoUrl ?? null, pricing };
+    // Template-owned "fixed" files embedded in the layout → signed URLs (org-scoped keys only).
+    const fixedFilesByKey: Record<string, string> = {};
+    if (this.spaces.configured) {
+      const keys = collectFixedFileKeys(content).filter((k) => k.startsWith(`org-${orgId}/`));
+      await Promise.all(keys.map(async (k) => { fixedFilesByKey[k] = await this.spaces.presignGet(k); }));
+    }
+
+    return { variables, imagesByField, documentsByField, logoUrl: org?.logoUrl ?? null, fixedFilesByKey, pricing };
   }
 
   /** Available estimates for a deal (for the "select estimates" picker). */

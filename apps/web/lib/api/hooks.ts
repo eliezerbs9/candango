@@ -1,6 +1,6 @@
 'use client';
 
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
 import { useAuthStore } from '@/lib/auth/store';
 import {
@@ -1160,6 +1160,26 @@ export function useFileUrl(key: string | null) {
 export function useUploadFile() {
   const token = useToken();
   return useMutation({ mutationFn: ({ entity, file }: { entity: string; file: File }) => uploadFile(token!, entity, file) });
+}
+
+/** Resolve many object keys to signed URLs at once (for template-owned proposal files). */
+export function useFileUrls(keys: string[]): Record<string, string> {
+  const token = useToken();
+  const unique = Array.from(new Set(keys));
+  const results = useQueries({
+    queries: unique.map((key) => ({
+      queryKey: ['file-url', key],
+      queryFn: () => getFileUrl(token!, key),
+      enabled: !!token && !!key,
+      staleTime: 50 * 60 * 1000,
+    })),
+  });
+  const map: Record<string, string> = {};
+  unique.forEach((key, i) => {
+    const url = results[i]?.data?.url;
+    if (url) map[key] = url;
+  });
+  return map;
 }
 
 // --- Proposal templates ---

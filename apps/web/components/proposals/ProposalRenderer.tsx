@@ -16,13 +16,41 @@ export interface ProposalImageOpts {
   count?: number;
   pick?: MediaPick;
   picked?: string[];
+  /** When set (template-owned "fixed" source), render exactly these image URLs. */
+  urls?: string[];
+}
+export interface ProposalDocOpts {
+  fieldKey?: string;
+  pick?: MediaPick;
+  picked?: string[];
+  /** When set (template-owned "fixed" source), render exactly these documents. */
+  docs?: { name?: string; url: string }[];
 }
 export interface ProposalRenderCtx {
   resolveText: (s: string) => string;
   image: (opts: ProposalImageOpts) => React.ReactNode;
-  document: (opts: { fieldKey?: string; pick?: MediaPick; picked?: string[] }) => React.ReactNode;
+  document: (opts: ProposalDocOpts) => React.ReactNode;
   pricing: () => React.ReactNode;
   logo: (opts?: { fit?: 'contain' | 'cover' }) => React.ReactNode;
+  /** Resolve a stored object key to a signed URL (for template-owned uploaded files). */
+  fileUrl: (key: string) => string | undefined;
+}
+
+/** Resolve a fixed element's uploaded files to signed URLs via the ctx. */
+export function fixedImageUrls(props: Record<string, unknown>, ctx: ProposalRenderCtx): string[] | undefined {
+  if (props.source !== 'fixed') return undefined;
+  return ((props.files as { key: string }[] | undefined) ?? [])
+    .map((f) => ctx.fileUrl(f.key))
+    .filter((u): u is string => !!u);
+}
+export function fixedDocs(props: Record<string, unknown>, ctx: ProposalRenderCtx): { name?: string; url: string }[] | undefined {
+  if (props.source !== 'fixed') return undefined;
+  const out: { name?: string; url: string }[] = [];
+  for (const f of (props.files as { key: string; name?: string }[] | undefined) ?? []) {
+    const url = ctx.fileUrl(f.key);
+    if (url) out.push({ name: f.name, url });
+  }
+  return out;
 }
 
 const isCanvasPage = (p: unknown): p is CanvasPage => !!p && Array.isArray((p as CanvasPage).elements);
@@ -77,6 +105,7 @@ export function ElementView({ element, theme, ctx }: { element: CanvasElement; t
             count: element.props.count as number | undefined,
             pick: element.props.pick as MediaPick | undefined,
             picked: element.props.picked as string[] | undefined,
+            urls: fixedImageUrls(element.props, ctx),
           })}
         </div>
       );
@@ -87,6 +116,7 @@ export function ElementView({ element, theme, ctx }: { element: CanvasElement; t
             fieldKey: element.props.fieldKey as string | undefined,
             pick: element.props.pick as MediaPick | undefined,
             picked: element.props.picked as string[] | undefined,
+            docs: fixedDocs(element.props, ctx),
           })}
         </div>
       );

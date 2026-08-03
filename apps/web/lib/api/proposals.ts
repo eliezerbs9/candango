@@ -152,6 +152,8 @@ export interface ProposalRenderData extends Proposal {
   imagesByField: Record<string, ProposalImageFile[]>;
   documentsByField: Record<string, ProposalDocFile[]>;
   logoUrl: string | null;
+  /** Signed URLs for template-owned uploaded files (image/document "fixed" source), keyed by object key. */
+  fixedFilesByKey: Record<string, string>;
   pricing: { currency: string; rows: { description: string; amount: number }[]; total: number };
 }
 

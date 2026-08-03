@@ -7,6 +7,7 @@ import {
   Card,
   Checkbox,
   ColorInput,
+  FileButton,
   Group,
   Menu,
   Modal,
@@ -21,7 +22,7 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconClipboard, IconClipboardCopy, IconCheck, IconCopy, IconEye, IconLayout2, IconLayoutGrid, IconLock, IconPalette, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
+import { IconClipboard, IconClipboardCopy, IconCheck, IconCopy, IconEye, IconLayout2, IconLayoutGrid, IconLock, IconPalette, IconPlus, IconTrash, IconUpload, IconX } from '@tabler/icons-react';
 import type { CanvasElement, CanvasPage, ElementType, Orientation, ProposalDocFile, ProposalImageFile, ProposalTheme } from '@/lib/api/proposals';
 import { RichTextBody } from '@/components/common/RichTextBody';
 import { ElementView, ProposalRenderer, type MediaPick, type ProposalRenderCtx } from './ProposalRenderer';
@@ -139,6 +140,8 @@ export interface ProposalCanvasEditorProps {
   /** The deal's actual files (deal builder only), for the per-proposal image/document picker. */
   imageFilesByField?: Record<string, ProposalImageFile[]>;
   documentFilesByField?: Record<string, ProposalDocFile[]>;
+  /** Upload a file (settings editor only) for template-owned "fixed" image/document elements. */
+  onUploadFile?: (file: File) => Promise<{ key: string; name: string }>;
   /** When true (deal builder), elements the template marked as locked can't be moved/edited/deleted. */
   enforceLocks?: boolean;
 }
@@ -155,6 +158,7 @@ export function ProposalCanvasEditor({
   documentFields = [],
   imageFilesByField = {},
   documentFilesByField = {},
+  onUploadFile,
   enforceLocks = false,
 }: ProposalCanvasEditorProps) {
   const [pageId, setPageId] = useState<string | null>(pages[0]?.id ?? null);
@@ -452,6 +456,7 @@ export function ProposalCanvasEditor({
                 documentFields={documentFields}
                 imageFilesByField={imageFilesByField}
                 documentFilesByField={documentFilesByField}
+                onUploadFile={onUploadFile}
               />
             </Card>
           ) : (
@@ -631,6 +636,7 @@ function ElementSettings({
   documentFields,
   imageFilesByField,
   documentFilesByField,
+  onUploadFile,
 }: {
   el: CanvasElement;
   fonts: string[];
@@ -645,23 +651,34 @@ function ElementSettings({
   documentFields: FieldOption[];
   imageFilesByField: Record<string, ProposalImageFile[]>;
   documentFilesByField: Record<string, ProposalDocFile[]>;
+  onUploadFile?: (file: File) => Promise<{ key: string; name: string }>;
 }) {
   const s = el.style ?? {};
   const textLike = el.type === 'text' || el.type === 'heading';
   const isMedia = el.type === 'image' || el.type === 'document';
+  const source = (el.props.source as string) ?? 'field';
   const pick = (el.props.pick as MediaPick) ?? 'recent';
   const media = isMedia ? (
     <MediaPicker el={el} onProp={onProp} imageFilesByField={imageFilesByField} documentFilesByField={documentFilesByField} />
   ) : null;
 
-  // Locked media element: only its file selection is editable — everything else stays as the template set it.
+  // Locked media element: only its file selection is editable — and only when it pulls from a deal field
+  // (template-owned "fixed" files can't be changed at all). Everything else stays as the template set it.
   if (locked) {
     return (
       <Stack gap="sm">
-        <Text size="xs" c="dimmed">
-          Locked by the template — you can still choose its {el.type === 'image' ? 'photos' : 'documents'}.
-        </Text>
-        {media}
+        {source === 'fixed' ? (
+          <Text size="xs" c="dimmed">
+            Locked by the template — its {el.type === 'image' ? 'photos' : 'documents'} are set by the template and can&apos;t be changed.
+          </Text>
+        ) : (
+          <>
+            <Text size="xs" c="dimmed">
+              Locked by the template — you can still choose its {el.type === 'image' ? 'photos' : 'documents'}.
+            </Text>
+            {media}
+          </>
+        )}
       </Stack>
     );
   }
@@ -692,23 +709,54 @@ function ElementSettings({
       {isMedia && (
         <>
           <TextInput size="xs" label="Label" description="Only shown here, to help you edit." value={(el.props.label as string) ?? ''} onChange={(e) => onProp('label', e.currentTarget.value)} />
-          <FieldPicker
-            type={el.type as 'image' | 'document'}
-            value={(el.props.fieldKey as string) ?? ''}
-            onChange={(v) => onProp('fieldKey', v)}
-            options={el.type === 'image' ? imageFields : documentFields}
-          />
+          {onUploadFile && (
+            <div>
+              <Text size="xs" fw={500} mb={2}>
+                Source
+              </Text>
+              <SegmentedControl
+                size="xs"
+                fullWidth
+                data={[{ value: 'field', label: 'Deal field' }, { value: 'fixed', label: 'Upload here' }]}
+                value={source}
+                onChange={(v) => onProp('source', v)}
+              />
+            </div>
+          )}
+          {source === 'fixed' ? (
+            <>
+              {onUploadFile ? (
+                <FixedUploader el={el} onProp={onProp} onUploadFile={onUploadFile} />
+              ) : (
+                <Text size="xs" c="dimmed">
+                  {el.type === 'image' ? 'Photos' : 'Documents'} are set by the template.
+                </Text>
+              )}
+              {el.type === 'image' && (
+                <NumberInput size="xs" label="Columns" min={1} max={4} value={(el.props.cols as number) ?? 1} onChange={(v) => onProp('cols', Math.max(1, Number(v) || 1))} />
+              )}
+            </>
+          ) : (
+            <>
+              <FieldPicker
+                type={el.type as 'image' | 'document'}
+                value={(el.props.fieldKey as string) ?? ''}
+                onChange={(v) => onProp('fieldKey', v)}
+                options={el.type === 'image' ? imageFields : documentFields}
+              />
+              {el.type === 'image' && (
+                <Group gap="xs" grow>
+                  {pick !== 'manual' && (
+                    <NumberInput size="xs" label="Photos" min={1} max={12} value={(el.props.count as number) ?? 1} onChange={(v) => onProp('count', Math.max(1, Number(v) || 1))} />
+                  )}
+                  <NumberInput size="xs" label="Columns" min={1} max={4} value={(el.props.cols as number) ?? 1} onChange={(v) => onProp('cols', Math.max(1, Number(v) || 1))} />
+                </Group>
+              )}
+              {media}
+            </>
+          )}
         </>
       )}
-      {el.type === 'image' && (
-        <Group gap="xs" grow>
-          {pick !== 'manual' && (
-            <NumberInput size="xs" label="Photos" min={1} max={12} value={(el.props.count as number) ?? 1} onChange={(v) => onProp('count', Math.max(1, Number(v) || 1))} />
-          )}
-          <NumberInput size="xs" label="Columns" min={1} max={4} value={(el.props.cols as number) ?? 1} onChange={(v) => onProp('cols', Math.max(1, Number(v) || 1))} />
-        </Group>
-      )}
-      {media}
       {el.type === 'logo' && (
         <div>
           <Text size="xs" fw={500} mb={2}>
@@ -869,6 +917,61 @@ function MediaPicker({
       {pick === 'manual' && picked.length > 0 && (
         <Text size="xs" c="dimmed">
           {picked.length} selected · shown in the order you pick them.
+        </Text>
+      )}
+    </Stack>
+  );
+}
+
+/** Template-owned "fixed" files: the creator uploads photos/PDFs onto the element (unchangeable in proposals). */
+function FixedUploader({
+  el,
+  onProp,
+  onUploadFile,
+}: {
+  el: CanvasElement;
+  onProp: (key: string, value: unknown) => void;
+  onUploadFile: (file: File) => Promise<{ key: string; name: string }>;
+}) {
+  const isImage = el.type === 'image';
+  const files = (el.props.files as { key: string; name?: string }[]) ?? [];
+  const [busy, setBusy] = useState(false);
+
+  const add = async (picked: File[]) => {
+    if (!picked.length) return;
+    setBusy(true);
+    try {
+      const uploaded: { key: string; name?: string }[] = [];
+      for (const f of picked) uploaded.push(await onUploadFile(f));
+      onProp('files', [...files, ...uploaded]);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = (key: string) => onProp('files', files.filter((f) => f.key !== key));
+
+  return (
+    <Stack gap={6}>
+      <FileButton onChange={add} accept={isImage ? 'image/*' : 'application/pdf'} multiple>
+        {(props) => (
+          <Button {...props} size="xs" variant="light" loading={busy} leftSection={<IconUpload size={14} />}>
+            Upload {isImage ? 'photos' : 'PDFs'}
+          </Button>
+        )}
+      </FileButton>
+      {files.map((f) => (
+        <Group key={f.key} justify="space-between" gap={6} wrap="nowrap">
+          <Text size="xs" lineClamp={1}>
+            {f.name ?? f.key.split('/').pop()}
+          </Text>
+          <ActionIcon size="xs" variant="subtle" color="red" onClick={() => remove(f.key)} aria-label="Remove file">
+            <IconX size={12} />
+          </ActionIcon>
+        </Group>
+      ))}
+      {files.length === 0 && (
+        <Text size="xs" c="dimmed">
+          No {isImage ? 'photos' : 'PDFs'} uploaded yet.
         </Text>
       )}
     </Stack>

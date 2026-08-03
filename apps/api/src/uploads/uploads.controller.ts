@@ -4,7 +4,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, type AuthContext } from '../auth/current-user.decorator';
 import { SpacesService } from './spaces.service';
 
-const ENTITIES = ['deal', 'person', 'company'];
+const ENTITIES = ['deal', 'person', 'company', 'proposal'];
 
 /**
  * Presigned file uploads for image/document custom fields, backed by DO Spaces. Objects are keyed by

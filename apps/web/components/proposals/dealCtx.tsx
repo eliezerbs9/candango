@@ -21,11 +21,14 @@ export function buildDealCtx(data: ProposalRenderData): ProposalRenderCtx {
 
   return {
     resolveText,
-    image: ({ fieldKey, cols = 1, count = 1, pick = 'recent', picked }) => {
-      const all: ProposalImageFile[] = fieldKey ? data.imagesByField[fieldKey] ?? [] : Object.values(data.imagesByField).flat();
-      const files = selectFiles(all, pick, picked);
+    fileUrl: (key: string) => data.fixedFilesByKey?.[key],
+    image: ({ fieldKey, cols = 1, count = 1, pick = 'recent', picked, urls }) => {
+      // "fixed" (template-owned) images arrive as resolved URLs; otherwise pull from the deal field.
+      const fixed = urls?.map((url) => ({ key: url, url }));
+      const all: ProposalImageFile[] = fixed ?? (fieldKey ? data.imagesByField[fieldKey] ?? [] : Object.values(data.imagesByField).flat());
+      const files = fixed ?? selectFiles(all, pick, picked);
       const c = Math.max(1, cols);
-      const slots = pick === 'manual' ? Math.max(1, files.length) : Math.max(1, count);
+      const slots = fixed ? Math.max(1, files.length) : pick === 'manual' ? Math.max(1, files.length) : Math.max(1, count);
       return (
         <div
           style={{
@@ -47,9 +50,9 @@ export function buildDealCtx(data: ProposalRenderData): ProposalRenderCtx {
         </div>
       );
     },
-    document: ({ fieldKey, pick = 'recent', picked }) => {
+    document: ({ fieldKey, pick = 'recent', picked, docs: fixedDocs }) => {
       const all: ProposalDocFile[] = fieldKey ? data.documentsByField[fieldKey] ?? [] : Object.values(data.documentsByField).flat();
-      const docs = selectFiles(all, pick, picked);
+      const docs = fixedDocs ? fixedDocs.map((d) => ({ key: d.url, name: d.name ?? 'Document', url: d.url })) : selectFiles(all, pick, picked);
       if (docs.length === 0) return null;
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
