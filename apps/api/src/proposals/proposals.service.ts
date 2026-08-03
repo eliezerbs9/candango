@@ -1,10 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SpacesService } from '../uploads/spaces.service';
+import { MessagesService } from '../messages/messages.service';
 import { buildTemplateContext } from '../email-templates/template-vars';
-import { CreateProposalDto, UpdateProposalDto } from './dto/proposal.dto';
+import { CreateProposalDto, SendProposalDto, UpdateProposalDto } from './dto/proposal.dto';
 
 /** Walk a proposal's layout (pages → elements) and collect object keys of "fixed" image/document files. */
 function collectFixedFileKeys(content: unknown): string[] {
@@ -24,7 +26,7 @@ function collectFixedFileKeys(content: unknown): string[] {
   return keys;
 }
 
-const shape = (p: {
+export const shapeProposal = (p: {
   id: string;
   dealId: string;
   templateId: string | null;
@@ -62,17 +64,71 @@ export class ProposalsService {
     private readonly prisma: PrismaService,
     private readonly spaces: SpacesService,
     private readonly events: EventEmitter2,
+    private readonly messages: MessagesService,
+    private readonly config: ConfigService,
   ) {}
+
+  /** The public presentation link for a proposal's share token. */
+  private shareLink(shareToken: string) {
+    const appUrl = this.config.get<string>('APP_URL') ?? 'http://localhost:3000';
+    return `${appUrl}/proposal/${encodeURIComponent(shareToken)}`;
+  }
+
+  /**
+   * Mark a proposal sent and (best-effort) email the presentation link to the recipient. The link is
+   * returned regardless, so it works for testing even when the sender's mailbox isn't connected.
+   */
+  async send(orgId: string, userId: string, id: string, dto: SendProposalDto) {
+    const proposal = await this.prisma.proposal.findFirst({ where: { id, orgId } });
+    if (!proposal) throw new NotFoundException('Proposal not found');
+    const link = this.shareLink(proposal.shareToken);
+
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: proposal.dealId, orgId },
+      select: { primaryPerson: { select: { name: true, firstName: true, emails: true } } },
+    });
+    const firstEmail = (() => {
+      const raw = deal?.primaryPerson?.emails;
+      if (Array.isArray(raw) && raw.length) {
+        const first = raw[0];
+        if (typeof first === 'string') return first;
+        if (first && typeof first === 'object' && typeof (first as { value?: string }).value === 'string') return (first as { value: string }).value;
+      }
+      return undefined;
+    })();
+    const to = (dto.to && dto.to.length ? dto.to : firstEmail ? [firstEmail] : []).filter(Boolean);
+
+    let emailed = false;
+    if (to.length) {
+      const name = deal?.primaryPerson?.firstName || deal?.primaryPerson?.name || 'there';
+      const body =
+        `<p>Hi ${name},</p>` +
+        `<p>Your proposal <strong>${proposal.title}</strong> is ready. You can review it here:</p>` +
+        `<p><a href="${link}">View your proposal</a></p>`;
+      try {
+        await this.messages.send(orgId, userId, { to, subject: `Proposal: ${proposal.title}`, body, html: true, dealId: proposal.dealId });
+        emailed = true;
+      } catch {
+        // Mailbox not connected / send failed — the link is still returned so it can be shared manually.
+      }
+    }
+
+    const row = await this.prisma.proposal.update({
+      where: { id },
+      data: { status: proposal.status === 'draft' ? 'sent' : proposal.status, sentAt: proposal.sentAt ?? new Date() },
+    });
+    return { ...shapeProposal(row), link, emailed };
+  }
 
   async list(orgId: string, dealId: string) {
     const rows = await this.prisma.proposal.findMany({ where: { orgId, dealId }, orderBy: { createdAt: 'desc' } });
-    return rows.map(shape);
+    return rows.map(shapeProposal);
   }
 
   async get(orgId: string, id: string) {
     const row = await this.prisma.proposal.findFirst({ where: { id, orgId } });
     if (!row) throw new NotFoundException('Proposal not found');
-    return shape(row);
+    return shapeProposal(row);
   }
 
   async create(orgId: string, userId: string, dto: CreateProposalDto) {
@@ -93,7 +149,7 @@ export class ProposalsService {
         estimateIds: dto.estimateIds ?? [],
       },
     });
-    return shape(row);
+    return shapeProposal(row);
   }
 
   async update(orgId: string, id: string, dto: UpdateProposalDto) {
@@ -108,7 +164,7 @@ export class ProposalsService {
         ...(dto.status !== undefined ? { status: dto.status } : {}),
       },
     });
-    return shape(row);
+    return shapeProposal(row);
   }
 
   async remove(orgId: string, id: string) {
@@ -125,7 +181,7 @@ export class ProposalsService {
     const proposal = await this.prisma.proposal.findFirst({ where: { id, orgId } });
     if (!proposal) throw new NotFoundException('Proposal not found');
     return {
-      ...shape(proposal),
+      ...shapeProposal(proposal),
       ...(await this.renderData(orgId, proposal.dealId, proposal.estimateIds, proposal.content)),
     };
   }

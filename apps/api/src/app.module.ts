@@ -29,6 +29,7 @@ import { EmailAutomationsModule } from './email-automations/email-automations.mo
 import { PublicEmailModule } from './public-email/public-email.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { ProposalsModule } from './proposals/proposals.module';
+import { PublicProposalModule } from './public-proposal/public-proposal.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -78,6 +79,7 @@ import { HealthController } from './health.controller';
     PublicEmailModule,
     UploadsModule,
     ProposalsModule,
+    PublicProposalModule,
   ],
   controllers: [HealthController],
 })

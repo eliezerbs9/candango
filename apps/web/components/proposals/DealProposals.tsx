@@ -19,7 +19,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconArrowLeft, IconDeviceFloppy, IconDots, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconArrowLeft, IconDeviceFloppy, IconDots, IconLink, IconPlus, IconSend, IconTrash } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import {
   useCreateProposal,
@@ -30,6 +30,7 @@ import {
   useProposalMeta,
   useProposalRender,
   useProposalTemplates,
+  useSendProposal,
   useTemplateVariables,
   useUpdateProposal,
 } from '@/lib/api/hooks';
@@ -203,6 +204,22 @@ function ProposalBuilder({ id, onBack }: { id: string; onBack: () => void }) {
   const { data: dealFields = [] } = useCustomFields('deal');
   const { data: meta } = useProposalMeta();
   const update = useUpdateProposal();
+  const sendMut = useSendProposal();
+
+  const shareLink = () => (typeof window !== 'undefined' && data ? `${window.location.origin}/proposal/${data.shareToken}` : '');
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(shareLink());
+    notifications.show({ message: 'Presentation link copied', color: 'green' });
+  };
+  const send = () =>
+    sendMut.mutate(
+      { id },
+      {
+        onSuccess: (r) =>
+          notifications.show({ message: r.emailed ? 'Proposal sent to the customer' : 'Marked sent — copy the link to share it', color: 'green' }),
+        onError: fail,
+      },
+    );
   const [title, setTitle] = useState('');
   const [estimateIds, setEstimateIds] = useState<string[]>([]);
   const [pages, setPages] = useState<CanvasPage[]>([]);
@@ -252,6 +269,12 @@ function ProposalBuilder({ id, onBack }: { id: string; onBack: () => void }) {
           <Badge variant="light" color={STATUS_COLOR[data.status]} style={{ textTransform: 'none' }}>
             {data.status}
           </Badge>
+          <Button size="xs" variant="default" leftSection={<IconLink size={14} />} onClick={copyLink}>
+            Copy link
+          </Button>
+          <Button size="xs" variant="default" leftSection={<IconSend size={14} />} onClick={send} loading={sendMut.isPending}>
+            Send
+          </Button>
           <Button size="xs" leftSection={<IconDeviceFloppy size={14} />} onClick={save} loading={update.isPending}>
             Save
           </Button>

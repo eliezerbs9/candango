@@ -135,6 +135,7 @@ import {
   getProposalTemplate,
   getProposalTemplates,
   seedProposalTemplates,
+  sendProposal,
   updateProposal,
   updateProposalTemplate,
   type ProposalBody,
@@ -1288,6 +1289,18 @@ export function useDeleteProposal() {
   return useMutation({
     mutationFn: (id: string) => deleteProposal(token!, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['proposals'] }),
+  });
+}
+
+export function useSendProposal() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, to }: { id: string; to?: string[] }) => sendProposal(token!, id, to),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: ['proposals'] });
+      qc.invalidateQueries({ queryKey: ['proposal-render', id] });
+    },
   });
 }
 

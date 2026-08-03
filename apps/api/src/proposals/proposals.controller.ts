@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Use
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, type AuthContext } from '../auth/current-user.decorator';
 import { ProposalsService } from './proposals.service';
-import { CreateProposalDto, UpdateProposalDto } from './dto/proposal.dto';
+import { CreateProposalDto, SendProposalDto, UpdateProposalDto } from './dto/proposal.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('proposals')
@@ -28,6 +28,12 @@ export class ProposalsController {
   @Post()
   create(@CurrentUser() u: AuthContext, @Body() dto: CreateProposalDto) {
     return this.svc.create(u.orgId, u.userId, dto);
+  }
+
+  /** Mark sent + email the public presentation link (best-effort). Returns the shareable link. */
+  @Post(':id/send')
+  send(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() dto: SendProposalDto) {
+    return this.svc.send(u.orgId, u.userId, id, dto);
   }
 
   @Patch(':id')

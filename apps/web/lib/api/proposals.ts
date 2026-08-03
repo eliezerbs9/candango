@@ -186,3 +186,12 @@ export function updateProposal(token: string, id: string, body: ProposalBody) {
 export function deleteProposal(token: string, id: string) {
   return apiFetch<void>(`/proposals/${id}`, { method: 'DELETE', token });
 }
+
+export interface SentProposal extends Proposal {
+  link: string;
+  emailed: boolean;
+}
+
+export function sendProposal(token: string, id: string, to?: string[]) {
+  return apiFetch<SentProposal>(`/proposals/${id}/send`, { method: 'POST', token, body: JSON.stringify({ to }) });
+}

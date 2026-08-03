@@ -71,6 +71,14 @@ export const AUTOMATION_TRIGGERS: TriggerDef[] = [
     ],
   },
   {
+    key: 'proposal_accepted',
+    label: 'Proposal accepted',
+    description: 'When a customer accepts a proposal from its presentation link.',
+    kind: 'event',
+    events: ['proposal.accepted'],
+    fields: [],
+  },
+  {
     key: 'doc_overdue',
     label: 'Estimate/invoice overdue',
     description: 'A set number of days after an estimate/invoice was sent without being accepted/paid.',
