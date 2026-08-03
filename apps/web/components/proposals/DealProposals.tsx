@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Badge,
@@ -23,15 +23,18 @@ import { IconArrowLeft, IconDeviceFloppy, IconDots, IconPlus, IconTrash } from '
 import { ApiError } from '@/lib/api/client';
 import {
   useCreateProposal,
+  useCustomFields,
   useDealEstimates,
   useDealProposals,
   useDeleteProposal,
+  useProposalMeta,
   useProposalRender,
   useProposalTemplates,
+  useTemplateVariables,
   useUpdateProposal,
 } from '@/lib/api/hooks';
-import type { Proposal, ProposalStatus } from '@/lib/api/proposals';
-import { ProposalRenderer } from './ProposalRenderer';
+import type { CanvasPage, Proposal, ProposalStatus, ProposalTheme } from '@/lib/api/proposals';
+import { ProposalCanvasEditor, toCanvasPages, type FieldOption } from './ProposalCanvasEditor';
 import { buildDealCtx } from './dealCtx';
 
 const fail = (e: unknown) =>
@@ -196,23 +199,42 @@ function NewProposalModal({
 function ProposalBuilder({ id, onBack }: { id: string; onBack: () => void }) {
   const { data, isLoading } = useProposalRender(id);
   const { data: estimates = [] } = useDealEstimates(data?.dealId ?? '');
+  const { data: variables = [] } = useTemplateVariables();
+  const { data: dealFields = [] } = useCustomFields('deal');
+  const { data: meta } = useProposalMeta();
   const update = useUpdateProposal();
   const [title, setTitle] = useState('');
   const [estimateIds, setEstimateIds] = useState<string[]>([]);
+  const [pages, setPages] = useState<CanvasPage[]>([]);
+  const [theme, setTheme] = useState<ProposalTheme | null>(null);
 
   useEffect(() => {
     if (!data) return;
     setTitle(data.title);
     setEstimateIds(data.estimateIds);
+    setTheme({ orientation: 'portrait', ...data.theme });
+    const p = toCanvasPages(data.content);
+    setPages(p.length ? p : [{ id: `${Date.now()}`, elements: [] }]);
   }, [data]);
 
+  const ctx = useMemo(() => (data ? buildDealCtx(data) : null), [data]);
+  const imageFields: FieldOption[] = useMemo(
+    () => dealFields.filter((f) => f.type === 'image').map((f) => ({ value: f.key, label: f.label })),
+    [dealFields],
+  );
+  const documentFields: FieldOption[] = useMemo(
+    () => dealFields.filter((f) => f.type === 'document').map((f) => ({ value: f.key, label: f.label })),
+    [dealFields],
+  );
+
   const save = () =>
+    theme &&
     update.mutate(
-      { id, body: { title: title.trim(), estimateIds } },
+      { id, body: { title: title.trim(), estimateIds, content: pages, theme } },
       { onSuccess: () => notifications.show({ message: 'Proposal saved', color: 'green' }), onError: fail },
     );
 
-  if (isLoading || !data) {
+  if (isLoading || !data || !theme || !ctx) {
     return (
       <Card withBorder radius="md" padding="md">
         <Loader size="sm" />
@@ -241,6 +263,7 @@ function ProposalBuilder({ id, onBack }: { id: string; onBack: () => void }) {
           <TextInput label="Title" value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
           <MultiSelect
             label="Estimates"
+            description="Save to refresh pricing blocks."
             data={estimates.map((e) => ({
               value: e.id,
               label: `${e.docNumber ? `#${e.docNumber}` : 'Estimate'} · ${money(e.totalAmount, e.currency)}`,
@@ -251,10 +274,17 @@ function ProposalBuilder({ id, onBack }: { id: string; onBack: () => void }) {
         </Group>
       </Card>
 
-      {/* Live preview with the real deal data */}
-      <Paper withBorder radius="md" p="lg" bg="#fff">
-        <ProposalRenderer layout={data.content} theme={data.theme} ctx={buildDealCtx(data)} />
-      </Paper>
+      <ProposalCanvasEditor
+        pages={pages}
+        onPagesChange={setPages}
+        theme={theme}
+        onThemeChange={setTheme}
+        variables={variables}
+        fonts={meta?.fonts ?? []}
+        ctx={ctx}
+        imageFields={imageFields}
+        documentFields={documentFields}
+      />
     </Stack>
   );
 }

@@ -4,27 +4,42 @@ import type { ProposalRenderCtx } from './ProposalRenderer';
 export function buildPreviewCtx(exampleByKey: Record<string, string>): ProposalRenderCtx {
   const resolveText = (s: string) => s.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, k: string) => exampleByKey[k] ?? k);
 
-  const box = (label: string): React.ReactNode => (
-    <div
-      style={{
-        flex: 1,
-        height: 120,
-        background: '#e9ecef',
-        borderRadius: 8,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#868e96',
-        fontSize: 12,
-      }}
-    >
-      {label}
-    </div>
-  );
-
   return {
     resolveText,
-    image: () => <div style={{ display: 'flex', gap: 8 }}>{[0, 1, 2].map((i) => <span key={i} style={{ flex: 1 }}>{box('Photo')}</span>)}</div>,
+    image: ({ cols = 1, count = 1 }) => {
+      const c = Math.max(1, cols);
+      const n = Math.max(1, count);
+      return (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${c}, 1fr)`,
+            gridAutoRows: '1fr',
+            gap: 8,
+            width: '100%',
+            height: '100%',
+          }}
+        >
+          {Array.from({ length: n }).map((_, i) => (
+            <div
+              key={i}
+              style={{
+                background: '#e9ecef',
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#868e96',
+                fontSize: 12,
+                minHeight: 48,
+              }}
+            >
+              Photo
+            </div>
+          ))}
+        </div>
+      );
+    },
     document: () => (
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid #dee2e6', borderRadius: 8, padding: '8px 12px' }}>
         <span style={{ color: '#e03131', fontWeight: 700 }}>PDF</span>

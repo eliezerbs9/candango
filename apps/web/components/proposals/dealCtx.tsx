@@ -10,18 +10,32 @@ export function buildDealCtx(data: ProposalRenderData): ProposalRenderCtx {
 
   return {
     resolveText,
-    image: (fieldKey) => {
+    image: ({ fieldKey, cols = 1, count = 1 }) => {
       const urls = fieldKey ? data.imagesByField[fieldKey] ?? [] : Object.values(data.imagesByField).flat();
-      if (urls.length === 0) return null;
+      const c = Math.max(1, cols);
+      const slots = Math.max(1, count);
       return (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {urls.map((u, i) => (
-            <img key={i} src={u} alt="" style={{ flex: '1 1 30%', maxWidth: '100%', borderRadius: 8, objectFit: 'cover' }} />
-          ))}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${c}, 1fr)`,
+            gridAutoRows: '1fr',
+            gap: 8,
+            width: '100%',
+            height: '100%',
+          }}
+        >
+          {Array.from({ length: slots }).map((_, i) =>
+            urls[i] ? (
+              <img key={i} src={urls[i]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }} />
+            ) : (
+              <div key={i} style={{ background: '#e9ecef', borderRadius: 8, minHeight: 48 }} />
+            ),
+          )}
         </div>
       );
     },
-    document: (fieldKey) => {
+    document: ({ fieldKey }) => {
       const docs = fieldKey ? data.documentsByField[fieldKey] ?? [] : Object.values(data.documentsByField).flat();
       if (docs.length === 0) return null;
       return (

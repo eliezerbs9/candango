@@ -8,10 +8,15 @@ import type { CanvasElement, CanvasPage, ProposalPage, ProposalRow, ProposalThem
  * fallback for pre-canvas templates). The image/document/pricing content resolves differently by
  * context (example placeholders / real deal data / public snapshot), so those come via a ctx.
  */
+export interface ProposalImageOpts {
+  fieldKey?: string;
+  cols?: number;
+  count?: number;
+}
 export interface ProposalRenderCtx {
   resolveText: (s: string) => string;
-  image: (fieldKey?: string) => React.ReactNode;
-  document: (fieldKey?: string) => React.ReactNode;
+  image: (opts: ProposalImageOpts) => React.ReactNode;
+  document: (opts: { fieldKey?: string }) => React.ReactNode;
   pricing: () => React.ReactNode;
 }
 
@@ -57,9 +62,17 @@ export function ElementView({ element, theme, ctx }: { element: CanvasElement; t
         />
       );
     case 'image':
-      return <div style={base}>{ctx.image(element.props.fieldKey as string | undefined)}</div>;
+      return (
+        <div style={base}>
+          {ctx.image({
+            fieldKey: element.props.fieldKey as string | undefined,
+            cols: element.props.cols as number | undefined,
+            count: element.props.count as number | undefined,
+          })}
+        </div>
+      );
     case 'document':
-      return <div style={base}>{ctx.document(element.props.fieldKey as string | undefined)}</div>;
+      return <div style={base}>{ctx.document({ fieldKey: element.props.fieldKey as string | undefined })}</div>;
     case 'pricing':
       return <div style={{ ...base, fontSize: s.fontSize ?? 14 }}>{ctx.pricing()}</div>;
     case 'divider':
@@ -123,8 +136,8 @@ function LegacyFlow({ page, theme, ctx }: { page: ProposalPage; theme: ProposalT
         </div>
       );
     if (type === 'text') return <div dangerouslySetInnerHTML={{ __html: ctx.resolveText(String(props.html ?? '')) }} />;
-    if (type === 'image') return <>{ctx.image(props.fieldKey as string | undefined)}</>;
-    if (type === 'document') return <>{ctx.document(props.fieldKey as string | undefined)}</>;
+    if (type === 'image') return <>{ctx.image({ fieldKey: props.fieldKey as string | undefined })}</>;
+    if (type === 'document') return <>{ctx.document({ fieldKey: props.fieldKey as string | undefined })}</>;
     if (type === 'pricing') return <>{ctx.pricing()}</>;
     return null;
   };
