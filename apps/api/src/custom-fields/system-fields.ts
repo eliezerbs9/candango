@@ -51,6 +51,8 @@ export const INTEGRATION_FIELDS: Record<string, SystemField[]> = {
   ],
   deal: [
     { key: 'qbSubcustomerId', label: 'QuickBooks sub-customer ID', type: 'text', group: 'integration', integration: 'quickbooks' },
+    { key: 'shipTo', label: 'Ship to (work site)', type: 'address', group: 'integration', integration: 'quickbooks' },
+    { key: 'billTo', label: 'Bill to (payer)', type: 'address', group: 'integration', integration: 'quickbooks' },
   ],
 };
 

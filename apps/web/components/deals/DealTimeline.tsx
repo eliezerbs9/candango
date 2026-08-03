@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Anchor, Badge, Button, Checkbox, Group, Paper, Stack, Text, Textarea, ThemeIcon, Timeline } from '@mantine/core';
+import { Anchor, Badge, Button, Checkbox, Group, Paper, ScrollArea, Stack, Text, Textarea, ThemeIcon, Timeline } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import {
@@ -115,16 +115,19 @@ export function DealTimeline({ dealId }: { dealId: string }) {
           No history yet. Add a note or log an activity.
         </Text>
       ) : (
-        <Timeline active={-1} bulletSize={26} lineWidth={2}>
-          {items.map((it) => (
-            <Timeline.Item key={`${it.kind}-${itemKey(it)}`} bullet={bullet(it)} title={titleOf(it, toggleActivity, openEditActivity)}>
-              <Text size="xs" c="dimmed">
-                {fmt(it.date)}
-              </Text>
-              {bodyOf(it)}
-            </Timeline.Item>
-          ))}
-        </Timeline>
+        // Cap the height so a long history scrolls instead of stretching the page.
+        <ScrollArea.Autosize mah="60vh" type="hover" offsetScrollbars>
+          <Timeline active={-1} bulletSize={26} lineWidth={2} pr="xs">
+            {items.map((it) => (
+              <Timeline.Item key={`${it.kind}-${itemKey(it)}`} bullet={bullet(it)} title={titleOf(it, toggleActivity, openEditActivity)}>
+                <Text size="xs" c="dimmed">
+                  {fmt(it.date)}
+                </Text>
+                {bodyOf(it)}
+              </Timeline.Item>
+            ))}
+          </Timeline>
+        </ScrollArea.Autosize>
       )}
 
       <ActivityForm opened={actOpen} onClose={actCtl.close} defaultDealId={dealId} activity={editing} />
