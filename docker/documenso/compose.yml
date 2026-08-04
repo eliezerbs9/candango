@@ -67,7 +67,10 @@ services:
       - NEXT_PRIVATE_DATABASE_URL=${NEXT_PRIVATE_DATABASE_URL:?err}
       - NEXT_PRIVATE_DIRECT_DATABASE_URL=${NEXT_PRIVATE_DATABASE_URL}
       - NEXT_PUBLIC_UPLOAD_TRANSPORT=s3
-      - NEXT_PRIVATE_UPLOAD_ENDPOINT=http://minio:9000
+      # host.docker.internal so the presigned upload/download URLs work from BOTH the Documenso
+      # container and our host-run API. Requires `127.0.0.1 host.docker.internal` in the host's
+      # /etc/hosts (macOS) so the host resolves it too.
+      - NEXT_PRIVATE_UPLOAD_ENDPOINT=http://host.docker.internal:9000
       - NEXT_PRIVATE_UPLOAD_FORCE_PATH_STYLE=true
       - NEXT_PRIVATE_UPLOAD_REGION=us-east-1
       - NEXT_PRIVATE_UPLOAD_BUCKET=documenso
