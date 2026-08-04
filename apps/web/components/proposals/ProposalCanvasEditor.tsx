@@ -898,7 +898,7 @@ function ElementSettings({
   const source = (el.props.source as string) ?? 'field';
   const pick = (el.props.pick as MediaPick) ?? 'recent';
   const media = isMedia ? (
-    <MediaPicker el={el} onProp={onProp} imageFilesByField={imageFilesByField} documentFilesByField={documentFilesByField} />
+    <MediaPicker el={el} onProp={onProp} imageFilesByField={imageFilesByField} documentFilesByField={documentFilesByField} single={el.type === 'document'} />
   ) : null;
 
   // Locked media element: only its file selection is editable — and only when it pulls from a deal field
@@ -1085,11 +1085,13 @@ function MediaPicker({
   onProp,
   imageFilesByField,
   documentFilesByField,
+  single = false,
 }: {
   el: CanvasElement;
   onProp: (key: string, value: unknown) => void;
   imageFilesByField: Record<string, ProposalImageFile[]>;
   documentFilesByField: Record<string, ProposalDocFile[]>;
+  single?: boolean;
 }) {
   const isImage = el.type === 'image';
   const fk = (el.props.fieldKey as string) || '';
@@ -1105,13 +1107,15 @@ function MediaPicker({
   const noun = isImage ? 'photos' : 'documents';
 
   const toggle = (key: string) =>
-    onProp('picked', picked.includes(key) ? picked.filter((k) => k !== key) : [...picked, key]);
+    single
+      ? onProp('picked', picked.includes(key) ? [] : [key])
+      : onProp('picked', picked.includes(key) ? picked.filter((k) => k !== key) : [...picked, key]);
 
   return (
     <Stack gap={6}>
       <Select
         size="xs"
-        label={isImage ? 'Which photos' : 'Which documents'}
+        label={isImage ? 'Which photos' : 'Which document'}
         data={[
           { value: 'recent', label: 'Most recent' },
           { value: 'oldest', label: 'Oldest' },

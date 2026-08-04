@@ -43,12 +43,15 @@ export function buildDealCtx(data: ProposalRenderCore): ProposalRenderCtx {
       const raw = fixedDocs ? fixedDocs.map((d) => ({ key: d.url, name: d.name ?? 'Document', url: d.url })) : selectFiles(all, pick, picked);
       // De-duplicate so an accidentally repeated file doesn't render a phantom second row.
       const seen = new Set<string>();
-      const docs = raw.filter((d) => {
+      const deduped = raw.filter((d) => {
         const k = d.key || d.url;
         if (seen.has(k)) return false;
         seen.add(k);
         return true;
       });
+      // A field-bound document shows exactly one (most recent / oldest / the picked one); creator-uploaded
+      // "fixed" documents show all the files they attached.
+      const docs = fixedDocs ? deduped : deduped.slice(0, 1);
       if (docs.length === 0) return null;
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
