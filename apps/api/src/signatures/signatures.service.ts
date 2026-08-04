@@ -35,6 +35,7 @@ const shape = (r: {
   title: string;
   status: string;
   recipients: unknown;
+  hasInitials: boolean;
   signerName: string | null;
   signerEmail: string | null;
   sourceFileKey: string | null;
@@ -56,10 +57,17 @@ const shape = (r: {
   sourceFileKey: r.sourceFileKey,
   signedFileKey: r.signedFileKey,
   hasSigned: !!r.signedFileKey,
+  hasInitials: r.hasInitials,
+  // The signing parties (name + role + status) for the deal card — no links/emails leaked.
+  signers: ((r.recipients as { name?: string; owner?: boolean; signed?: boolean }[] | null) ?? []).map((x) => ({
+    name: x.name ?? '',
+    owner: !!x.owner,
+    signed: r.status === 'signed' ? true : !!x.signed,
+  })),
   // The workspace's own signing link (the deal-owner party), so it can sign its part from the deal.
   ownerSignUrl:
     r.status !== 'signed'
-      ? ((r.recipients as { owner?: boolean; signingUrl?: string }[] | null) ?? []).find((x) => x.owner)?.signingUrl ?? null
+      ? ((r.recipients as { owner?: boolean; signingUrl?: string; signed?: boolean }[] | null) ?? []).find((x) => x.owner && !x.signed)?.signingUrl ?? null
       : null,
   auditUrl: r.auditUrl,
   sentAt: r.sentAt?.toISOString() ?? null,
@@ -144,12 +152,19 @@ export class SignaturesService {
     return rows.map(shape);
   }
 
-  /** Poll Documenso for a pending request and apply the completed/declined outcome if reached. */
-  private async reconcile(row: { id: string; orgId: string; dealId: string; title: string; signerName: string | null; signerEmail: string | null; createdByUserId: string | null; signedFileKey: string | null; documensoDocumentId: number | null }) {
+  /** Poll Documenso for a pending request: sync per-recipient signed state + the completed/declined outcome. */
+  private async reconcile(row: { id: string; orgId: string; dealId: string; title: string; recipients: unknown; signerName: string | null; signerEmail: string | null; createdByUserId: string | null; signedFileKey: string | null; documensoDocumentId: number | null }) {
     if (!row.documensoDocumentId) return;
-    const status = await this.documenso.getDocumentStatus(row.documensoDocumentId);
-    if (status === 'COMPLETED') await this.markSigned(row);
-    else if (status === 'REJECTED' || status === 'CANCELLED') {
+    const doc = await this.documenso.getDocument(row.documensoDocumentId);
+    // Update each stored recipient's signed flag (match by email).
+    const stored = (row.recipients as { email?: string }[] | null) ?? [];
+    if (stored.length && doc.recipients.length) {
+      const signedByEmail = new Map(doc.recipients.map((r) => [r.email, r.signed]));
+      const updated = stored.map((r) => ({ ...r, signed: signedByEmail.get(String(r.email ?? '').toLowerCase()) ?? (r as { signed?: boolean }).signed ?? false }));
+      await this.prisma.signatureRequest.update({ where: { id: row.id }, data: { recipients: updated as object } });
+    }
+    if (doc.status === 'COMPLETED') await this.markSigned(row);
+    else if (doc.status === 'REJECTED' || doc.status === 'CANCELLED') {
       await this.prisma.signatureRequest.update({ where: { id: row.id }, data: { status: 'declined', declinedAt: new Date() } });
     }
   }
@@ -272,6 +287,7 @@ export class SignaturesService {
         signatureTemplateId: template?.id ?? null,
         drawnFields: (dto.drawnFields ?? []) as object,
         recipients: this.mergeRecipients(recipients, sub.recipients) as object,
+        hasInitials: initialsPages.length > 0 || drawn.some((f) => f.type === 'initials'),
         signerName: dto.signerName ?? null,
         signerEmail: dto.signerEmail,
         sourceFileKey: dto.fileKey,
@@ -329,6 +345,7 @@ export class SignaturesService {
         title: tpl.name,
         status: 'sent',
         recipients: this.mergeRecipients(recipients, sub.recipients) as object,
+        hasInitials: fields.some((f) => f.type === 'initials'),
         signerName: signerName ?? null,
         signerEmail,
         sourceFileKey: tpl.fileKey,
@@ -344,10 +361,11 @@ export class SignaturesService {
   private async resolveRecipients(orgId: string, dealId: string, client: { email: string; name?: string }, bothParties: boolean): Promise<{ email: string; name?: string; owner: boolean }[]> {
     const recipients: { email: string; name?: string; owner: boolean }[] = [{ email: client.email, name: client.name, owner: false }];
     if (bothParties) {
-      const deal = await this.prisma.deal.findFirst({ where: { id: dealId, orgId }, select: { owner: { select: { name: true, email: true } } } });
+      const deal = await this.prisma.deal.findFirst({ where: { id: dealId, orgId }, select: { owner: { select: { name: true, firstName: true, lastName: true, email: true } } } });
       const owner = deal?.owner;
       if (!owner?.email) throw new BadRequestException('The deal owner has no email — can’t add them as the second signer.');
-      if (owner.email.toLowerCase() !== client.email.toLowerCase()) recipients.push({ email: owner.email, name: owner.name ?? undefined, owner: true });
+      const ownerName = `${owner.firstName ?? ''} ${owner.lastName ?? ''}`.trim() || owner.name || undefined;
+      if (owner.email.toLowerCase() !== client.email.toLowerCase()) recipients.push({ email: owner.email, name: ownerName, owner: true });
     }
     return recipients;
   }

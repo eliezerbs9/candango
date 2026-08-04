@@ -13,6 +13,9 @@ export interface SignatureRequest {
   sourceFileKey: string | null;
   signedFileKey: string | null;
   hasSigned: boolean;
+  hasInitials: boolean;
+  /** The signing parties + their status, for the card. */
+  signers: { name: string; owner: boolean; signed: boolean }[];
   /** The workspace's own signing link (both-parties), so the owner can sign their part. */
   ownerSignUrl: string | null;
   auditUrl: string | null;

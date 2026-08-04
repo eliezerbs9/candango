@@ -105,13 +105,17 @@ export class DocumensoService {
     return { documentId, signingUrl, recipients: outRecipients };
   }
 
-  /** Current document status (DRAFT | PENDING | COMPLETED | REJECTED …) for reconciliation. */
-  async getDocumentStatus(documentId: number): Promise<string | null> {
+  /** Document status + per-recipient signed state (for reconciliation + the deal card). */
+  async getDocument(documentId: number): Promise<{ status: string | null; recipients: { email: string; signed: boolean }[] }> {
     try {
       const doc = await this.req('GET', `/api/v1/documents/${documentId}`);
-      return (doc.status as string) ?? null;
+      const recips = (doc.recipients as Record<string, unknown>[] | undefined) ?? [];
+      return {
+        status: (doc.status as string) ?? null,
+        recipients: recips.map((r) => ({ email: String(r.email ?? '').toLowerCase(), signed: r.signingStatus === 'SIGNED' || r.signingStatus === 'COMPLETED' })),
+      };
     } catch {
-      return null;
+      return { status: null, recipients: [] };
     }
   }
 

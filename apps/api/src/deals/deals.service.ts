@@ -265,11 +265,11 @@ export class DealsService {
       ...(deal.company?.contacts.map((c) => c.person) ?? []),
     ];
     const seen = new Set<string>();
-    const people: { id: string; name: string; email: string | null }[] = [];
+    const people: { id: string; name: string; firstName: string; lastName: string; email: string | null }[] = [];
     for (const p of ordered) {
       if (seen.has(p.id)) continue;
       seen.add(p.id);
-      people.push({ id: p.id, name: p.name || `${p.firstName} ${p.lastName}`.trim(), email: firstEmail(p.emails) });
+      people.push({ id: p.id, name: p.name || `${p.firstName} ${p.lastName}`.trim(), firstName: p.firstName, lastName: p.lastName, email: firstEmail(p.emails) });
     }
     return people;
   }

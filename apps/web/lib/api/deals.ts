@@ -37,6 +37,8 @@ export function getDeals(token: string, filters: DealFilters = {}) {
 export interface DealRecipient {
   id: string;
   name: string;
+  firstName: string;
+  lastName: string;
   email: string | null;
 }
 

@@ -25,7 +25,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconDots, IconDownload, IconExternalLink, IconFileText, IconInfoCircle, IconLink, IconPlus, IconRefresh, IconSignature, IconTrash, IconUpload } from '@tabler/icons-react';
+import { IconCheck, IconClock, IconDots, IconDownload, IconExternalLink, IconFileText, IconInfoCircle, IconLink, IconPlus, IconRefresh, IconSignature, IconTrash, IconUpload } from '@tabler/icons-react';
 import Link from 'next/link';
 import { ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/auth/store';
@@ -155,8 +155,34 @@ function SignatureCard({ r, dealId }: { r: SignatureRequest; dealId: string }) {
           {r.title}
         </Text>
         <Text size="xs" c="dimmed" lineClamp={1}>
-          {r.signerName || r.signerEmail || '—'} · {when}
+          {when}
         </Text>
+
+        {/* Signing parties + who's still missing */}
+        <Stack gap={2} mt={6}>
+          {r.signers.map((s, i) => (
+            <Group key={i} gap={6} wrap="nowrap">
+              {s.signed ? <IconCheck size={13} color="var(--mantine-color-teal-6)" /> : <IconClock size={13} color="var(--mantine-color-gray-5)" />}
+              <Text size="xs" c={s.signed ? undefined : 'dimmed'} lineClamp={1}>
+                {s.owner ? 'You' : s.name || 'Client'}
+                {s.owner ? '' : ' (client)'}
+                {s.signed ? '' : ' · pending'}
+              </Text>
+            </Group>
+          ))}
+        </Stack>
+
+        <Group gap={4} mt={6}>
+          <Badge size="xs" variant="light" color="candango" style={{ textTransform: 'none' }}>
+            Signature
+          </Badge>
+          {r.hasInitials && (
+            <Badge size="xs" variant="light" color="violet" style={{ textTransform: 'none' }}>
+              Initials
+            </Badge>
+          )}
+        </Group>
+
         <Group justify="space-between" mt="sm" gap="xs" wrap="nowrap">
           {r.hasSigned ? (
             <Button size="compact-xs" variant="light" leftSection={<IconDownload size={13} />} onClick={downloadSigned}>
@@ -615,10 +641,11 @@ function SignerFields({
 
   const withEmail = recipients.filter((r) => r.email);
 
-  // Resolve the picked person to a signer (name + email).
+  // Resolve the picked person to a signer — always "First Last" for the document (not the display format).
   useEffect(() => {
     const r = recipients.find((x) => x.id === personId);
-    onSigner(r && r.email ? { name: r.name, email: r.email } : null);
+    const name = r ? `${r.firstName} ${r.lastName}`.trim() || r.name : '';
+    onSigner(r && r.email ? { name, email: r.email } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [personId, recipients]);
 
