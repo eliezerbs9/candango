@@ -61,6 +61,7 @@ export default function DocumentTemplateEditor() {
 
   const [name, setName] = useState('');
   const [mode, setMode] = useState<SignableDocMode>('builder');
+  const [parties, setParties] = useState<'one' | 'both'>('one');
   const [bodyHtml, setBodyHtml] = useState('');
   const [pages, setPages] = useState<CanvasPage[]>([]);
   const [theme, setTheme] = useState<ProposalTheme | null>(null);
@@ -72,6 +73,7 @@ export default function DocumentTemplateEditor() {
     if (!doc || hydrated) return;
     setName(doc.name);
     setMode(doc.mode);
+    setParties(doc.parties ?? 'one');
     setBodyHtml(doc.bodyHtml ?? '');
     const p = toCanvasPages(doc.layout);
     setPages(p.length ? p : [{ id: uid(), elements: [] }]);
@@ -82,7 +84,7 @@ export default function DocumentTemplateEditor() {
   }, [doc, hydrated]);
 
   const status = useAutosave(
-    { name: name.trim(), mode, bodyHtml, layout: pages, theme, fileKey, fields },
+    { name: name.trim(), mode, parties, bodyHtml, layout: pages, theme, fileKey, fields },
     async (v) => {
       try {
         await update.mutateAsync({ id, body: v as never });
@@ -115,16 +117,36 @@ export default function DocumentTemplateEditor() {
         <SaveStatus status={status} />
       </Group>
 
-      <SegmentedControl
-        value={mode}
-        onChange={(v) => setMode(v as SignableDocMode)}
-        data={[
-          { value: 'builder', label: 'Visual builder' },
-          { value: 'upload', label: 'Upload PDF' },
-          // Raw HTML is disabled for new docs; still editable if a template already uses it.
-          ...(mode === 'html' ? [{ value: 'html', label: 'Raw HTML' }] : []),
-        ]}
-      />
+      <Group align="flex-end" wrap="wrap" gap="lg">
+        <div>
+          <Text size="xs" fw={500} mb={4}>
+            Build mode
+          </Text>
+          <SegmentedControl
+            value={mode}
+            onChange={(v) => setMode(v as SignableDocMode)}
+            data={[
+              { value: 'builder', label: 'Visual builder' },
+              { value: 'upload', label: 'Upload PDF' },
+              // Raw HTML is disabled for new docs; still editable if a template already uses it.
+              ...(mode === 'html' ? [{ value: 'html', label: 'Raw HTML' }] : []),
+            ]}
+          />
+        </div>
+        <div>
+          <Text size="xs" fw={500} mb={4}>
+            Signed by
+          </Text>
+          <SegmentedControl
+            value={parties}
+            onChange={(v) => setParties(v as 'one' | 'both')}
+            data={[
+              { value: 'one', label: 'Client only' },
+              { value: 'both', label: 'Both parties' },
+            ]}
+          />
+        </div>
+      </Group>
 
       {mode === 'builder' ? (
         <BuilderMode pages={pages} onPages={setPages} theme={theme} onTheme={setTheme} />

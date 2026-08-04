@@ -75,13 +75,10 @@ function renderEl(el: El, theme: Theme, vars: Record<string, string>, logoUrl?: 
       return logoUrl ? `<div style="${box}"><img src="${esc(logoUrl)}" style="width:100%;height:100%;object-fit:${el.props.fit === 'cover' ? 'cover' : 'contain'}"/></div>` : '';
     case 'divider':
       return `<div style="${box}display:flex;align-items:center"><div style="width:100%;border-top:2px solid ${s.color ?? '#dee2e6'}"></div></div>`;
-    case 'field': {
-      const ft = FIELD_TYPES.includes(el.props.fieldType as (typeof FIELD_TYPES)[number]) ? String(el.props.fieldType) : 'signature';
-      const name = esc(String(el.props.label ?? fieldName(ft)));
-      return `<div style="${box}"><${ft}-field name="${name}" role="Client" style="display:block;width:100%;height:100%"></${ft}-field></div>`;
-    }
+    // 'field' elements aren't rendered into the content — signatures are placed on the appended
+    // Acceptance & Signature page instead. image / document / pricing are deferred too.
     default:
-      return ''; // image / document / pricing — deferred in generated documents
+      return '';
   }
 }
 

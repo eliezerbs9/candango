@@ -10,11 +10,12 @@ import { SignaturesService } from './signatures.service';
 import { SignatureTemplatesService } from './signature-templates.service';
 import { SignableDocumentsService } from './signable-documents.service';
 import { DocumensoService } from './documenso.service';
+import { GotenbergService } from './gotenberg.service';
 
 @Module({
   imports: [PrismaModule, UploadsModule, MessagesModule],
   controllers: [SignaturesController, SignatureTemplatesController, SignableDocumentsController, SignatureWebhookController],
-  providers: [SignaturesService, SignatureTemplatesService, SignableDocumentsService, DocumensoService],
+  providers: [SignaturesService, SignatureTemplatesService, SignableDocumentsService, DocumensoService, GotenbergService],
   exports: [SignaturesService],
 })
 export class SignaturesModule {}

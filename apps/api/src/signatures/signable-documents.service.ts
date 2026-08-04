@@ -6,6 +6,7 @@ const shape = (r: {
   id: string;
   name: string;
   mode: string;
+  parties: string;
   bodyHtml: string;
   layout: unknown;
   theme: unknown;
@@ -17,6 +18,7 @@ const shape = (r: {
   id: r.id,
   name: r.name,
   mode: r.mode,
+  parties: r.parties,
   bodyHtml: r.bodyHtml,
   layout: (r.layout as unknown[] | null) ?? [],
   theme: (r.theme as Record<string, unknown> | null) ?? {},
@@ -52,6 +54,7 @@ export class SignableDocumentsService {
         createdByUserId: userId,
         name: dto.name.trim(),
         mode: dto.mode ?? 'html',
+        parties: dto.parties ?? 'one',
         bodyHtml: dto.bodyHtml ?? '',
         layout: (dto.layout ?? []) as object,
         theme: (dto.theme ?? {}) as object,
@@ -69,6 +72,7 @@ export class SignableDocumentsService {
       data: {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
         ...(dto.mode !== undefined ? { mode: dto.mode } : {}),
+        ...(dto.parties !== undefined ? { parties: dto.parties } : {}),
         ...(dto.bodyHtml !== undefined ? { bodyHtml: dto.bodyHtml } : {}),
         ...(dto.layout !== undefined ? { layout: dto.layout as object } : {}),
         ...(dto.theme !== undefined ? { theme: dto.theme as object } : {}),

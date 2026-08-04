@@ -271,7 +271,7 @@ function GenerateModal({
         signerName: signer.name || undefined,
         signerEmail: signer.email,
         sendEmail,
-        bothParties,
+        // parties are defined by the document template
       });
       setLink(res.signingUrl ?? null);
       notifications.show({ message: sendEmail ? 'Generated and sent to the signer' : 'Document generated', color: 'green' });
@@ -316,6 +316,7 @@ function GenerateModal({
             onBothParties={setBothParties}
             sendEmail={sendEmail}
             onSendEmail={setSendEmail}
+            hideParties
           />
           <Button onClick={submit} loading={generate.isPending} disabled={!templateId || !signer}>
             Generate &amp; send
@@ -619,6 +620,7 @@ function SignerFields({
   onBothParties,
   sendEmail,
   onSendEmail,
+  hideParties,
 }: {
   dealId: string;
   companyId: string | null;
@@ -628,6 +630,7 @@ function SignerFields({
   onBothParties: (b: boolean) => void;
   sendEmail: boolean;
   onSendEmail: (b: boolean) => void;
+  hideParties?: boolean;
 }) {
   const { data: recipients = [] } = useDealRecipients(dealId);
   const createPerson = useCreatePerson();
@@ -708,25 +711,27 @@ function SignerFields({
         </Collapse>
       </div>
 
-      <div>
-        <Text size="sm" fw={500} mb={4}>
-          Signed by
-        </Text>
-        <SegmentedControl
-          fullWidth
-          data={[
-            { value: 'one', label: 'Client only' },
-            { value: 'both', label: 'Both parties' },
-          ]}
-          value={bothParties ? 'both' : 'one'}
-          onChange={(v) => onBothParties(v === 'both')}
-        />
-        {bothParties && (
-          <Text size="xs" c="dimmed" mt={4}>
-            The deal owner (you / the salesperson) counter-signs after the client.
+      {!hideParties && (
+        <div>
+          <Text size="sm" fw={500} mb={4}>
+            Signed by
           </Text>
-        )}
-      </div>
+          <SegmentedControl
+            fullWidth
+            data={[
+              { value: 'one', label: 'Client only' },
+              { value: 'both', label: 'Both parties' },
+            ]}
+            value={bothParties ? 'both' : 'one'}
+            onChange={(v) => onBothParties(v === 'both')}
+          />
+          {bothParties && (
+            <Text size="xs" c="dimmed" mt={4}>
+              You (the deal owner) also sign — either party can sign anytime.
+            </Text>
+          )}
+        </div>
+      )}
 
       <Switch label="Email the signer(s) now" checked={sendEmail} onChange={(e) => onSendEmail(e.currentTarget.checked)} />
     </Stack>

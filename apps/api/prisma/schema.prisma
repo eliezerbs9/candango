@@ -1001,6 +1001,7 @@ model SignableDocumentTemplate {
   orgId           String
   name            String
   mode            String    @default("html") // html (raw) | builder (free-canvas) | upload (PDF + placed fields)
+  parties         String    @default("one") // who signs: one (client) | both (client + deal owner)
   bodyHtml        String    @default("") // html mode
   layout          Json      @default("[]") // builder mode: CanvasPage[] (same model as proposals)
   theme           Json      @default("{}") // builder mode: ProposalTheme (paper size/orientation, fonts, colors)

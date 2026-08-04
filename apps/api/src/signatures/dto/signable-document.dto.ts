@@ -12,6 +12,10 @@ export class CreateSignableDocumentDto {
   mode?: string;
 
   @IsOptional()
+  @IsIn(['one', 'both'])
+  parties?: string;
+
+  @IsOptional()
   @IsString()
   @MaxLength(100000)
   bodyHtml?: string;

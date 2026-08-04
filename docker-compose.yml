@@ -21,23 +21,14 @@ services:
     ports:
       - '6379:6379'
 
-  # E-signature engine (self-hosted DocuSeal CE). Run JUST this service (Postgres/Redis here are
-  # optional — many devs run those natively via Homebrew): `docker compose up -d docuseal`.
-  # Then open http://localhost:3030: create the first user, copy the API token (Settings → API)
-  # into apps/api/.env as DOCUSEAL_API_KEY, and add a webhook (Settings → Webhooks) pointing at
-  #   http://host.docker.internal:4000/v1/public/docuseal/webhook
-  # Uses its own bundled SQLite (persisted in the volume) — no dependency on the Postgres above,
-  # so it won't clash with a native Postgres on 5432.
-  docuseal:
-    image: docuseal/docuseal:latest
-    container_name: candango-docuseal
+  # HTML→PDF rendering (for generating signable documents from the visual builder). Stateless.
+  # `docker compose up -d gotenberg`. The API reaches it at http://localhost:3005 (GOTENBERG_URL).
+  # (The e-signature engine, Documenso, lives in docker/documenso/compose.yml.)
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: candango-gotenberg
     ports:
-      - '3030:3000'
-    environment:
-      HOST: localhost:3030
-    volumes:
-      - candango_docuseal:/data
+      - '3005:3000'
 
 volumes:
   candango_pgdata:
-  candango_docuseal:

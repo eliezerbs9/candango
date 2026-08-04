@@ -4,6 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SpacesService } from '../uploads/spaces.service';
 import { type DocusealField } from './docuseal.service';
 import { DocumensoService } from './documenso.service';
+import { GotenbergService } from './gotenberg.service';
+import { layoutToHtml } from './layout-to-html';
 import { INITIALS_ZONE, PDFDocument, addAcceptancePage } from './acceptance-page';
 import { CreateSignatureDto } from './dto/signature.dto';
 import type { DrawnFieldDto } from './dto/signature-template.dto';
@@ -84,6 +86,7 @@ export class SignaturesService {
     private readonly prisma: PrismaService,
     private readonly spaces: SpacesService,
     private readonly documenso: DocumensoService,
+    private readonly gotenberg: GotenbergService,
     private readonly messages: MessagesService,
     private readonly events: EventEmitter2,
   ) {}
@@ -305,27 +308,34 @@ export class SignaturesService {
     const tpl = await this.prisma.signableDocumentTemplate.findFirst({ where: { id: dto.signableDocumentTemplateId, orgId, archivedAt: null } });
     if (!tpl) throw new BadRequestException('Document template not found');
 
-    // builder / raw-HTML templates render to HTML; the new engine (Documenso) signs PDFs — the
-    // HTML→PDF step lands in a later phase. Upload-mode (a template-owned PDF) works today.
-    if (tpl.mode !== 'upload') {
-      throw new BadRequestException('Generated (visual builder / HTML) documents aren’t available yet with the new signing engine — use an Upload-PDF document template for now.');
-    }
-    if (!tpl.fileKey || !tpl.fileKey.startsWith(`org-${orgId}/`)) throw new BadRequestException('This template has no source document');
-
     const ctx = await this.dealContext(orgId, userId, dto.dealId);
     const signerEmail = (dto.signerEmail || ctx['contact.email'] || '').trim();
     if (!signerEmail) throw new BadRequestException('No signer email — set a primary contact with an email on the deal.');
     const signerName = (dto.signerName || ctx['contact.name'] || '').trim() || undefined;
+    const bothParties = dto.bothParties ?? tpl.parties === 'both';
 
-    const source = await this.spaces.getBytes(tpl.fileKey);
+    // Build the source PDF for the template's mode (upload = stored PDF; builder/html = HTML→PDF per deal).
     let doc: Awaited<ReturnType<typeof PDFDocument.load>>;
-    try {
-      doc = await PDFDocument.load(source);
-    } catch {
-      throw new BadRequestException('The template document must be a PDF.');
+    if (tpl.mode === 'upload') {
+      if (!tpl.fileKey || !tpl.fileKey.startsWith(`org-${orgId}/`)) throw new BadRequestException('This template has no source document');
+      try {
+        doc = await PDFDocument.load(await this.spaces.getBytes(tpl.fileKey));
+      } catch {
+        throw new BadRequestException('The template document must be a PDF.');
+      }
+    } else {
+      if (!this.gotenberg.configured) throw new ServiceUnavailableException('Document generation is not configured (set GOTENBERG_URL).');
+      const org = await this.prisma.organization.findFirst({ where: { id: orgId }, select: { logoUrl: true } });
+      const theme = tpl.theme as { accentColor?: string; fontHeading?: string; fontBody?: string; orientation?: string; paperSize?: string } | null;
+      const html =
+        tpl.mode === 'builder'
+          ? layoutToHtml(tpl.layout, theme, ctx, org?.logoUrl ?? null)
+          : `<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#1a1a1a;line-height:1.6;padding:48px">${renderTemplate(tpl.bodyHtml || '', ctx)}</body></html>`;
+      doc = await PDFDocument.load(await this.gotenberg.htmlToPdf(html, { paperSize: theme?.paperSize, orientation: theme?.orientation }));
     }
-    const recipients = await this.resolveRecipients(orgId, dto.dealId, { email: signerEmail, name: signerName }, dto.bothParties ?? false);
-    const fields: DocusealField[] = drawnToDocusealFields((tpl.fields as DrawnFieldDto[] | null) ?? []);
+
+    const recipients = await this.resolveRecipients(orgId, dto.dealId, { email: signerEmail, name: signerName }, bothParties);
+    const fields: DocusealField[] = drawnToDocusealFields(tpl.mode === 'upload' ? ((tpl.fields as DrawnFieldDto[] | null) ?? []) : []);
     if (fields.length === 0) {
       const parties = recipients.map((r, i) => ({ label: i === 0 ? 'Client' : r.name || 'Company', recipient: i }));
       fields.push(...(await addAcceptancePage(doc, { title: tpl.name, parties })));
@@ -338,6 +348,13 @@ export class SignaturesService {
     const sub = await this.documenso.createPdfSubmission({ name: tpl.name, fileBytes: pdf, fields, recipients, sendEmail: wantEmail && !candangoEmail });
     if (candangoEmail && ownerUserId) await this.sendInvites(orgId, ownerUserId, dto.dealId, tpl.name, sub.recipients);
 
+    // Store the generated PDF so the deal card can preview it (upload mode already has its source).
+    let sourceKey: string | null = tpl.mode === 'upload' ? tpl.fileKey : null;
+    if (tpl.mode !== 'upload' && this.spaces.configured) {
+      sourceKey = `org-${orgId}/signature/gen-${sub.documentId}.pdf`;
+      await this.spaces.putBytes(sourceKey, pdf, 'application/pdf').catch(() => {});
+    }
+
     const row = await this.prisma.signatureRequest.create({
       data: {
         orgId,
@@ -348,7 +365,7 @@ export class SignaturesService {
         hasInitials: fields.some((f) => f.type === 'initials'),
         signerName: signerName ?? null,
         signerEmail,
-        sourceFileKey: tpl.fileKey,
+        sourceFileKey: sourceKey,
         documensoDocumentId: sub.documentId,
         createdByUserId: userId,
         sentAt: new Date(),
