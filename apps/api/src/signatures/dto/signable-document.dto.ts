@@ -16,6 +16,14 @@ export class CreateSignableDocumentDto {
   parties?: string;
 
   @IsOptional()
+  @IsIn(['owner', 'user'])
+  party2Source?: string;
+
+  @IsOptional()
+  @IsString()
+  party2UserId?: string | null;
+
+  @IsOptional()
   @IsString()
   @MaxLength(100000)
   bodyHtml?: string;

@@ -32,8 +32,9 @@ import {
   useSignatureTemplates,
   useTemplateVariables,
   useUpdateSignatureTemplate,
+  useUsers,
 } from '@/lib/api/hooks';
-import type { InitialsRule, SignatureTemplate, SignatureTemplateBody } from '@/lib/api/signature-templates';
+import type { InitialsParty, InitialsRule, Party2Source, SignatureParties, SignatureTemplate, SignatureTemplateBody } from '@/lib/api/signature-templates';
 import type { SignableDocumentTemplate } from '@/lib/api/signable-documents';
 import { VariableTextarea } from '@/components/common/VariableTextarea';
 
@@ -48,6 +49,7 @@ const fail = (e: unknown) => notifications.show({ message: e instanceof ApiError
 
 function summarize(t: SignatureTemplate): string {
   const parts: string[] = [];
+  if (t.parties === 'both') parts.push('Both parties sign');
   if (t.acceptance) parts.push('Acceptance & Signature page');
   if (t.initialsRule === 'every_page') parts.push('initials on every page');
   else if (t.initialsRule === 'last_page') parts.push('initials on the last page');
@@ -327,12 +329,18 @@ function TemplateModal({ opened, onClose, template }: { opened: boolean; onClose
   const update = useUpdateSignatureTemplate();
   const { data: variables = [] } = useTemplateVariables();
   const dealVars = useMemo(() => variables.filter((v) => !v.hidden && (!v.scopes || v.scopes.includes('deal'))), [variables]);
+  const { data: users = [] } = useUsers();
+  const userOptions = useMemo(() => users.filter((u) => u.status === 'active').map((u) => ({ value: u.id, label: u.name || u.email })), [users]);
 
   const [name, setName] = useState('');
   const [initialsRule, setInitialsRule] = useState<InitialsRule>('none');
   const [pagesText, setPagesText] = useState('');
   const [acceptance, setAcceptance] = useState(true);
   const [acceptanceText, setAcceptanceText] = useState('');
+  const [parties, setParties] = useState<SignatureParties>('one');
+  const [party2Source, setParty2Source] = useState<Party2Source>('owner');
+  const [party2UserId, setParty2UserId] = useState<string | null>(null);
+  const [initialsParty, setInitialsParty] = useState<InitialsParty>('client');
 
   // Re-seed the form whenever the modal opens for a different template.
   const seededFor = useRef<string | null>(null);
@@ -344,6 +352,10 @@ function TemplateModal({ opened, onClose, template }: { opened: boolean; onClose
     setPagesText((template?.initialsPages ?? []).join(', '));
     setAcceptance(template?.acceptance ?? true);
     setAcceptanceText(template?.acceptanceText ?? '');
+    setParties(template?.parties ?? 'one');
+    setParty2Source(template?.party2Source ?? 'owner');
+    setParty2UserId(template?.party2UserId ?? null);
+    setInitialsParty(template?.initialsParty ?? 'client');
   }
   if (!opened && seededFor.current) seededFor.current = null;
 
@@ -364,12 +376,20 @@ function TemplateModal({ opened, onClose, template }: { opened: boolean; onClose
       notifications.show({ message: 'Enable the acceptance page or an initials rule', color: 'red' });
       return;
     }
+    if (parties === 'both' && party2Source === 'user' && !party2UserId) {
+      notifications.show({ message: 'Pick the second signer (a workspace user)', color: 'red' });
+      return;
+    }
     const body: SignatureTemplateBody = {
       name: name.trim(),
       initialsRule,
       initialsPages: pages,
       acceptance,
       acceptanceText: acceptance ? acceptanceText.trim() || null : null,
+      parties,
+      party2Source: parties === 'both' ? party2Source : 'owner',
+      party2UserId: parties === 'both' && party2Source === 'user' ? party2UserId : null,
+      initialsParty: parties === 'both' ? initialsParty : 'client',
     };
     const done = { onSuccess: () => { notifications.show({ message: 'Saved', color: 'green' }); onClose(); }, onError: fail };
     if (template) update.mutate({ id: template.id, body }, done);
@@ -381,7 +401,53 @@ function TemplateModal({ opened, onClose, template }: { opened: boolean; onClose
       <Stack>
         <TextInput label="Name" placeholder="e.g. Initials every page + Acceptance" required value={name} onChange={(e) => setName(e.currentTarget.value)} data-autofocus />
 
+        <div>
+          <Text size="sm" fw={500} mb={4}>
+            Signed by
+          </Text>
+          <SegmentedControl
+            fullWidth
+            data={[
+              { label: 'Client only', value: 'one' },
+              { label: 'Both parties', value: 'both' },
+            ]}
+            value={parties}
+            onChange={(v) => setParties(v as SignatureParties)}
+          />
+        </div>
+        {parties === 'both' && (
+          <>
+            <Select
+              label="Second signer"
+              description="Who counter-signs as the second party."
+              data={[
+                { value: 'owner', label: 'Deal owner (sales rep)' },
+                { value: 'user', label: 'A specific workspace user' },
+              ]}
+              value={party2Source}
+              onChange={(v) => setParty2Source((v as Party2Source) ?? 'owner')}
+              allowDeselect={false}
+            />
+            {party2Source === 'user' && (
+              <Select label="Workspace user" placeholder="Pick a user" data={userOptions} value={party2UserId} onChange={setParty2UserId} searchable nothingFoundMessage="No users" />
+            )}
+          </>
+        )}
+
         <Select label="Initials" data={RULE_OPTIONS} value={initialsRule} onChange={(v) => setInitialsRule((v as InitialsRule) ?? 'none')} allowDeselect={false} />
+        {parties === 'both' && initialsRule !== 'none' && (
+          <Select
+            label="Who initials"
+            data={[
+              { value: 'client', label: 'Client only' },
+              { value: 'sender', label: 'Second party only' },
+              { value: 'both', label: 'Both parties' },
+            ]}
+            value={initialsParty}
+            onChange={(v) => setInitialsParty((v as InitialsParty) ?? 'client')}
+            allowDeselect={false}
+          />
+        )}
         {initialsRule === 'specified_pages' && (
           <TextInput
             label="Pages"

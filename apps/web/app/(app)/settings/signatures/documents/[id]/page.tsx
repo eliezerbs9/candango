@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Anchor, Badge, Button, Center, FileButton, Group, Loader, Paper, SegmentedControl, Stack, Text, TextInput } from '@mantine/core';
+import { Anchor, Badge, Button, Center, FileButton, Group, Loader, Paper, SegmentedControl, Select, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconArrowLeft, IconUpload } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
@@ -27,6 +27,7 @@ import {
   useTemplateVariables,
   useUpdateSignableDocument,
   useUploadFile,
+  useUsers,
 } from '@/lib/api/hooks';
 import type { CanvasPage, ProposalTheme } from '@/lib/api/proposals';
 import type { DrawnField } from '@/lib/api/signature-templates';
@@ -58,10 +59,14 @@ export default function DocumentTemplateEditor() {
   const { id } = useParams<{ id: string }>();
   const { data: doc, isLoading } = useSignableDocument(id);
   const update = useUpdateSignableDocument();
+  const { data: users = [] } = useUsers();
+  const userOptions = useMemo(() => users.filter((u) => u.status === 'active').map((u) => ({ value: u.id, label: u.name || u.email })), [users]);
 
   const [name, setName] = useState('');
   const [mode, setMode] = useState<SignableDocMode>('builder');
   const [parties, setParties] = useState<'one' | 'both'>('one');
+  const [party2Source, setParty2Source] = useState<'owner' | 'user'>('owner');
+  const [party2UserId, setParty2UserId] = useState<string | null>(null);
   const [bodyHtml, setBodyHtml] = useState('');
   const [pages, setPages] = useState<CanvasPage[]>([]);
   const [theme, setTheme] = useState<ProposalTheme | null>(null);
@@ -74,6 +79,8 @@ export default function DocumentTemplateEditor() {
     setName(doc.name);
     setMode(doc.mode);
     setParties(doc.parties ?? 'one');
+    setParty2Source(doc.party2Source ?? 'owner');
+    setParty2UserId(doc.party2UserId ?? null);
     setBodyHtml(doc.bodyHtml ?? '');
     const p = toCanvasPages(doc.layout);
     setPages(p.length ? p : [{ id: uid(), elements: [] }]);
@@ -84,7 +91,18 @@ export default function DocumentTemplateEditor() {
   }, [doc, hydrated]);
 
   const status = useAutosave(
-    { name: name.trim(), mode, parties, bodyHtml, layout: pages, theme, fileKey, fields },
+    {
+      name: name.trim(),
+      mode,
+      parties,
+      party2Source: parties === 'both' ? party2Source : 'owner',
+      party2UserId: parties === 'both' && party2Source === 'user' ? party2UserId : null,
+      bodyHtml,
+      layout: pages,
+      theme,
+      fileKey,
+      fields,
+    },
     async (v) => {
       try {
         await update.mutateAsync({ id, body: v as never });
@@ -146,6 +164,24 @@ export default function DocumentTemplateEditor() {
             ]}
           />
         </div>
+        {parties === 'both' && (
+          <Group align="flex-end" gap="sm" wrap="wrap">
+            <Select
+              label="Second signer"
+              data={[
+                { value: 'owner', label: 'Deal owner (sales rep)' },
+                { value: 'user', label: 'A specific user' },
+              ]}
+              value={party2Source}
+              onChange={(v) => setParty2Source((v as 'owner' | 'user') ?? 'owner')}
+              allowDeselect={false}
+              w={200}
+            />
+            {party2Source === 'user' && (
+              <Select label="Workspace user" placeholder="Pick a user" data={userOptions} value={party2UserId} onChange={setParty2UserId} searchable nothingFoundMessage="No users" w={220} />
+            )}
+          </Group>
+        )}
       </Group>
 
       {mode === 'builder' ? (

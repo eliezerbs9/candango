@@ -11,6 +11,10 @@ const shape = (r: {
   acceptanceText: string | null;
   fields: unknown;
   requireCounterSigner: boolean;
+  parties: string;
+  party2Source: string;
+  party2UserId: string | null;
+  initialsParty: string;
   createdAt: Date;
   updatedAt: Date;
 }) => ({
@@ -22,6 +26,10 @@ const shape = (r: {
   acceptanceText: r.acceptanceText,
   fields: (r.fields as unknown[] | null) ?? [],
   requireCounterSigner: r.requireCounterSigner,
+  parties: r.parties,
+  party2Source: r.party2Source,
+  party2UserId: r.party2UserId,
+  initialsParty: r.initialsParty,
   createdAt: r.createdAt.toISOString(),
   updatedAt: r.updatedAt.toISOString(),
 });
@@ -55,6 +63,10 @@ export class SignatureTemplatesService {
         acceptanceText: dto.acceptanceText ?? null,
         fields: (dto.fields ?? []) as object,
         requireCounterSigner: dto.requireCounterSigner ?? false,
+        parties: dto.parties ?? 'one',
+        party2Source: dto.party2Source ?? 'owner',
+        party2UserId: dto.party2Source === 'user' ? dto.party2UserId ?? null : null,
+        initialsParty: dto.initialsParty ?? 'client',
       },
     });
     return shape(row);
@@ -72,6 +84,9 @@ export class SignatureTemplatesService {
         ...(dto.acceptanceText !== undefined ? { acceptanceText: dto.acceptanceText } : {}),
         ...(dto.fields !== undefined ? { fields: dto.fields as object } : {}),
         ...(dto.requireCounterSigner !== undefined ? { requireCounterSigner: dto.requireCounterSigner } : {}),
+        ...(dto.parties !== undefined ? { parties: dto.parties } : {}),
+        ...(dto.party2Source !== undefined ? { party2Source: dto.party2Source, party2UserId: dto.party2Source === 'user' ? dto.party2UserId ?? null : null } : dto.party2UserId !== undefined ? { party2UserId: dto.party2UserId } : {}),
+        ...(dto.initialsParty !== undefined ? { initialsParty: dto.initialsParty } : {}),
       },
     });
     return shape(row);

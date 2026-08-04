@@ -6,7 +6,7 @@ import { type DocusealField } from './docuseal.service';
 import { DocumensoService } from './documenso.service';
 import { GotenbergService } from './gotenberg.service';
 import { layoutToHtml } from './layout-to-html';
-import { INITIALS_ZONE, PDFDocument, addAcceptancePage } from './acceptance-page';
+import { initialsZones, PDFDocument, addAcceptancePage } from './acceptance-page';
 import { CreateSignatureDto } from './dto/signature.dto';
 import type { DrawnFieldDto } from './dto/signature-template.dto';
 import { GenerateSignatureDto } from './dto/signable-document.dto';
@@ -19,6 +19,14 @@ function resolveInitialsPages(rule: string, pages: number[], pageCount: number):
   if (rule === 'last_page') return [pageCount];
   if (rule === 'specified_pages') return [...new Set(pages)].filter((p) => p >= 1 && p <= pageCount).sort((a, b) => a - b);
   return [];
+}
+
+/** Which recipient indexes get the page-initials field, given the rule and the party count. */
+function initialsRecipientIndexes(initialsParty: string, recipientCount: number): number[] {
+  if (recipientCount <= 1) return [0]; // only the client exists
+  if (initialsParty === 'sender') return [1];
+  if (initialsParty === 'both') return [0, 1];
+  return [0]; // client (default)
 }
 
 /** Turn visually-placed fields into DocuSeal fields with unique names. */
@@ -233,7 +241,11 @@ export class SignaturesService {
     const acceptance = template ? template.acceptance : dto.acceptance ?? true;
     const initialsRule = template ? template.initialsRule : dto.initialsEveryPage ? 'every_page' : 'none';
     const initialsPageList = template ? ((template.initialsPages as number[] | null) ?? []) : [];
+    const initialsParty = template?.initialsParty ?? 'client';
     const acceptanceText = template?.acceptanceText ?? null;
+    // Parties + who signs the 2nd party — from the template, else the inline "both parties" flag.
+    const partiesBoth = template ? template.parties === 'both' : dto.bothParties ?? false;
+    const party2 = { enabled: partiesBoth, source: (template?.party2Source as 'owner' | 'user') ?? 'owner', userId: template?.party2UserId ?? null };
     // Drawn fields: from the template plus any placed ad-hoc on this request.
     const drawn = [...((template?.fields as DrawnFieldDto[] | null) ?? []), ...(dto.drawnFields ?? [])];
 
@@ -251,8 +263,8 @@ export class SignaturesService {
       throw new BadRequestException('Select at least one signing option.');
     }
 
-    // Recipients: the client, plus (optionally) the deal owner (salesperson) as a counter-signer.
-    const recipients = await this.resolveRecipients(orgId, dto.dealId, { email: dto.signerEmail, name: dto.signerName }, dto.bothParties ?? false);
+    // Recipients: the client, plus (optionally) a second party (deal owner or a fixed user) as a counter-signer.
+    const recipients = await this.resolveRecipients(orgId, dto.dealId, { email: dto.signerEmail, name: dto.signerName }, party2);
 
     const fields: DocusealField[] = [...drawnToDocusealFields(drawn)];
     if (acceptance) {
@@ -261,8 +273,12 @@ export class SignaturesService {
       fields.push(...(await addAcceptancePage(doc, { title: dto.title, body, parties })));
     }
     if (initialsPages.length > 0) {
-      // One field repeated on the target pages: the client initials once and they stamp all pages.
-      fields.push({ name: 'Initials', type: 'initials', role: 'Client', recipient: 0, areas: initialsPages.map((page) => ({ page, ...INITIALS_ZONE })) });
+      // Repeat a footer initials field on the target pages, for each party that initials (offset side-by-side).
+      const targets = initialsRecipientIndexes(initialsParty, recipients.length);
+      const zones = initialsZones(targets.length);
+      targets.forEach((rIdx, k) => {
+        fields.push({ name: `Initials ${rIdx + 1}`, type: 'initials', role: 'Client', recipient: rIdx, areas: initialsPages.map((page) => ({ page, ...zones[k] })) });
+      });
     }
 
     const pdf = Buffer.from(await doc.save());
@@ -312,7 +328,8 @@ export class SignaturesService {
     const signerEmail = (dto.signerEmail || ctx['contact.email'] || '').trim();
     if (!signerEmail) throw new BadRequestException('No signer email — set a primary contact with an email on the deal.');
     const signerName = (dto.signerName || ctx['contact.name'] || '').trim() || undefined;
-    const bothParties = dto.bothParties ?? tpl.parties === 'both';
+    const partiesBoth = dto.bothParties ?? tpl.parties === 'both';
+    const party2 = { enabled: partiesBoth, source: (tpl.party2Source as 'owner' | 'user') ?? 'owner', userId: tpl.party2UserId ?? null };
 
     // Build the source PDF for the template's mode (upload = stored PDF; builder/html = HTML→PDF per deal).
     let doc: Awaited<ReturnType<typeof PDFDocument.load>>;
@@ -334,7 +351,7 @@ export class SignaturesService {
       doc = await PDFDocument.load(await this.gotenberg.htmlToPdf(html, { paperSize: theme?.paperSize, orientation: theme?.orientation }));
     }
 
-    const recipients = await this.resolveRecipients(orgId, dto.dealId, { email: signerEmail, name: signerName }, bothParties);
+    const recipients = await this.resolveRecipients(orgId, dto.dealId, { email: signerEmail, name: signerName }, party2);
     const fields: DocusealField[] = drawnToDocusealFields(tpl.mode === 'upload' ? ((tpl.fields as DrawnFieldDto[] | null) ?? []) : []);
     if (fields.length === 0) {
       const parties = recipients.map((r, i) => ({ label: i === 0 ? 'Client' : r.name || 'Company', recipient: i }));
@@ -374,15 +391,29 @@ export class SignaturesService {
     return { ...shape(row), signingUrl: sub.signingUrl };
   }
 
-  /** The signing parties: the client, plus the deal owner (salesperson) when both parties sign. */
-  private async resolveRecipients(orgId: string, dealId: string, client: { email: string; name?: string }, bothParties: boolean): Promise<{ email: string; name?: string; owner: boolean }[]> {
+  /**
+   * The signing parties: the client, plus (when both parties sign) the second party — resolved from
+   * the template's config: either the deal owner (salesperson) or a fixed workspace user.
+   */
+  private async resolveRecipients(
+    orgId: string,
+    dealId: string,
+    client: { email: string; name?: string },
+    party2: { enabled: boolean; source: 'owner' | 'user'; userId?: string | null },
+  ): Promise<{ email: string; name?: string; owner: boolean }[]> {
     const recipients: { email: string; name?: string; owner: boolean }[] = [{ email: client.email, name: client.name, owner: false }];
-    if (bothParties) {
-      const deal = await this.prisma.deal.findFirst({ where: { id: dealId, orgId }, select: { owner: { select: { name: true, firstName: true, lastName: true, email: true } } } });
-      const owner = deal?.owner;
-      if (!owner?.email) throw new BadRequestException('The deal owner has no email — can’t add them as the second signer.');
-      const ownerName = `${owner.firstName ?? ''} ${owner.lastName ?? ''}`.trim() || owner.name || undefined;
-      if (owner.email.toLowerCase() !== client.email.toLowerCase()) recipients.push({ email: owner.email, name: ownerName, owner: true });
+    if (party2.enabled) {
+      const u =
+        party2.source === 'user' && party2.userId
+          ? await this.prisma.user.findFirst({ where: { id: party2.userId, orgId }, select: { name: true, firstName: true, lastName: true, email: true } })
+          : (await this.prisma.deal.findFirst({ where: { id: dealId, orgId }, select: { owner: { select: { name: true, firstName: true, lastName: true, email: true } } } }))?.owner ?? null;
+      if (!u?.email) {
+        throw new BadRequestException(
+          party2.source === 'user' ? 'The template’s second signer (a workspace user) has no email.' : 'The deal owner has no email — can’t add them as the second signer.',
+        );
+      }
+      const name = `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || u.name || undefined;
+      if (u.email.toLowerCase() !== client.email.toLowerCase()) recipients.push({ email: u.email, name, owner: true });
     }
     return recipients;
   }

@@ -1,6 +1,9 @@
 import { apiFetch } from './client';
 
 export type InitialsRule = 'none' | 'every_page' | 'specified_pages' | 'last_page';
+export type SignatureParties = 'one' | 'both';
+export type Party2Source = 'owner' | 'user';
+export type InitialsParty = 'client' | 'sender' | 'both';
 
 /** A visually-placed field (Phase 3). Coords normalized 0–1, page 1-indexed. */
 export interface DrawnField {
@@ -22,6 +25,10 @@ export interface SignatureTemplate {
   acceptanceText: string | null;
   fields: DrawnField[];
   requireCounterSigner: boolean;
+  parties: SignatureParties;
+  party2Source: Party2Source;
+  party2UserId: string | null;
+  initialsParty: InitialsParty;
   createdAt: string;
   updatedAt: string;
 }
@@ -34,6 +41,10 @@ export interface SignatureTemplateBody {
   acceptanceText?: string | null;
   fields?: DrawnField[];
   requireCounterSigner?: boolean;
+  parties?: SignatureParties;
+  party2Source?: Party2Source;
+  party2UserId?: string | null;
+  initialsParty?: InitialsParty;
 }
 
 export function getSignatureTemplates(token: string) {

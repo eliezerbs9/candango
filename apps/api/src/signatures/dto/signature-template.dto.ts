@@ -63,6 +63,22 @@ export class CreateSignatureTemplateDto {
   @IsOptional()
   @IsBoolean()
   requireCounterSigner?: boolean;
+
+  @IsOptional()
+  @IsIn(['one', 'both'])
+  parties?: string;
+
+  @IsOptional()
+  @IsIn(['owner', 'user'])
+  party2Source?: string;
+
+  @IsOptional()
+  @IsString()
+  party2UserId?: string | null;
+
+  @IsOptional()
+  @IsIn(['client', 'sender', 'both'])
+  initialsParty?: string;
 }
 
 export class UpdateSignatureTemplateDto extends CreateSignatureTemplateDto {

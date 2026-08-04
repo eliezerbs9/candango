@@ -9,6 +9,8 @@ export interface SignableDocumentTemplate {
   name: string;
   mode: SignableDocMode;
   parties: 'one' | 'both';
+  party2Source: 'owner' | 'user';
+  party2UserId: string | null;
   bodyHtml: string;
   layout: CanvasPage[];
   theme: Partial<ProposalTheme>;
@@ -22,6 +24,8 @@ export interface SignableDocumentBody {
   name?: string;
   mode?: SignableDocMode;
   parties?: 'one' | 'both';
+  party2Source?: 'owner' | 'user';
+  party2UserId?: string | null;
   bodyHtml?: string;
   layout?: CanvasPage[];
   theme?: Partial<ProposalTheme>;

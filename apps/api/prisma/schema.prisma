@@ -982,6 +982,10 @@ model SignatureTemplate {
   acceptanceText  String? // acceptance-page wording; may contain {{variables}}; null = default
   fields          Json      @default("[]") // Phase 3: drawn signature/initials/date/text fields
   requireCounterSigner Boolean @default(false) // Phase 4: workspace counter-signs
+  parties         String    @default("one") // who signs: one (client) | both (client + a second party)
+  party2Source    String    @default("owner") // second party: owner (deal owner) | user (a fixed workspace user)
+  party2UserId    String? // when party2Source=user: the workspace user who counter-signs
+  initialsParty   String    @default("client") // which party initials: client | sender | both
   createdByUserId String?
   archivedAt      DateTime?
   createdAt       DateTime  @default(now())
@@ -1001,7 +1005,9 @@ model SignableDocumentTemplate {
   orgId           String
   name            String
   mode            String    @default("html") // html (raw) | builder (free-canvas) | upload (PDF + placed fields)
-  parties         String    @default("one") // who signs: one (client) | both (client + deal owner)
+  parties         String    @default("one") // who signs: one (client) | both (client + a second party)
+  party2Source    String    @default("owner") // second party: owner (deal owner) | user (a fixed workspace user)
+  party2UserId    String? // when party2Source=user: the workspace user who counter-signs
   bodyHtml        String    @default("") // html mode
   layout          Json      @default("[]") // builder mode: CanvasPage[] (same model as proposals)
   theme           Json      @default("{}") // builder mode: ProposalTheme (paper size/orientation, fonts, colors)

@@ -7,6 +7,8 @@ const shape = (r: {
   name: string;
   mode: string;
   parties: string;
+  party2Source: string;
+  party2UserId: string | null;
   bodyHtml: string;
   layout: unknown;
   theme: unknown;
@@ -19,6 +21,8 @@ const shape = (r: {
   name: r.name,
   mode: r.mode,
   parties: r.parties,
+  party2Source: r.party2Source,
+  party2UserId: r.party2UserId,
   bodyHtml: r.bodyHtml,
   layout: (r.layout as unknown[] | null) ?? [],
   theme: (r.theme as Record<string, unknown> | null) ?? {},
@@ -55,6 +59,8 @@ export class SignableDocumentsService {
         name: dto.name.trim(),
         mode: dto.mode ?? 'html',
         parties: dto.parties ?? 'one',
+        party2Source: dto.party2Source ?? 'owner',
+        party2UserId: dto.party2Source === 'user' ? dto.party2UserId ?? null : null,
         bodyHtml: dto.bodyHtml ?? '',
         layout: (dto.layout ?? []) as object,
         theme: (dto.theme ?? {}) as object,
@@ -73,6 +79,7 @@ export class SignableDocumentsService {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
         ...(dto.mode !== undefined ? { mode: dto.mode } : {}),
         ...(dto.parties !== undefined ? { parties: dto.parties } : {}),
+        ...(dto.party2Source !== undefined ? { party2Source: dto.party2Source, party2UserId: dto.party2Source === 'user' ? dto.party2UserId ?? null : null } : dto.party2UserId !== undefined ? { party2UserId: dto.party2UserId } : {}),
         ...(dto.bodyHtml !== undefined ? { bodyHtml: dto.bodyHtml } : {}),
         ...(dto.layout !== undefined ? { layout: dto.layout as object } : {}),
         ...(dto.theme !== undefined ? { theme: dto.theme as object } : {}),

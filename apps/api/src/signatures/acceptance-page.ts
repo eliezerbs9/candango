@@ -8,6 +8,15 @@ const MARGIN = 56;
 /** Footer-right zone for a page-initials field (repeated on every page). Normalized, y from top. */
 export const INITIALS_ZONE = { x: 0.8, y: 0.955, w: 0.13, h: 0.028 };
 
+/** Footer initials zone(s) for `count` parties — offset side-by-side so two parties don't overlap. */
+export function initialsZones(count: number): { x: number; y: number; w: number; h: number }[] {
+  if (count <= 1) return [INITIALS_ZONE];
+  return [
+    { ...INITIALS_ZONE, x: 0.66 },
+    { ...INITIALS_ZONE, x: 0.8 },
+  ];
+}
+
 export { PDFDocument };
 
 /** A signing party that gets a signature/date/printed-name block on the appended page. */
