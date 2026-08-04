@@ -67,7 +67,7 @@ export class EmailAutomationsService {
    * automations run in the context of one deal, so a marketing template (no deal/sender variables)
    * could never render correctly here.
    */
-  private async validateAction(orgId: string, action: string, templateId?: string | null) {
+  private async validateAction(orgId: string, action: string, templateId?: string | null, config?: unknown) {
     if (action === 'send_email') {
       if (!templateId) throw new BadRequestException('Pick a template for the email action');
       const t = await this.prisma.emailTemplate.findFirst({ where: { id: templateId, orgId, archivedAt: null } });
@@ -75,6 +75,12 @@ export class EmailAutomationsService {
       if (t.scope !== 'deal') {
         throw new BadRequestException('Pick a deal email template — marketing templates can’t be used in deal automations');
       }
+    }
+    if (action === 'request_signature') {
+      const docId = (config as Record<string, unknown> | undefined)?.signableDocumentTemplateId;
+      if (typeof docId !== 'string' || !docId) throw new BadRequestException('Pick a document template for the signature action');
+      const doc = await this.prisma.signableDocumentTemplate.findFirst({ where: { id: docId, orgId, archivedAt: null } });
+      if (!doc) throw new BadRequestException('Document template not found');
     }
   }
 
@@ -84,7 +90,7 @@ export class EmailAutomationsService {
   }
 
   async create(orgId: string, userId: string, dto: CreateEmailAutomationDto) {
-    await this.validateAction(orgId, dto.action, dto.templateId);
+    await this.validateAction(orgId, dto.action, dto.templateId, dto.config);
     // An email automation can be created without Google, but starts OFF until a mailbox is connected.
     let enabled = dto.enabled ?? true;
     if (dto.action === 'send_email' && enabled && !(await this.orgHasMailbox(orgId))) enabled = false;
@@ -111,7 +117,8 @@ export class EmailAutomationsService {
     if (!existing) throw new NotFoundException('Automation not found');
     const action = dto.action ?? existing.action;
     const templateId = dto.templateId !== undefined ? dto.templateId : existing.templateId;
-    if (dto.action !== undefined || dto.templateId !== undefined) await this.validateAction(orgId, action, templateId);
+    const config = dto.config !== undefined ? dto.config : existing.config;
+    if (dto.action !== undefined || dto.templateId !== undefined || dto.config !== undefined) await this.validateAction(orgId, action, templateId, config);
     // Block turning ON an email automation until the workspace has a connected mailbox.
     const willEnable = dto.enabled !== undefined ? dto.enabled : existing.enabled;
     if (action === 'send_email' && willEnable && !(await this.orgHasMailbox(orgId))) {

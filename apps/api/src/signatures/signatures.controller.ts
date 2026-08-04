@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, type AuthContext } from '../auth/current-user.decorator';
 import { SignaturesService } from './signatures.service';
 import { CreateSignatureDto } from './dto/signature.dto';
+import { GenerateSignatureDto } from './dto/signable-document.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('signatures')
@@ -18,6 +19,12 @@ export class SignaturesController {
   @Post()
   create(@CurrentUser() u: AuthContext, @Body() dto: CreateSignatureDto) {
     return this.svc.create(u.orgId, u.userId, dto);
+  }
+
+  /** Generate a document from a template and send it for signature. */
+  @Post('generate')
+  generate(@CurrentUser() u: AuthContext, @Body() dto: GenerateSignatureDto) {
+    return this.svc.createGenerated(u.orgId, u.userId, dto);
   }
 
   /** Short-lived signed URL to download the completed/signed PDF. */

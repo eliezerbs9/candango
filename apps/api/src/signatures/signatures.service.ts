@@ -6,7 +6,30 @@ import { DocusealService, type DocusealField } from './docuseal.service';
 import { ACCEPTANCE_FIELDS, INITIALS_ZONE, PDFDocument, addAcceptancePage } from './acceptance-page';
 import { CreateSignatureDto } from './dto/signature.dto';
 import type { DrawnFieldDto } from './dto/signature-template.dto';
+import { GenerateSignatureDto } from './dto/signable-document.dto';
 import { buildTemplateContext, renderTemplate } from '../email-templates/template-vars';
+
+const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** Appended to a generated document that declares no signature field, so it's always signable. */
+const DEFAULT_ACCEPTANCE_HTML = `
+<div style="margin-top:36px;padding-top:16px;border-top:1px solid #e5e5e5">
+  <p style="font-weight:bold;font-size:15px;margin:0 0 6px">Acceptance &amp; Signature</p>
+  <p style="margin:0 0 20px;color:#444">By signing below, I acknowledge and accept this document.</p>
+  <table style="width:100%"><tr>
+    <td style="width:55%;vertical-align:bottom">Signature:<br/><signature-field name="Signature" role="Client" required="true"></signature-field></td>
+    <td style="vertical-align:bottom">Date:<br/><date-field name="Date" role="Client"></date-field></td>
+  </tr></table>
+  <p style="margin-top:16px">Printed name:<br/><text-field name="Printed name" role="Client"></text-field></p>
+</div>`;
+
+/** Wrap generated body HTML in a minimal styled document for DocuSeal's HTML API. */
+function wrapSignableHtml(title: string, inner: string): string {
+  return (
+    `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head>` +
+    `<body style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#1a1a1a;line-height:1.6;max-width:720px;margin:0 auto;padding:40px">${inner}</body></html>`
+  );
+}
 
 /** Resolve an initials rule + page list to concrete 1-indexed content pages (clamped to the doc). */
 function resolveInitialsPages(rule: string, pages: number[], pageCount: number): number[] {
@@ -153,6 +176,45 @@ export class SignaturesService {
         signerName: dto.signerName ?? null,
         signerEmail: dto.signerEmail,
         sourceFileKey: dto.fileKey,
+        docusealSubmissionId: sub.submissionId || null,
+        createdByUserId: userId,
+        sentAt: new Date(),
+      },
+    });
+    return { ...shape(row), signingUrl: sub.signingUrl };
+  }
+
+  /** Generate a document from a SignableDocumentTemplate (HTML + variables) and send it for signature. */
+  async createGenerated(orgId: string, userId: string, dto: GenerateSignatureDto) {
+    if (!this.docuseal.configured) throw new ServiceUnavailableException('E-signature is not configured (set DOCUSEAL_URL, DOCUSEAL_API_KEY).');
+    const tpl = await this.prisma.signableDocumentTemplate.findFirst({ where: { id: dto.signableDocumentTemplateId, orgId, archivedAt: null } });
+    if (!tpl) throw new BadRequestException('Document template not found');
+
+    const ctx = await this.dealContext(orgId, userId, dto.dealId);
+    const signerEmail = (dto.signerEmail || ctx['contact.email'] || '').trim();
+    if (!signerEmail) throw new BadRequestException('No signer email — set a primary contact with an email on the deal.');
+    const signerName = (dto.signerName || ctx['contact.name'] || '').trim() || undefined;
+
+    let inner = renderTemplate(tpl.bodyHtml || '', ctx);
+    // If the author placed no signature field, append a standard acceptance block so the doc is signable.
+    if (!/<(signature|initials|date|text|checkbox)-field/i.test(inner)) inner += DEFAULT_ACCEPTANCE_HTML;
+    const html = wrapSignableHtml(tpl.name, inner);
+
+    const sub = await this.docuseal.createHtmlSubmission({
+      name: tpl.name,
+      html,
+      submitter: { role: 'Client', email: signerEmail, name: signerName },
+      sendEmail: dto.sendEmail ?? true,
+    });
+
+    const row = await this.prisma.signatureRequest.create({
+      data: {
+        orgId,
+        dealId: dto.dealId,
+        title: tpl.name,
+        status: 'sent',
+        signerName: signerName ?? null,
+        signerEmail,
         docusealSubmissionId: sub.submissionId || null,
         createdByUserId: userId,
         sentAt: new Date(),

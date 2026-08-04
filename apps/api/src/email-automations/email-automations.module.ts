@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { MessagesModule } from '../messages/messages.module';
 import { MailModule } from '../mail/mail.module';
+import { SignaturesModule } from '../signatures/signatures.module';
 import { EmailAutomationsController } from './email-automations.controller';
 import { EmailAutomationsService } from './email-automations.service';
 import { EmailAutomationsExecutor } from './email-automations.executor';
@@ -9,7 +10,7 @@ import { EmailAutomationsRunner } from './email-automations.runner';
 import { AutomationScanProcessor } from './automation-scan.processor';
 
 @Module({
-  imports: [MessagesModule, MailModule, BullModule.registerQueue({ name: 'automation-scan' })],
+  imports: [MessagesModule, MailModule, SignaturesModule, BullModule.registerQueue({ name: 'automation-scan' })],
   controllers: [EmailAutomationsController],
   providers: [EmailAutomationsService, EmailAutomationsExecutor, EmailAutomationsRunner, AutomationScanProcessor],
   exports: [EmailAutomationsService],

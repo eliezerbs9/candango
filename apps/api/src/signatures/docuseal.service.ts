@@ -50,17 +50,41 @@ export class DocusealService {
     submitter: { role: string; email: string; name?: string };
     sendEmail: boolean;
   }): Promise<{ submissionId: string; signingUrl?: string }> {
-    const res = (await this.req('POST', '/submissions/pdf', {
+    const res = await this.req('POST', '/submissions/pdf', {
       name: input.name,
       send_email: input.sendEmail,
       documents: [{ name: input.fileName, file: input.fileBase64, fields: input.fields }],
       submitters: [{ role: input.submitter.role, email: input.submitter.email, name: input.submitter.name }],
-    })) as Record<string, unknown> | Record<string, unknown>[];
+    });
+    return this.parseSubmission(res);
+  }
 
-    // The API returns either a submission object {id, submitters:[...]} or an array of submitters.
-    const submitters = (Array.isArray(res) ? res : ((res.submitters as Record<string, unknown>[]) ?? [])) as Record<string, unknown>[];
+  /**
+   * One-off submission from generated HTML — fields are defined by inline field tags in the markup
+   * (`<signature-field>`, `<date-field>`, `{{Field;type=signature}}`), so they flow with the content.
+   * Used for generated agreements (Class A). Returns the signer's link.
+   */
+  async createHtmlSubmission(input: {
+    name: string;
+    html: string;
+    submitter: { role: string; email: string; name?: string };
+    sendEmail: boolean;
+  }): Promise<{ submissionId: string; signingUrl?: string }> {
+    const res = await this.req('POST', '/submissions/html', {
+      name: input.name,
+      send_email: input.sendEmail,
+      documents: [{ name: `${input.name}.html`, html: input.html }],
+      submitters: [{ role: input.submitter.role, email: input.submitter.email, name: input.submitter.name }],
+    });
+    return this.parseSubmission(res);
+  }
+
+  /** DocuSeal returns either a submission object {id, submitters:[...]} or a bare array of submitters. */
+  private parseSubmission(res: unknown): { submissionId: string; signingUrl?: string } {
+    const r = res as Record<string, unknown> | Record<string, unknown>[];
+    const submitters = (Array.isArray(r) ? r : ((r.submitters as Record<string, unknown>[]) ?? [])) as Record<string, unknown>[];
     const first = submitters[0] ?? {};
-    const submissionId = String((Array.isArray(res) ? first.submission_id : (res as Record<string, unknown>).id) ?? first.submission_id ?? '');
+    const submissionId = String((Array.isArray(r) ? first.submission_id : (r as Record<string, unknown>).id) ?? first.submission_id ?? '');
     const slug = first.slug as string | undefined;
     const signingUrl = (first.embed_src as string | undefined) ?? (slug ? `${this.url}/s/${slug}` : undefined);
     return { submissionId, signingUrl };

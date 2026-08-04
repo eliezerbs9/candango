@@ -15,7 +15,7 @@ import { AUTOMATION_CATEGORY_KEYS } from '../automation-categories';
 import type { MarketingSchedule } from '../marketing-schedule';
 import type { MarketingAudience } from '../marketing-audience';
 
-const ACTIONS = ['send_email', 'create_activity'];
+const ACTIONS = ['send_email', 'create_activity', 'request_signature'];
 
 export class CreateEmailAutomationDto {
   @IsString()

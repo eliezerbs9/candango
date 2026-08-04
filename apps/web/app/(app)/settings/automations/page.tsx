@@ -42,6 +42,7 @@ import {
   useEmailTemplates,
   useGoogleStatus,
   useOrganization,
+  useSignableDocuments,
   useUpdateEmailAutomation,
   useUpdateMarketingAutomation,
 } from '@/lib/api/hooks';
@@ -63,6 +64,7 @@ export default function AutomationsSettingsPage() {
   const { data: automations = [], isLoading } = useEmailAutomations();
   const { data: triggers = [] } = useAutomationTriggers();
   const { data: templates = [] } = useEmailTemplates();
+  const { data: signableDocs = [] } = useSignableDocuments();
   const { data: google } = useGoogleStatus();
   const del = useDeleteEmailAutomation();
   const update = useUpdateEmailAutomation();
@@ -126,6 +128,14 @@ export default function AutomationsSettingsPage() {
         <>
           create an activity{subject ? <> “<b>{subject}</b>”</> : ''} ({kind ? `${kind}, ` : ''}
           {due})
+        </>
+      );
+    }
+    if (a.action === 'request_signature') {
+      const docName = signableDocs.find((d) => d.id === c.signableDocumentTemplateId)?.name;
+      return (
+        <>
+          request a signature on <b>{docName ?? 'a document'}</b> from the primary contact
         </>
       );
     }
@@ -379,7 +389,8 @@ function AutomationModal({
 
   const [name, setName] = useState('');
   const [tags, setTags] = useState<string[]>([]);
-  const [action, setAction] = useState<'send_email' | 'create_activity'>('send_email');
+  const [action, setAction] = useState<'send_email' | 'create_activity' | 'request_signature'>('send_email');
+  const { data: signableDocs = [] } = useSignableDocuments();
   // The Deal/Marketing "type" applies only to a Send-email action (an activity is always deal-side).
   const [kind, setKind] = useState<AutomationKind>('deal');
   const [trigger, setTrigger] = useState<string | null>(null);
@@ -447,6 +458,10 @@ function AutomationModal({
     }
     if (action === 'create_activity' && !String(config.activitySubject ?? '').trim()) {
       notifications.show({ message: 'Give the task a subject', color: 'red' });
+      return;
+    }
+    if (action === 'request_signature' && !config.signableDocumentTemplateId) {
+      notifications.show({ message: 'Pick a document template to send for signature', color: 'red' });
       return;
     }
     const body = {
@@ -539,9 +554,10 @@ function AutomationModal({
               data={[
                 { value: 'send_email', label: 'Send an email' },
                 { value: 'create_activity', label: 'Create an activity' },
+                { value: 'request_signature', label: 'Request a signature' },
               ]}
               value={action}
-              onChange={(v) => setAction((v as 'send_email' | 'create_activity') ?? 'send_email')}
+              onChange={(v) => setAction((v as 'send_email' | 'create_activity' | 'request_signature') ?? 'send_email')}
               allowDeselect={false}
             />
             {/* When (trigger) */}
@@ -629,6 +645,23 @@ function AutomationModal({
                   );
                 }}
               />
+            ) : action === 'request_signature' ? (
+              <>
+                <Select
+                  label="Generate & send this document"
+                  required
+                  description="Sent to the deal's primary contact for signature via DocuSeal"
+                  placeholder={signableDocs.length === 0 ? 'Create a document template in Settings → Signatures' : 'Pick a document template'}
+                  data={signableDocs.map((d) => ({ value: d.id, label: d.name }))}
+                  value={(config.signableDocumentTemplateId as string) ?? null}
+                  onChange={(v) => setCfg('signableDocumentTemplateId', v ?? undefined)}
+                />
+                <Switch
+                  label="Email the signer now"
+                  checked={config.sendEmail !== false}
+                  onChange={(e) => setCfg('sendEmail', e.currentTarget.checked)}
+                />
+              </>
             ) : (
               <>
                 <Select

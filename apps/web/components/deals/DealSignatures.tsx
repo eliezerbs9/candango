@@ -23,7 +23,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconDots, IconDownload, IconInfoCircle, IconLink, IconPlus, IconTrash, IconUpload } from '@tabler/icons-react';
+import { IconDots, IconDownload, IconFileText, IconInfoCircle, IconLink, IconPlus, IconTrash, IconUpload } from '@tabler/icons-react';
 import Link from 'next/link';
 import { ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/auth/store';
@@ -33,6 +33,8 @@ import {
   useDealSignatures,
   useDeleteSignature,
   useFileUrl,
+  useGenerateSignature,
+  useSignableDocuments,
   useSignatureTemplates,
   useUploadFile,
 } from '@/lib/api/hooks';
@@ -65,8 +67,10 @@ const fail = (e: unknown) => notifications.show({ message: e instanceof ApiError
 export function DealSignatures({ dealId }: { dealId: string }) {
   const token = useAuthStore((s) => s.token);
   const { data: rows = [], isLoading } = useDealSignatures(dealId);
+  const { data: docTemplates = [] } = useSignableDocuments();
   const del = useDeleteSignature(dealId);
   const [opened, ctl] = useDisclosure(false);
+  const [genOpened, genCtl] = useDisclosure(false);
 
   const download = async (id: string) => {
     try {
@@ -85,9 +89,16 @@ export function DealSignatures({ dealId }: { dealId: string }) {
     <Card withBorder radius="md" padding="md">
       <Group justify="space-between" mb="sm">
         <Text fw={600}>Signatures</Text>
-        <Button size="xs" leftSection={<IconPlus size={14} />} onClick={ctl.open}>
-          Request signature
-        </Button>
+        <Group gap="xs">
+          {docTemplates.length > 0 && (
+            <Button size="xs" variant="light" leftSection={<IconFileText size={14} />} onClick={genCtl.open}>
+              Generate document
+            </Button>
+          )}
+          <Button size="xs" leftSection={<IconPlus size={14} />} onClick={ctl.open}>
+            Request signature
+          </Button>
+        </Group>
       </Group>
 
       {isLoading ? (
@@ -144,7 +155,96 @@ export function DealSignatures({ dealId }: { dealId: string }) {
       )}
 
       <RequestModal opened={opened} onClose={ctl.close} dealId={dealId} />
+      <GenerateModal opened={genOpened} onClose={genCtl.close} dealId={dealId} templates={docTemplates} />
     </Card>
+  );
+}
+
+function GenerateModal({
+  opened,
+  onClose,
+  dealId,
+  templates,
+}: {
+  opened: boolean;
+  onClose: () => void;
+  dealId: string;
+  templates: { id: string; name: string }[];
+}) {
+  const generate = useGenerateSignature();
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  const [signerName, setSignerName] = useState('');
+  const [signerEmail, setSignerEmail] = useState('');
+  const [sendEmail, setSendEmail] = useState(true);
+  const [link, setLink] = useState<string | null>(null);
+
+  const close = () => {
+    setTemplateId(null);
+    setSignerName('');
+    setSignerEmail('');
+    setSendEmail(true);
+    setLink(null);
+    onClose();
+  };
+
+  const submit = async () => {
+    if (!templateId) {
+      notifications.show({ message: 'Pick a document template', color: 'red' });
+      return;
+    }
+    try {
+      const res = await generate.mutateAsync({
+        dealId,
+        signableDocumentTemplateId: templateId,
+        signerName: signerName.trim() || undefined,
+        signerEmail: signerEmail.trim() || undefined,
+        sendEmail,
+      });
+      setLink(res.signingUrl ?? null);
+      notifications.show({ message: sendEmail ? 'Generated and sent to the signer' : 'Document generated', color: 'green' });
+    } catch (e) {
+      fail(e);
+    }
+  };
+
+  return (
+    <Modal opened={opened} onClose={close} title="Generate a document for signature" centered>
+      {link ? (
+        <Stack>
+          <Text size="sm">Signing link (share it with the signer):</Text>
+          <TextInput readOnly value={link} />
+          <Group justify="flex-end">
+            <Button variant="default" leftSection={<IconLink size={14} />} onClick={() => { navigator.clipboard.writeText(link); notifications.show({ message: 'Copied', color: 'green' }); }}>
+              Copy link
+            </Button>
+            <Button onClick={close}>Done</Button>
+          </Group>
+        </Stack>
+      ) : (
+        <Stack>
+          <Select
+            label="Document template"
+            placeholder="Pick a document to generate"
+            required
+            data={templates.map((t) => ({ value: t.id, label: t.name }))}
+            value={templateId}
+            onChange={setTemplateId}
+            data-autofocus
+          />
+          <Text size="xs" c="dimmed">
+            Content is filled from this deal. Leave the signer blank to use the deal&apos;s primary contact.
+          </Text>
+          <Group grow>
+            <TextInput label="Signer name" placeholder="Primary contact" value={signerName} onChange={(e) => setSignerName(e.currentTarget.value)} />
+            <TextInput label="Signer email" type="email" placeholder="Primary contact" value={signerEmail} onChange={(e) => setSignerEmail(e.currentTarget.value)} />
+          </Group>
+          <Switch label="Email the signer now" checked={sendEmail} onChange={(e) => setSendEmail(e.currentTarget.checked)} />
+          <Button onClick={submit} loading={generate.isPending} disabled={!templateId}>
+            Generate &amp; send
+          </Button>
+        </Stack>
+      )}
+    </Modal>
   );
 }
 

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MessagesService } from '../messages/messages.service';
 import { MailService } from '../mail/mail.service';
+import { SignaturesService } from '../signatures/signatures.service';
 import {
   buildSignatureValues,
   buildTemplateContext,
@@ -60,6 +61,7 @@ export class EmailAutomationsExecutor {
     private readonly prisma: PrismaService,
     private readonly messages: MessagesService,
     private readonly mail: MailService,
+    private readonly signatures: SignaturesService,
   ) {}
 
   async fireForDeal(orgId: string, dealId: string, auto: AutomationRow): Promise<void> {
@@ -98,6 +100,11 @@ export class EmailAutomationsExecutor {
 
     if (auto.action === 'create_activity') {
       await this.createActivity(orgId, dealId, deal.ownerUserId, deal.primaryPersonId, auto, ctx);
+      return;
+    }
+
+    if (auto.action === 'request_signature') {
+      await this.requestSignature(orgId, dealId, deal.ownerUserId, auto, ctx);
       return;
     }
 
@@ -198,6 +205,29 @@ export class EmailAutomationsExecutor {
       if (dev) void this.mail.sendAutomationErrorToDev(dev, orgName, auto.name, automationId, msg);
     } catch (e) {
       this.logger.warn(`automation ${automationId} error-handling failed: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  /** Generate a document from the automation's document template and send it to the deal's contact. */
+  private async requestSignature(orgId: string, dealId: string, ownerUserId: string, auto: AutomationRow, ctx: Record<string, string>): Promise<void> {
+    const config = (auto.config ?? {}) as Record<string, unknown>;
+    const docId = String(config.signableDocumentTemplateId ?? '');
+    if (!docId) return;
+    if (!ctx['contact.email']) {
+      this.logger.log(`automation ${auto.id}: deal ${dealId} has no contact email — signature skipped`);
+      return;
+    }
+    try {
+      await this.signatures.createGenerated(orgId, ownerUserId, {
+        dealId,
+        signableDocumentTemplateId: docId,
+        signerEmail: ctx['contact.email'],
+        signerName: ctx['contact.name'] || undefined,
+        sendEmail: config.sendEmail !== false,
+      });
+      this.logger.log(`automation ${auto.id} sent a signature request for deal ${dealId}`);
+    } catch (err) {
+      this.logger.warn(`automation ${auto.id} signature request failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

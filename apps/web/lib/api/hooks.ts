@@ -124,7 +124,7 @@ import {
   updateCustomField,
 } from './customFields';
 import { getFileUrl, getUploadStatus, uploadFile } from './uploads';
-import { createSignature, deleteSignature, getDealSignatures, type SignatureBody } from './signatures';
+import { createSignature, deleteSignature, generateSignature, getDealSignatures, type GenerateSignatureBody, type SignatureBody } from './signatures';
 import {
   createSignatureTemplate,
   deleteSignatureTemplate,
@@ -132,6 +132,13 @@ import {
   updateSignatureTemplate,
   type SignatureTemplateBody,
 } from './signature-templates';
+import {
+  createSignableDocument,
+  deleteSignableDocument,
+  getSignableDocuments,
+  updateSignableDocument,
+  type SignableDocumentBody,
+} from './signable-documents';
 import {
   createProposal,
   createProposalTemplate,
@@ -1329,6 +1336,47 @@ export function useDeleteSignatureTemplate() {
   return useMutation({
     mutationFn: (id: string) => deleteSignatureTemplate(token!, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['signature-templates'] }),
+  });
+}
+
+export function useSignableDocuments() {
+  const token = useToken();
+  return useQuery({ queryKey: ['signable-documents'], queryFn: () => getSignableDocuments(token!), enabled: !!token });
+}
+
+export function useCreateSignableDocument() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SignableDocumentBody) => createSignableDocument(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['signable-documents'] }),
+  });
+}
+
+export function useUpdateSignableDocument() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: SignableDocumentBody }) => updateSignableDocument(token!, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['signable-documents'] }),
+  });
+}
+
+export function useDeleteSignableDocument() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteSignableDocument(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['signable-documents'] }),
+  });
+}
+
+export function useGenerateSignature() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: GenerateSignatureBody) => generateSignature(token!, body),
+    onSuccess: (_d, body) => qc.invalidateQueries({ queryKey: ['signatures', body.dealId] }),
   });
 }
 

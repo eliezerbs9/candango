@@ -46,6 +46,18 @@ export function createSignature(token: string, body: SignatureBody) {
   return apiFetch<CreatedSignature>('/signatures', { method: 'POST', token, body: JSON.stringify(body) });
 }
 
+export interface GenerateSignatureBody {
+  dealId: string;
+  signableDocumentTemplateId: string;
+  signerName?: string;
+  signerEmail?: string;
+  sendEmail?: boolean;
+}
+
+export function generateSignature(token: string, body: GenerateSignatureBody) {
+  return apiFetch<CreatedSignature>('/signatures/generate', { method: 'POST', token, body: JSON.stringify(body) });
+}
+
 export function deleteSignature(token: string, id: string) {
   return apiFetch<void>(`/signatures/${id}`, { method: 'DELETE', token });
 }

@@ -70,6 +70,7 @@ model Organization {
   proposals      Proposal[]
   signatureRequests SignatureRequest[]
   signatureTemplates SignatureTemplate[]
+  signableDocumentTemplates SignableDocumentTemplate[]
 }
 
 model User {
@@ -985,6 +986,24 @@ model SignatureTemplate {
 
   organization      Organization       @relation(fields: [orgId], references: [id])
   signatureRequests SignatureRequest[]
+
+  @@index([orgId])
+}
+
+// A generated-agreement template (Class A): HTML content with {{variables}} + inline DocuSeal
+// field tags (<signature-field>, <date-field>, …). Rendered per deal and sent for signature via
+// DocuSeal's HTML API — used by the "Request signature" automation action. Phase 4.
+model SignableDocumentTemplate {
+  id              String    @id @default(cuid())
+  orgId           String
+  name            String
+  bodyHtml        String    @default("")
+  createdByUserId String?
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
 
   @@index([orgId])
 }
