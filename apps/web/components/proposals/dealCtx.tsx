@@ -52,7 +52,15 @@ export function buildDealCtx(data: ProposalRenderCore): ProposalRenderCtx {
     },
     document: ({ fieldKey, pick = 'recent', picked, docs: fixedDocs }) => {
       const all: ProposalDocFile[] = fieldKey ? data.documentsByField[fieldKey] ?? [] : Object.values(data.documentsByField).flat();
-      const docs = fixedDocs ? fixedDocs.map((d) => ({ key: d.url, name: d.name ?? 'Document', url: d.url })) : selectFiles(all, pick, picked);
+      const raw = fixedDocs ? fixedDocs.map((d) => ({ key: d.url, name: d.name ?? 'Document', url: d.url })) : selectFiles(all, pick, picked);
+      // De-duplicate so an accidentally repeated file doesn't render a phantom second row.
+      const seen = new Set<string>();
+      const docs = raw.filter((d) => {
+        const k = d.key || d.url;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
       if (docs.length === 0) return null;
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

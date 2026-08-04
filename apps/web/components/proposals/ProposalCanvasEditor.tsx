@@ -28,6 +28,7 @@ import type { CanvasElement, CanvasPage, ElementType, ProposalDocFile, ProposalI
 import { RichTextBody } from '@/components/common/RichTextBody';
 import { ElementView, ProposalRenderer, type MediaPick, type ProposalRenderCtx } from './ProposalRenderer';
 import { ProposalSlides } from './ProposalSlides';
+import { PageSurface } from './PageSurface';
 
 // 12-column grid + a fine vertical unit, for the alignment overlay and snapping.
 const COL = 100 / 12; // ≈ 8.333%
@@ -473,21 +474,15 @@ export function ProposalCanvasEditor({
             gap: 14,
           }}
         >
-            <div style={{ width: '100%', maxWidth: theme.orientation === 'landscape' ? 1100 : 820 }}>
-            <div
+            <div style={{ width: '100%', maxWidth: theme.orientation === 'landscape' ? 1180 : 820 }}>
+            <PageSurface
               ref={pageRef}
+              orientation={theme.orientation}
+              fit="width"
               onPointerDown={onPagePointerDown}
               onDragOver={(e) => e.preventDefault()}
               onDrop={onCanvasDrop}
-              style={{
-                position: 'relative',
-                width: '100%',
-                aspectRatio: theme.orientation === 'landscape' ? '11 / 8.5' : '8.5 / 11',
-                background: '#fff',
-                borderRadius: 8,
-                overflow: 'hidden',
-                boxShadow: '0 10px 34px rgba(0,0,0,0.38)',
-              }}
+              surfaceStyle={{ borderRadius: 8, boxShadow: '0 10px 34px rgba(0,0,0,0.38)' }}
             >
               {/* 12-column reference grid */}
               {showGrid && (
@@ -542,7 +537,7 @@ export function ProposalCanvasEditor({
                   }}
                 />
               )}
-            </div>
+            </PageSurface>
             </div>
           {pages.length > 1 && (
             <Group

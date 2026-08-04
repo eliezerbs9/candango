@@ -55,6 +55,18 @@ export interface CanvasPage {
   elements: CanvasElement[];
 }
 
+// ── Page geometry ────────────────────────────────────────────────────────────
+// The page is authored at a FIXED reference size and uniformly scaled to fit wherever it renders
+// (editor, preview, presentation, thumbnails). That keeps fonts, spacing and positions identical
+// across every surface — the presentation matches the template exactly. Landscape uses 16:9 so it
+// fits tablets/phones/monitors in landscape; portrait stays US-Letter.
+export function pageDims(orientation?: string): { w: number; h: number } {
+  return orientation === 'landscape' ? { w: 1280, h: 720 } : { w: 816, h: 1056 };
+}
+export function pageAspectCss(orientation?: string): string {
+  return orientation === 'landscape' ? '16 / 9' : '8.5 / 11';
+}
+
 export interface ProposalTheme {
   primaryColor: string;
   accentColor: string;

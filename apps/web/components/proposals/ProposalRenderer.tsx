@@ -1,7 +1,7 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import type { CanvasElement, CanvasPage, ProposalPage, ProposalRow, ProposalTheme } from '@/lib/api/proposals';
+import { pageAspectCss, type CanvasElement, type CanvasPage, type ProposalPage, type ProposalRow, type ProposalTheme } from '@/lib/api/proposals';
 
 /**
  * Renders a proposal — free-canvas pages of absolutely-positioned elements (with a legacy flow
@@ -54,7 +54,7 @@ export function fixedDocs(props: Record<string, unknown>, ctx: ProposalRenderCtx
 }
 
 const isCanvasPage = (p: unknown): p is CanvasPage => !!p && Array.isArray((p as CanvasPage).elements);
-const pageAspect = (o?: string) => (o === 'landscape' ? '11 / 8.5' : '8.5 / 11');
+const pageAspect = (o?: string) => pageAspectCss(o);
 
 function normalize(layout: unknown): (CanvasPage | ProposalPage)[] {
   const arr = Array.isArray(layout) ? layout : [];
@@ -68,8 +68,8 @@ function normalize(layout: unknown): (CanvasPage | ProposalPage)[] {
 /** Renders one element's content, filling its positioned box. Shared with the editor for WYSIWYG. */
 export function ElementView({ element, theme, ctx }: { element: CanvasElement; theme: ProposalTheme; ctx: ProposalRenderCtx }) {
   const s = element.style ?? {};
-  // Text/heading may wrap past their box — let them spill instead of clipping words.
-  const textLike = element.type === 'text' || element.type === 'heading';
+  // Text/heading/document may exceed their box — let them spill instead of clipping content.
+  const textLike = element.type === 'text' || element.type === 'heading' || element.type === 'document';
   const base: CSSProperties = {
     width: '100%',
     height: '100%',

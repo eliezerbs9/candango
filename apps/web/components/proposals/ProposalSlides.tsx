@@ -5,6 +5,7 @@ import { ActionIcon, Group } from '@mantine/core';
 import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import type { CanvasPage, ProposalTheme } from '@/lib/api/proposals';
 import { ElementView, type ProposalRenderCtx } from './ProposalRenderer';
+import { PageSurface } from './PageSurface';
 
 const CSS = `
 @keyframes propSlideFade { from { opacity: 0 } to { opacity: 1 } }
@@ -44,8 +45,6 @@ export function ProposalSlides({
   const clamp = (x: number) => Math.max(0, Math.min(n - 1, x));
   const go = (d: number) => setI((x) => clamp(x + d));
 
-  const fitRef = useRef<HTMLDivElement>(null);
-  const [box, setBox] = useState({ w: 0, h: 0 });
   const startX = useRef<number | null>(null);
 
   const [active, setActive] = useState(true);
@@ -67,14 +66,6 @@ export function ProposalSlides({
   }, [n]);
 
   useEffect(() => {
-    const el = fitRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [fill]);
-
-  useEffect(() => {
     if (immersive) poke();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [immersive]);
@@ -82,8 +73,6 @@ export function ProposalSlides({
   const page = pages[i];
   const transition = theme.transition ?? 'fade';
   const animate = theme.animate ?? true;
-  const landscape = theme.orientation === 'landscape';
-  const ratio = landscape ? 11 / 8.5 : 8.5 / 11; // width / height
 
   const onPointerDown = (e: React.PointerEvent) => {
     startX.current = e.clientX;
@@ -140,26 +129,14 @@ export function ProposalSlides({
 
   const fitArea = (
     <div
-      ref={fitRef}
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
       onPointerMove={immersive ? poke : undefined}
-      style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'pan-y', userSelect: 'none', overflow: 'hidden' }}
+      style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'pan-y', userSelect: 'none', overflow: 'hidden', padding: immersive ? 0 : 4 }}
     >
-      {box.w > 0 &&
-        (() => {
-          let w = box.w;
-          let h = w / ratio;
-          if (h > box.h) {
-            h = box.h;
-            w = h * ratio;
-          }
-          return (
-            <div style={{ position: 'relative', width: w, height: h, background: '#fff', overflow: 'hidden', boxShadow: '0 8px 40px rgba(0,0,0,0.25)', fontFamily: `${theme.fontBody}, sans-serif`, color: theme.accentColor }}>
-              {slide}
-            </div>
-          );
-        })()}
+      <PageSurface orientation={theme.orientation} fit="contain" surfaceStyle={{ boxShadow: '0 8px 40px rgba(0,0,0,0.25)', fontFamily: `${theme.fontBody}, sans-serif`, color: theme.accentColor }}>
+        {slide}
+      </PageSurface>
     </div>
   );
 
@@ -205,24 +182,14 @@ export function ProposalSlides({
   return (
     <div>
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
-      <div
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
-        style={{
-          position: 'relative',
-          width: '100%',
-          aspectRatio: landscape ? '11 / 8.5' : '8.5 / 11',
-          background: '#fff',
-          borderRadius: 10,
-          overflow: 'hidden',
-          boxShadow: '0 10px 34px rgba(0,0,0,0.18)',
-          fontFamily: `${theme.fontBody}, sans-serif`,
-          color: theme.accentColor,
-          touchAction: 'pan-y',
-          userSelect: 'none',
-        }}
-      >
-        {slide}
+      <div onPointerDown={onPointerDown} onPointerUp={onPointerUp} style={{ touchAction: 'pan-y', userSelect: 'none' }}>
+        <PageSurface
+          orientation={theme.orientation}
+          fit="width"
+          surfaceStyle={{ borderRadius: 10, boxShadow: '0 10px 34px rgba(0,0,0,0.18)', fontFamily: `${theme.fontBody}, sans-serif`, color: theme.accentColor }}
+        >
+          {slide}
+        </PageSurface>
       </div>
       {dots}
     </div>
