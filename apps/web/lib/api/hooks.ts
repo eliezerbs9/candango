@@ -135,6 +135,7 @@ import {
 import {
   createSignableDocument,
   deleteSignableDocument,
+  getSignableDocument,
   getSignableDocuments,
   updateSignableDocument,
   type SignableDocumentBody,
@@ -1344,6 +1345,11 @@ export function useSignableDocuments() {
   return useQuery({ queryKey: ['signable-documents'], queryFn: () => getSignableDocuments(token!), enabled: !!token });
 }
 
+export function useSignableDocument(id: string | null) {
+  const token = useToken();
+  return useQuery({ queryKey: ['signable-document', id], queryFn: () => getSignableDocument(token!, id!), enabled: !!token && !!id });
+}
+
 export function useCreateSignableDocument() {
   const token = useToken();
   const qc = useQueryClient();
@@ -1358,7 +1364,10 @@ export function useUpdateSignableDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: SignableDocumentBody }) => updateSignableDocument(token!, id, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['signable-documents'] }),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: ['signable-documents'] });
+      qc.invalidateQueries({ queryKey: ['signable-document', id] });
+    },
   });
 }
 

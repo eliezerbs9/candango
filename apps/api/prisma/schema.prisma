@@ -997,7 +997,12 @@ model SignableDocumentTemplate {
   id              String    @id @default(cuid())
   orgId           String
   name            String
-  bodyHtml        String    @default("")
+  mode            String    @default("html") // html (raw) | builder (free-canvas) | upload (PDF + placed fields)
+  bodyHtml        String    @default("") // html mode
+  layout          Json      @default("[]") // builder mode: CanvasPage[] (same model as proposals)
+  theme           Json      @default("{}") // builder mode: ProposalTheme (paper size/orientation, fonts, colors)
+  fileKey         String? // upload mode: template-owned source PDF (Spaces key)
+  fields          Json      @default("[]") // upload mode: DrawnField[] placed on the PDF
   createdByUserId String?
   archivedAt      DateTime?
   createdAt       DateTime  @default(now())

@@ -129,6 +129,30 @@ export function ElementView({ element, theme, ctx }: { element: CanvasElement; t
       return <div style={base}>{ctx.logo({ fit: (element.props.fit as 'contain' | 'cover' | undefined) ?? 'contain' })}</div>;
     case 'divider':
       return <div style={{ width: '100%', borderTop: `2px solid ${s.color ?? '#dee2e6'}` }} />;
+    case 'field': {
+      // A signature field placeholder (signable documents) — becomes a real DocuSeal field on send.
+      const ft = (element.props.fieldType as string) || 'signature';
+      const label = ft.charAt(0).toUpperCase() + ft.slice(1);
+      return (
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            border: `1.5px dashed ${theme.primaryColor}`,
+            borderRadius: 4,
+            background: `color-mix(in srgb, ${theme.primaryColor} 8%, transparent)`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: theme.primaryColor,
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          {label}
+        </div>
+      );
+    }
     default:
       return null;
   }

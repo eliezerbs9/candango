@@ -7,6 +7,7 @@ import { ACCEPTANCE_FIELDS, INITIALS_ZONE, PDFDocument, addAcceptancePage } from
 import { CreateSignatureDto } from './dto/signature.dto';
 import type { DrawnFieldDto } from './dto/signature-template.dto';
 import { GenerateSignatureDto } from './dto/signable-document.dto';
+import { layoutHasField, layoutToHtml } from './layout-to-html';
 import { buildTemplateContext, renderTemplate } from '../email-templates/template-vars';
 
 const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -194,18 +195,43 @@ export class SignaturesService {
     const signerEmail = (dto.signerEmail || ctx['contact.email'] || '').trim();
     if (!signerEmail) throw new BadRequestException('No signer email — set a primary contact with an email on the deal.');
     const signerName = (dto.signerName || ctx['contact.name'] || '').trim() || undefined;
+    const submitter = { role: 'Client' as const, email: signerEmail, name: signerName };
+    const sendEmail = dto.sendEmail ?? true;
 
-    let inner = renderTemplate(tpl.bodyHtml || '', ctx);
-    // If the author placed no signature field, append a standard acceptance block so the doc is signable.
-    if (!/<(signature|initials|date|text|checkbox)-field/i.test(inner)) inner += DEFAULT_ACCEPTANCE_HTML;
-    const html = wrapSignableHtml(tpl.name, inner);
-
-    const sub = await this.docuseal.createHtmlSubmission({
-      name: tpl.name,
-      html,
-      submitter: { role: 'Client', email: signerEmail, name: signerName },
-      sendEmail: dto.sendEmail ?? true,
-    });
+    let sub: { submissionId: string; signingUrl?: string };
+    if (tpl.mode === 'upload') {
+      // A template-owned PDF with fields placed on it (or a default acceptance page when none).
+      if (!tpl.fileKey || !tpl.fileKey.startsWith(`org-${orgId}/`)) throw new BadRequestException('This template has no source document');
+      const source = await this.spaces.getBytes(tpl.fileKey);
+      let doc: Awaited<ReturnType<typeof PDFDocument.load>>;
+      try {
+        doc = await PDFDocument.load(source);
+      } catch {
+        throw new BadRequestException('The template document must be a PDF.');
+      }
+      const fields: DocusealField[] = drawnToDocusealFields((tpl.fields as DrawnFieldDto[] | null) ?? []);
+      if (fields.length === 0) {
+        const signPage = await addAcceptancePage(doc, { title: tpl.name });
+        fields.push(
+          { name: 'Signature', type: 'signature', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.signature }] },
+          { name: 'Date', type: 'date', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.date }] },
+          { name: 'Printed name', type: 'text', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.name }] },
+        );
+      }
+      const pdf = Buffer.from(await doc.save());
+      sub = await this.docuseal.createPdfSubmission({ name: tpl.name, fileName: `${tpl.name}.pdf`, fileBase64: pdf.toString('base64'), fields, submitter, sendEmail });
+    } else if (tpl.mode === 'builder') {
+      // Free-canvas layout rendered to HTML (same model as the proposal builder).
+      const org = await this.prisma.organization.findFirst({ where: { id: orgId }, select: { logoUrl: true } });
+      let html = layoutToHtml(tpl.layout, tpl.theme as { accentColor?: string; fontHeading?: string; fontBody?: string } | null, ctx, org?.logoUrl ?? null);
+      if (!layoutHasField(tpl.layout)) html = html.replace('</body>', `<div style="width:816px;margin:0 auto;padding:40px">${DEFAULT_ACCEPTANCE_HTML}</div></body>`);
+      sub = await this.docuseal.createHtmlSubmission({ name: tpl.name, html, submitter, sendEmail });
+    } else {
+      // Raw-HTML mode.
+      let inner = renderTemplate(tpl.bodyHtml || '', ctx);
+      if (!/<(signature|initials|date|text|checkbox)-field/i.test(inner)) inner += DEFAULT_ACCEPTANCE_HTML;
+      sub = await this.docuseal.createHtmlSubmission({ name: tpl.name, html: wrapSignableHtml(tpl.name, inner), submitter, sendEmail });
+    }
 
     const row = await this.prisma.signatureRequest.create({
       data: {
@@ -215,6 +241,7 @@ export class SignaturesService {
         status: 'sent',
         signerName: signerName ?? null,
         signerEmail,
+        sourceFileKey: tpl.mode === 'upload' ? tpl.fileKey : null,
         docusealSubmissionId: sub.submissionId || null,
         createdByUserId: userId,
         sentAt: new Date(),

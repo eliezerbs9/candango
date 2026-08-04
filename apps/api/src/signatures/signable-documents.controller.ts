@@ -14,6 +14,11 @@ export class SignableDocumentsController {
     return this.svc.list(u.orgId);
   }
 
+  @Get(':id')
+  get(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.getOne(u.orgId, id);
+  }
+
   @Post()
   create(@CurrentUser() u: AuthContext, @Body() dto: CreateSignableDocumentDto) {
     return this.svc.create(u.orgId, u.userId, dto);

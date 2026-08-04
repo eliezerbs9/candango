@@ -1,20 +1,38 @@
 import { apiFetch } from './client';
+import type { CanvasPage, ProposalTheme } from './proposals';
+import type { DrawnField } from './signature-templates';
+
+export type SignableDocMode = 'html' | 'builder' | 'upload';
 
 export interface SignableDocumentTemplate {
   id: string;
   name: string;
+  mode: SignableDocMode;
   bodyHtml: string;
+  layout: CanvasPage[];
+  theme: Partial<ProposalTheme>;
+  fileKey: string | null;
+  fields: DrawnField[];
   createdAt: string;
   updatedAt: string;
 }
 
 export interface SignableDocumentBody {
-  name: string;
+  name?: string;
+  mode?: SignableDocMode;
   bodyHtml?: string;
+  layout?: CanvasPage[];
+  theme?: Partial<ProposalTheme>;
+  fileKey?: string | null;
+  fields?: DrawnField[];
 }
 
 export function getSignableDocuments(token: string) {
   return apiFetch<SignableDocumentTemplate[]>('/signable-documents', { token });
+}
+
+export function getSignableDocument(token: string, id: string) {
+  return apiFetch<SignableDocumentTemplate>(`/signable-documents/${id}`, { token });
 }
 
 export function createSignableDocument(token: string, body: SignableDocumentBody) {

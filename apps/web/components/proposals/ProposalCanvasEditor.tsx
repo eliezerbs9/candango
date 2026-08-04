@@ -93,9 +93,21 @@ export function toCanvasPages(layout: unknown): CanvasPage[] {
   });
 }
 
+const FIELD_SIZES: Record<string, { w: number; h: number }> = {
+  signature: { w: 28, h: 6 },
+  initials: { w: 12, h: 5 },
+  date: { w: 18, h: 4.5 },
+  text: { w: 24, h: 4.5 },
+};
+
 /** A sensible default element (percent geometry) for a newly-added type. */
-function newElement(type: ElementType): CanvasElement {
+function newElement(type: ElementType, extra?: Record<string, unknown>): CanvasElement {
   const base = { id: uid(), x: 8, y: 8, w: 50, h: 12, props: {}, type } as CanvasElement;
+  if (type === 'field') {
+    const fieldType = (extra?.fieldType as string) ?? 'signature';
+    const sz = FIELD_SIZES[fieldType] ?? FIELD_SIZES.signature;
+    return { ...base, w: sz.w, h: sz.h, props: { fieldType, label: fieldType.charAt(0).toUpperCase() + fieldType.slice(1) } };
+  }
   switch (type) {
     case 'heading':
       return { ...base, w: 70, h: 9, props: { text: 'Heading' }, style: { fontSize: 32, fontWeight: 800 } };
@@ -153,7 +165,17 @@ export interface ProposalCanvasEditorProps {
   previewCtx?: ProposalRenderCtx;
   /** When true (deal builder), elements the template marked as locked can't be moved/edited/deleted. */
   enforceLocks?: boolean;
+  /** When true (signable-document builder), the palette also offers signature/initials/date/text fields. */
+  signatureFields?: boolean;
 }
+
+/** Placeable signature fields (signable-document builder only). */
+const FIELD_PALETTE: { fieldType: string; label: string }[] = [
+  { fieldType: 'signature', label: 'Signature' },
+  { fieldType: 'initials', label: 'Initials' },
+  { fieldType: 'date', label: 'Date' },
+  { fieldType: 'text', label: 'Text field' },
+];
 
 export function ProposalCanvasEditor({
   pages,
@@ -173,6 +195,7 @@ export function ProposalCanvasEditor({
   onPreviewDealChange,
   previewCtx,
   enforceLocks = false,
+  signatureFields = false,
 }: ProposalCanvasEditorProps) {
   const [pageId, setPageId] = useState<string | null>(pages[0]?.id ?? null);
   const [selIds, setSelIds] = useState<string[]>([]);
@@ -199,14 +222,14 @@ export function ProposalCanvasEditor({
 
   const setPageElements = (fn: (els: CanvasElement[]) => CanvasElement[]) =>
     page && onPagesChange(pages.map((p) => (p.id === page.id ? { ...p, elements: fn(p.elements) } : p)));
-  const addElement = (type: ElementType) => {
-    const el = newElement(type);
+  const addElement = (type: ElementType, extra?: Record<string, unknown>) => {
+    const el = newElement(type, extra);
     setPageElements((els) => [...els, el]);
     setSelId(el.id);
   };
   /** Place a dragged-in element where it was dropped (percent geometry, snapped + clamped). */
-  const addElementAt = (type: ElementType, xPct: number, yPct: number) => {
-    const el = newElement(type);
+  const addElementAt = (type: ElementType, xPct: number, yPct: number, extra?: Record<string, unknown>) => {
+    const el = newElement(type, extra);
     el.x = clamp(snap ? snapTo(xPct, COL) : xPct, 0, 100 - el.w);
     el.y = clamp(snap ? snapTo(yPct, ROW) : yPct, 0, 100 - el.h);
     setPageElements((els) => [...els, el]);
@@ -215,9 +238,10 @@ export function ProposalCanvasEditor({
   const onCanvasDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const type = e.dataTransfer.getData('text/proposal-element') as ElementType;
+    const fieldType = e.dataTransfer.getData('text/proposal-field') || undefined;
     const rect = pageRef.current?.getBoundingClientRect();
     if (!type || !rect) return;
-    addElementAt(type, ((e.clientX - rect.left) / rect.width) * 100, ((e.clientY - rect.top) / rect.height) * 100);
+    addElementAt(type, ((e.clientX - rect.left) / rect.width) * 100, ((e.clientY - rect.top) / rect.height) * 100, fieldType ? { fieldType } : undefined);
   };
   const updateElement = (elId: string, patch: Partial<CanvasElement>) =>
     setPageElements((els) => els.map((e) => (e.id === elId ? { ...e, ...patch } : e)));
@@ -569,7 +593,8 @@ export function ProposalCanvasEditor({
               Drag onto the page, or click to drop it in.
             </Text>
             <Group gap={6}>
-              {PALETTE.map((b) => (
+              {/* Signable documents only render heading/text/logo/divider server-side — hide the rest to stay WYSIWYG. */}
+              {(signatureFields ? PALETTE.filter((b) => !['image', 'document', 'pricing'].includes(b.type)) : PALETTE).map((b) => (
                 <Button
                   key={b.type}
                   size="xs"
@@ -583,6 +608,32 @@ export function ProposalCanvasEditor({
                 </Button>
               ))}
             </Group>
+            {signatureFields && (
+              <>
+                <Text size="xs" fw={600} mt="sm" mb={4}>
+                  Signature fields
+                </Text>
+                <Group gap={6}>
+                  {FIELD_PALETTE.map((f) => (
+                    <Button
+                      key={f.fieldType}
+                      size="xs"
+                      variant="light"
+                      color="candango"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('text/proposal-element', 'field');
+                        e.dataTransfer.setData('text/proposal-field', f.fieldType);
+                      }}
+                      onClick={() => addElement('field', { fieldType: f.fieldType })}
+                      style={{ cursor: 'grab' }}
+                    >
+                      {f.label}
+                    </Button>
+                  ))}
+                </Group>
+              </>
+            )}
           </Card>
 
           {sel ? (

@@ -26,7 +26,9 @@ export interface ProposalPage {
 
 // ── Free-canvas model ──────────────────────────────────────────────────────────
 export type Orientation = 'portrait' | 'landscape';
-export type ElementType = 'text' | 'heading' | 'image' | 'document' | 'pricing' | 'divider' | 'logo';
+export type ElementType = 'text' | 'heading' | 'image' | 'document' | 'pricing' | 'divider' | 'logo' | 'field';
+/** Signature-field sub-type carried in a 'field' element's props (signable documents only). */
+export type SignFieldType = 'signature' | 'initials' | 'date' | 'text';
 
 export interface ElementStyle {
   fontSize?: number; // px

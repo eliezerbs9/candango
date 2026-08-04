@@ -2,10 +2,26 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSignableDocumentDto, UpdateSignableDocumentDto } from './dto/signable-document.dto';
 
-const shape = (r: { id: string; name: string; bodyHtml: string; createdAt: Date; updatedAt: Date }) => ({
+const shape = (r: {
+  id: string;
+  name: string;
+  mode: string;
+  bodyHtml: string;
+  layout: unknown;
+  theme: unknown;
+  fileKey: string | null;
+  fields: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+}) => ({
   id: r.id,
   name: r.name,
+  mode: r.mode,
   bodyHtml: r.bodyHtml,
+  layout: (r.layout as unknown[] | null) ?? [],
+  theme: (r.theme as Record<string, unknown> | null) ?? {},
+  fileKey: r.fileKey,
+  fields: (r.fields as unknown[] | null) ?? [],
   createdAt: r.createdAt.toISOString(),
   updatedAt: r.updatedAt.toISOString(),
 });
@@ -25,9 +41,23 @@ export class SignableDocumentsService {
     return row;
   }
 
+  async getOne(orgId: string, id: string) {
+    return shape(await this.get(orgId, id));
+  }
+
   async create(orgId: string, userId: string, dto: CreateSignableDocumentDto) {
     const row = await this.prisma.signableDocumentTemplate.create({
-      data: { orgId, createdByUserId: userId, name: dto.name.trim(), bodyHtml: dto.bodyHtml ?? '' },
+      data: {
+        orgId,
+        createdByUserId: userId,
+        name: dto.name.trim(),
+        mode: dto.mode ?? 'html',
+        bodyHtml: dto.bodyHtml ?? '',
+        layout: (dto.layout ?? []) as object,
+        theme: (dto.theme ?? {}) as object,
+        fileKey: dto.fileKey ?? null,
+        fields: (dto.fields ?? []) as object,
+      },
     });
     return shape(row);
   }
@@ -38,7 +68,12 @@ export class SignableDocumentsService {
       where: { id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.mode !== undefined ? { mode: dto.mode } : {}),
         ...(dto.bodyHtml !== undefined ? { bodyHtml: dto.bodyHtml } : {}),
+        ...(dto.layout !== undefined ? { layout: dto.layout as object } : {}),
+        ...(dto.theme !== undefined ? { theme: dto.theme as object } : {}),
+        ...(dto.fileKey !== undefined ? { fileKey: dto.fileKey } : {}),
+        ...(dto.fields !== undefined ? { fields: dto.fields as object } : {}),
       },
     });
     return shape(row);

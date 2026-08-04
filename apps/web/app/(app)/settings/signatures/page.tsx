@@ -17,6 +17,7 @@ import {
   TextInput,
   ThemeIcon,
 } from '@mantine/core';
+import { useRouter } from 'next/navigation';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { IconFileText, IconInfoCircle, IconPencil, IconPlus, IconSignature, IconTrash } from '@tabler/icons-react';
@@ -29,11 +30,10 @@ import {
   useSignableDocuments,
   useSignatureTemplates,
   useTemplateVariables,
-  useUpdateSignableDocument,
   useUpdateSignatureTemplate,
 } from '@/lib/api/hooks';
 import type { InitialsRule, SignatureTemplate, SignatureTemplateBody } from '@/lib/api/signature-templates';
-import type { SignableDocumentBody, SignableDocumentTemplate } from '@/lib/api/signable-documents';
+import type { SignableDocumentTemplate } from '@/lib/api/signable-documents';
 import { VariableTextarea } from '@/components/common/VariableTextarea';
 
 const INITIALS_LABELS: Record<InitialsRule, string> = {
@@ -144,20 +144,20 @@ export default function SignatureTemplatesPage() {
 }
 
 // ── Document templates (generated agreements) ────────────────────────────────
-function DocumentTemplatesSection() {
-  const { data: docs = [], isLoading } = useSignableDocuments();
-  const del = useDeleteSignableDocument();
-  const [editing, setEditing] = useState<SignableDocumentTemplate | null>(null);
-  const [opened, ctl] = useDisclosure(false);
+const MODE_LABEL: Record<string, string> = { builder: 'Visual', upload: 'Upload', html: 'HTML' };
 
-  const openNew = () => {
-    setEditing(null);
-    ctl.open();
-  };
-  const openEdit = (d: SignableDocumentTemplate) => {
-    setEditing(d);
-    ctl.open();
-  };
+function DocumentTemplatesSection() {
+  const router = useRouter();
+  const { data: docs = [], isLoading } = useSignableDocuments();
+  const create = useCreateSignableDocument();
+  const del = useDeleteSignableDocument();
+
+  const openNew = () =>
+    create.mutate(
+      { name: 'Untitled document', mode: 'builder' },
+      { onSuccess: (d) => router.push(`/settings/signatures/documents/${d.id}`), onError: fail },
+    );
+  const openEdit = (d: SignableDocumentTemplate) => router.push(`/settings/signatures/documents/${d.id}`);
   const remove = (d: SignableDocumentTemplate) => {
     if (!window.confirm(`Delete document template “${d.name}”?`)) return;
     del.mutate(d.id, { onSuccess: () => notifications.show({ message: 'Deleted', color: 'green' }), onError: fail });
@@ -171,10 +171,10 @@ function DocumentTemplatesSection() {
             Document templates
           </Text>
           <Text size="sm" c="dimmed">
-            Generated agreements — HTML content with <code>{'{{variables}}'}</code> that resolve per deal. Used by the <b>Request signature</b> automation action.
+            Generated agreements filled per deal — build one visually (paper, drag &amp; drop, variables + signature fields), upload a PDF and place fields, or write raw HTML. Used by the <b>Request signature</b> automation and the deal <b>Generate document</b> button.
           </Text>
         </div>
-        <Button leftSection={<IconPlus size={16} />} onClick={openNew}>
+        <Button leftSection={<IconPlus size={16} />} onClick={openNew} loading={create.isPending}>
           New document
         </Button>
       </Group>
@@ -201,9 +201,14 @@ function DocumentTemplatesSection() {
                   <ThemeIcon variant="light" color="blue" radius="md" size="lg">
                     <IconFileText size={18} />
                   </ThemeIcon>
-                  <Text fw={600} lineClamp={1}>
-                    {d.name}
-                  </Text>
+                  <div style={{ minWidth: 0 }}>
+                    <Text fw={600} lineClamp={1}>
+                      {d.name}
+                    </Text>
+                    <Badge size="xs" variant="light" color="gray" style={{ textTransform: 'none' }}>
+                      {MODE_LABEL[d.mode] ?? d.mode}
+                    </Badge>
+                  </div>
                 </Group>
                 <Group gap={4} wrap="nowrap">
                   <Button size="compact-xs" variant="subtle" leftSection={<IconPencil size={13} />} onClick={() => openEdit(d)}>
@@ -218,111 +223,7 @@ function DocumentTemplatesSection() {
           ))}
         </SimpleGrid>
       )}
-
-      <DocumentModal opened={opened} onClose={ctl.close} doc={editing} />
     </Stack>
-  );
-}
-
-const FIELD_TAGS: { label: string; tag: string }[] = [
-  { label: 'Signature', tag: '<signature-field name="Signature" role="Client" required="true"></signature-field>' },
-  { label: 'Initials', tag: '<initials-field name="Initials" role="Client"></initials-field>' },
-  { label: 'Date', tag: '<date-field name="Date" role="Client"></date-field>' },
-  { label: 'Text', tag: '<text-field name="Text" role="Client"></text-field>' },
-];
-
-function DocumentModal({ opened, onClose, doc }: { opened: boolean; onClose: () => void; doc: SignableDocumentTemplate | null }) {
-  const create = useCreateSignableDocument();
-  const update = useUpdateSignableDocument();
-  const { data: variables = [] } = useTemplateVariables();
-  const dealVars = useMemo(() => variables.filter((v) => !v.hidden && (!v.scopes || v.scopes.includes('deal'))), [variables]);
-
-  const [name, setName] = useState('');
-  const [bodyHtml, setBodyHtml] = useState('');
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
-
-  const seededFor = useRef<string | null>(null);
-  const seedKey = opened ? doc?.id ?? 'new' : null;
-  if (seedKey && seededFor.current !== seedKey) {
-    seededFor.current = seedKey;
-    setName(doc?.name ?? '');
-    setBodyHtml(doc?.bodyHtml ?? '');
-  }
-  if (!opened && seededFor.current) seededFor.current = null;
-
-  const insert = (snippet: string) => {
-    const el = bodyRef.current;
-    if (!el) {
-      setBodyHtml((t) => t + snippet);
-      return;
-    }
-    const start = el.selectionStart ?? bodyHtml.length;
-    const end = el.selectionEnd ?? bodyHtml.length;
-    const next = bodyHtml.slice(0, start) + snippet + bodyHtml.slice(end);
-    setBodyHtml(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      const caret = start + snippet.length;
-      el.setSelectionRange(caret, caret);
-    });
-  };
-
-  const busy = create.isPending || update.isPending;
-  const submit = () => {
-    if (!name.trim()) {
-      notifications.show({ message: 'Name is required', color: 'red' });
-      return;
-    }
-    const body: SignableDocumentBody = { name: name.trim(), bodyHtml };
-    const done = { onSuccess: () => { notifications.show({ message: 'Saved', color: 'green' }); onClose(); }, onError: fail };
-    if (doc) update.mutate({ id: doc.id, body }, done);
-    else create.mutate(body, done);
-  };
-
-  return (
-    <Modal opened={opened} onClose={onClose} title={doc ? 'Edit document template' : 'New document template'} centered size="xl">
-      <Stack>
-        <TextInput label="Name" placeholder="e.g. Service Agreement" required value={name} onChange={(e) => setName(e.currentTarget.value)} data-autofocus />
-
-        <div>
-          <Group justify="space-between" align="flex-end" mb={4}>
-            <Text size="sm" fw={500}>
-              Document HTML
-            </Text>
-            <Group gap={4}>
-              {FIELD_TAGS.map((f) => (
-                <Badge key={f.label} variant="light" color="candango" style={{ cursor: 'pointer', textTransform: 'none' }} onClick={() => insert(f.tag)}>
-                  + {f.label}
-                </Badge>
-              ))}
-            </Group>
-          </Group>
-          <VariableTextarea
-            inputRef={bodyRef}
-            placeholder={'<h2>Service Agreement</h2>\n<p>This agreement is between {{company.name}} and ...</p>'}
-            autosize
-            minRows={8}
-            maxRows={20}
-            styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)', fontSize: 12 } }}
-            value={bodyHtml}
-            onChange={setBodyHtml}
-            variables={dealVars}
-          />
-          <Text size="xs" c="dimmed" mt={4}>
-            Write HTML. Insert signature fields with the buttons above (they flow with the content). If you add none, a standard Acceptance &amp; Signature block is appended automatically.
-          </Text>
-        </div>
-
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={submit} loading={busy}>
-            {doc ? 'Save' : 'Create'}
-          </Button>
-        </Group>
-      </Stack>
-    </Modal>
   );
 }
 
