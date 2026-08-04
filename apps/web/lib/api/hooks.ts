@@ -124,6 +124,7 @@ import {
   updateCustomField,
 } from './customFields';
 import { getFileUrl, getUploadStatus, uploadFile } from './uploads';
+import { createSignature, deleteSignature, getDealSignatures, type SignatureBody } from './signatures';
 import {
   createProposal,
   createProposalTemplate,
@@ -1260,6 +1261,35 @@ export function useProposalRender(id: string | null) {
     queryKey: ['proposal-render', id],
     queryFn: () => getProposalRender(token!, id!),
     enabled: !!token && !!id,
+  });
+}
+
+// --- E-signature ---
+
+export function useDealSignatures(dealId: string | null) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['signatures', dealId],
+    queryFn: () => getDealSignatures(token!, dealId!),
+    enabled: !!token && !!dealId,
+  });
+}
+
+export function useCreateSignature() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SignatureBody) => createSignature(token!, body),
+    onSuccess: (_d, body) => qc.invalidateQueries({ queryKey: ['signatures', body.dealId] }),
+  });
+}
+
+export function useDeleteSignature(dealId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteSignature(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['signatures', dealId] }),
   });
 }
 

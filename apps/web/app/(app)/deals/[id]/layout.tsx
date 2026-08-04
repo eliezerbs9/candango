@@ -182,6 +182,7 @@ export default function DealLayout({ children }: { children: ReactNode }) {
           {tabLink('overview', 'Overview', `/deals/${id}`)}
           {dealFields.length > 0 && tabLink('custom-fields', 'Custom fields', `/deals/${id}/custom-fields`)}
           {tabLink('proposals', 'Proposals', `/deals/${id}/proposals`)}
+          {tabLink('signatures', 'Signatures', `/deals/${id}/signatures`)}
           {tabLink('estimates', qb?.connected ? 'Estimates & invoices' : 'Estimates', `/deals/${id}/estimates`)}
         </Tabs.List>
       </Tabs>
