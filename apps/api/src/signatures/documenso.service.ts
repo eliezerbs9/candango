@@ -77,15 +77,19 @@ export class DocumensoService {
     // Each field area becomes one Documenso field for its recipient (normalized 0–1 top-left → percent).
     for (const f of input.fields) {
       const recipientId = recipientIds[f.recipient ?? 0] ?? recipientIds[0];
+      const type = FIELD_TYPE[f.type] ?? 'SIGNATURE';
+      // Documenso requires a fieldMeta for TEXT fields (a bare TEXT field 500s).
+      const fieldMeta = type === 'TEXT' ? { type: 'text', label: f.name } : undefined;
       for (const a of f.areas) {
         await this.req('POST', `/api/v1/documents/${documentId}/fields`, {
           recipientId,
-          type: FIELD_TYPE[f.type] ?? 'SIGNATURE',
+          type,
           pageNumber: a.page,
           pageX: a.x * 100,
           pageY: a.y * 100,
           pageWidth: a.w * 100,
           pageHeight: a.h * 100,
+          ...(fieldMeta ? { fieldMeta } : {}),
         });
       }
     }
