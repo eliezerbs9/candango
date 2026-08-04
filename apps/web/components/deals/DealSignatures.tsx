@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -643,6 +643,14 @@ function SignerFields({
   const [busy, setBusy] = useState(false);
 
   const withEmail = recipients.filter((r) => r.email);
+
+  // Default the signer to the deal's primary contact (the recipients endpoint returns it first).
+  const didInit = useRef(false);
+  useEffect(() => {
+    if (didInit.current || withEmail.length === 0) return;
+    didInit.current = true;
+    setPersonId((cur) => cur ?? withEmail[0].id);
+  }, [withEmail]);
 
   // Resolve the picked person to a signer — always "First Last" for the document (not the display format).
   useEffect(() => {

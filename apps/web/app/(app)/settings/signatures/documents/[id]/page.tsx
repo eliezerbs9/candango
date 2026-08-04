@@ -151,37 +151,30 @@ export default function DocumentTemplateEditor() {
             ]}
           />
         </div>
-        <div>
-          <Text size="xs" fw={500} mb={4}>
-            Signed by
-          </Text>
-          <SegmentedControl
-            value={parties}
-            onChange={(v) => setParties(v as 'one' | 'both')}
+        <Group align="flex-end" gap="sm" wrap="wrap">
+          <Select
+            label="Second signer"
+            description="The client (primary contact) always signs first."
             data={[
-              { value: 'one', label: 'Client only' },
-              { value: 'both', label: 'Both parties' },
+              { value: 'none', label: 'Client signs alone' },
+              { value: 'owner', label: 'Deal owner (sales rep)' },
+              { value: 'user', label: 'A specific user' },
             ]}
+            value={parties === 'one' ? 'none' : party2Source}
+            onChange={(v) => {
+              if (v === 'none') setParties('one');
+              else {
+                setParties('both');
+                setParty2Source(v as 'owner' | 'user');
+              }
+            }}
+            allowDeselect={false}
+            w={220}
           />
-        </div>
-        {parties === 'both' && (
-          <Group align="flex-end" gap="sm" wrap="wrap">
-            <Select
-              label="Second signer"
-              data={[
-                { value: 'owner', label: 'Deal owner (sales rep)' },
-                { value: 'user', label: 'A specific user' },
-              ]}
-              value={party2Source}
-              onChange={(v) => setParty2Source((v as 'owner' | 'user') ?? 'owner')}
-              allowDeselect={false}
-              w={200}
-            />
-            {party2Source === 'user' && (
-              <Select label="Workspace user" placeholder="Pick a user" data={userOptions} value={party2UserId} onChange={setParty2UserId} searchable nothingFoundMessage="No users" w={220} />
-            )}
-          </Group>
-        )}
+          {parties === 'both' && party2Source === 'user' && (
+            <Select label="Workspace user" placeholder="Pick a user" data={userOptions} value={party2UserId} onChange={setParty2UserId} searchable nothingFoundMessage="No users" w={220} />
+          )}
+        </Group>
       </Group>
 
       {mode === 'builder' ? (

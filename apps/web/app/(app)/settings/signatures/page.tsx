@@ -401,37 +401,26 @@ function TemplateModal({ opened, onClose, template }: { opened: boolean; onClose
       <Stack>
         <TextInput label="Name" placeholder="e.g. Initials every page + Acceptance" required value={name} onChange={(e) => setName(e.currentTarget.value)} data-autofocus />
 
-        <div>
-          <Text size="sm" fw={500} mb={4}>
-            Signed by
-          </Text>
-          <SegmentedControl
-            fullWidth
-            data={[
-              { label: 'Client only', value: 'one' },
-              { label: 'Both parties', value: 'both' },
-            ]}
-            value={parties}
-            onChange={(v) => setParties(v as SignatureParties)}
-          />
-        </div>
-        {parties === 'both' && (
-          <>
-            <Select
-              label="Second signer"
-              description="Who counter-signs as the second party."
-              data={[
-                { value: 'owner', label: 'Deal owner (sales rep)' },
-                { value: 'user', label: 'A specific workspace user' },
-              ]}
-              value={party2Source}
-              onChange={(v) => setParty2Source((v as Party2Source) ?? 'owner')}
-              allowDeselect={false}
-            />
-            {party2Source === 'user' && (
-              <Select label="Workspace user" placeholder="Pick a user" data={userOptions} value={party2UserId} onChange={setParty2UserId} searchable nothingFoundMessage="No users" />
-            )}
-          </>
+        <Select
+          label="Second signer"
+          description="Who counter-signs. The client — the deal's primary contact — always signs first."
+          data={[
+            { value: 'none', label: 'Client signs alone' },
+            { value: 'owner', label: 'Deal owner (sales rep)' },
+            { value: 'user', label: 'A specific workspace user' },
+          ]}
+          value={parties === 'one' ? 'none' : party2Source}
+          onChange={(v) => {
+            if (v === 'none') setParties('one');
+            else {
+              setParties('both');
+              setParty2Source(v as Party2Source);
+            }
+          }}
+          allowDeselect={false}
+        />
+        {parties === 'both' && party2Source === 'user' && (
+          <Select label="Workspace user" placeholder="Pick a user" data={userOptions} value={party2UserId} onChange={setParty2UserId} searchable nothingFoundMessage="No users" />
         )}
 
         <Select label="Initials" data={RULE_OPTIONS} value={initialsRule} onChange={(v) => setInitialsRule((v as InitialsRule) ?? 'none')} allowDeselect={false} />

@@ -269,7 +269,8 @@ export class SignaturesService {
     const fields: DocusealField[] = [...drawnToDocusealFields(drawn)];
     if (acceptance) {
       const body = acceptanceText ? renderTemplate(acceptanceText, await this.dealContext(orgId, userId, dto.dealId)) : undefined;
-      const parties = recipients.map((r, i) => ({ label: i === 0 ? 'Client' : r.name || 'Company', recipient: i }));
+      const labels = await this.partyBlockLabels(orgId, dto.dealId);
+      const parties = recipients.map((r, i) => ({ label: i === 0 ? labels.client : labels.workspace, recipient: i }));
       fields.push(...(await addAcceptancePage(doc, { title: dto.title, body, parties })));
     }
     if (initialsPages.length > 0) {
@@ -354,7 +355,8 @@ export class SignaturesService {
     const recipients = await this.resolveRecipients(orgId, dto.dealId, { email: signerEmail, name: signerName }, party2);
     const fields: DocusealField[] = drawnToDocusealFields(tpl.mode === 'upload' ? ((tpl.fields as DrawnFieldDto[] | null) ?? []) : []);
     if (fields.length === 0) {
-      const parties = recipients.map((r, i) => ({ label: i === 0 ? 'Client' : r.name || 'Company', recipient: i }));
+      const labels = await this.partyBlockLabels(orgId, dto.dealId);
+      const parties = recipients.map((r, i) => ({ label: i === 0 ? labels.client : labels.workspace, recipient: i }));
       fields.push(...(await addAcceptancePage(doc, { title: tpl.name, parties })));
     }
     const pdf = Buffer.from(await doc.save());
@@ -416,6 +418,19 @@ export class SignaturesService {
       if (u.email.toLowerCase() !== client.email.toLowerCase()) recipients.push({ email: u.email, name, owner: true });
     }
     return recipients;
+  }
+
+  /**
+   * The heading shown above each party's signature block: the client's block is titled with the
+   * deal's company name (else "Client"); the second party's block is titled with the workspace name
+   * (the company sending) — not the individual signer's personal name.
+   */
+  private async partyBlockLabels(orgId: string, dealId: string): Promise<{ client: string; workspace: string }> {
+    const [deal, org] = await Promise.all([
+      this.prisma.deal.findFirst({ where: { id: dealId, orgId }, select: { company: { select: { name: true } } } }),
+      this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true } }),
+    ]);
+    return { client: deal?.company?.name?.trim() || 'Client', workspace: org?.name?.trim() || 'Company' };
   }
 
   /** Merge our recipients (with owner flags) with Documenso's signing URLs for storage. */
