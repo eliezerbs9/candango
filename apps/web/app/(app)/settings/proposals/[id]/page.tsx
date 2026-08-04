@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Anchor, Center, Group, Loader, Select, Stack, TextInput } from '@mantine/core';
+import { Anchor, Center, Group, Loader, Stack, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconArrowLeft } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
@@ -53,15 +53,12 @@ export default function ProposalTemplateEditor() {
   const { data: variables = [] } = useTemplateVariables();
   const { data: dealFields = [] } = useCustomFields('deal');
   const { data: org } = useOrganization();
-  const { data: emailTemplates = [] } = useEmailTemplates();
-  const dealEmailTemplates = emailTemplates.filter((t) => t.scope === 'deal');
   const update = useUpdateProposalTemplate();
   const upload = useUploadFile();
 
   const [name, setName] = useState('');
   const [theme, setTheme] = useState<ProposalTheme | null>(null);
   const [pages, setPages] = useState<CanvasPage[]>([]);
-  const [emailTemplateId, setEmailTemplateId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [previewDealId, setPreviewDealId] = useState<string | null>(null);
 
@@ -102,15 +99,14 @@ export default function ProposalTemplateEditor() {
     setTheme({ orientation: 'portrait', ...template.theme });
     const p = toCanvasPages(template.layout);
     setPages(p.length ? p : [{ id: uid(), elements: [] }]);
-    setEmailTemplateId(template.emailTemplateId);
     setHydrated(true);
   }, [template, hydrated]);
 
   const status = useAutosave(
-    { name: name.trim(), theme, layout: pages, emailTemplateId: emailTemplateId ?? '' },
+    { name: name.trim(), theme, layout: pages },
     async (v) => {
       try {
-        await update.mutateAsync({ id, body: v as { name: string; theme: ProposalTheme; layout: CanvasPage[]; emailTemplateId: string } });
+        await update.mutateAsync({ id, body: v as { name: string; theme: ProposalTheme; layout: CanvasPage[] } });
       } catch (e) {
         fail(e);
         throw e;
@@ -136,17 +132,7 @@ export default function ProposalTemplateEditor() {
       </Anchor>
 
       <Group justify="space-between" align="flex-end" wrap="wrap">
-        <TextInput label="Template name" value={name} onChange={(e) => setName(e.currentTarget.value)} style={{ flex: '1 1 200px' }} />
-        <Select
-          label="Covering email"
-          description="Sent with the proposal link."
-          placeholder="Pick an email template"
-          searchable
-          data={dealEmailTemplates.map((t) => ({ value: t.id, label: t.name }))}
-          value={emailTemplateId}
-          onChange={setEmailTemplateId}
-          style={{ flex: '0 1 240px' }}
-        />
+        <TextInput label="Template name" value={name} onChange={(e) => setName(e.currentTarget.value)} style={{ flex: '1 1 240px' }} />
         <SaveStatus status={status} />
       </Group>
 

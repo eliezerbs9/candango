@@ -17,8 +17,8 @@
  *  - `marketing` — broadcast to an audience of contacts from the workspace (no single deal, no
  *                  personal sender): contact, company, workspace only. Used by marketing automations.
  */
-export type TemplateScope = 'deal' | 'marketing';
-export const TEMPLATE_SCOPES: TemplateScope[] = ['deal', 'marketing'];
+export type TemplateScope = 'deal' | 'marketing' | 'proposal';
+export const TEMPLATE_SCOPES: TemplateScope[] = ['deal', 'marketing', 'proposal'];
 
 export interface TemplateVariable {
   key: string;
@@ -32,8 +32,11 @@ export interface TemplateVariable {
   scopes?: TemplateScope[];
 }
 
-const BOTH: TemplateScope[] = ['deal', 'marketing'];
-const DEAL_ONLY: TemplateScope[] = ['deal'];
+// BOTH = available in every scope (contact/company/workspace/date). DEAL_ONLY = scopes that carry a
+// deal + sender context (deal + proposal, never marketing). PROPOSAL = proposal-only variables.
+const BOTH: TemplateScope[] = ['deal', 'marketing', 'proposal'];
+const DEAL_ONLY: TemplateScope[] = ['deal', 'proposal'];
+const PROPOSAL: TemplateScope[] = ['proposal'];
 
 export const TEMPLATE_VARIABLES: TemplateVariable[] = [
   { key: 'contact.first_name', label: 'Contact first name', group: 'Contact', example: 'John', scopes: BOTH },
@@ -49,7 +52,8 @@ export const TEMPLATE_VARIABLES: TemplateVariable[] = [
   { key: 'sender.phone', label: 'Your phone', group: 'Sender', example: '(555) 987-6543', scopes: DEAL_ONLY },
   { key: 'workspace.name', label: 'Workspace name', group: 'Workspace', example: 'Your Company', scopes: BOTH },
   { key: 'date.today', label: "Today's date", group: 'Date', example: '08/03/2026', scopes: BOTH },
-  { key: 'proposal.link', label: 'Proposal link', group: 'Proposal', example: 'https://app.example.com/proposal/…', scopes: DEAL_ONLY },
+  { key: 'proposal.url', label: 'Proposal link', group: 'Proposal', example: 'View your proposal', scopes: PROPOSAL },
+  { key: 'proposal.name', label: 'Proposal name', group: 'Proposal', example: 'Kitchen remodel proposal', scopes: PROPOSAL },
 ];
 
 const VALID_KEYS = new Set(TEMPLATE_VARIABLES.map((v) => v.key));
@@ -215,6 +219,16 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
       '<p>Please find attached the invoice for <strong>{{deal.title}}</strong> ({{deal.value}}). ' +
       'Payment details are on the invoice — just reply here if anything is unclear.</p>' +
       '<p>Thank you for your business!</p>',
+  },
+  {
+    systemKey: 'send_proposal',
+    scope: 'proposal',
+    name: 'Send proposal',
+    subject: 'Your proposal is ready!',
+    body:
+      '<p>Hi {{contact.first_name}},</p>' +
+      '<p>Your proposal <strong>{{proposal.name}}</strong> for {{deal.title}} is ready — {{proposal.url}}.</p>' +
+      '<p>Please take a look and let us know what you think.</p>',
   },
   {
     scope: 'deal',

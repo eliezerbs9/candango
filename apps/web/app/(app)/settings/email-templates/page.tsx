@@ -45,7 +45,7 @@ import {
 } from '@/lib/api/hooks';
 import type { EmailTemplate, TemplateBodyFormat, TemplateScope, TemplateVariable } from '@/lib/api/email-templates';
 
-const SCOPE_LABEL: Record<TemplateScope, string> = { deal: 'Deal', marketing: 'Marketing' };
+const SCOPE_LABEL: Record<TemplateScope, string> = { deal: 'Deal', marketing: 'Marketing', proposal: 'Proposals' };
 import type { Organization } from '@/lib/api/organization';
 import {
   DEFAULT_SIGNATURE_HTML,
@@ -521,13 +521,16 @@ function TemplateModal({
               disabled={!!editing}
               allowDeselect={false}
               data={[
-                { label: 'Deal email', value: 'deal' },
-                { label: 'Marketing email', value: 'marketing' },
+                { label: 'Deal', value: 'deal' },
+                { label: 'Marketing', value: 'marketing' },
+                { label: 'Proposals', value: 'proposal' },
               ]}
               description={
                 scope === 'deal'
                   ? 'Sent from a deal — can use contact, company, deal and your (sender) details. Available in the deal send box and deal automations.'
-                  : 'Broadcast to an audience of contacts — contact, company and workspace details only (no deal or sender). Available in marketing automations.'
+                  : scope === 'proposal'
+                    ? 'The covering email sent with a proposal — contact, company, deal, sender details plus the proposal link/name. One is used for every proposal.'
+                    : 'Broadcast to an audience of contacts — contact, company and workspace details only (no deal or sender). Available in marketing automations.'
               }
             />
             {editing && (

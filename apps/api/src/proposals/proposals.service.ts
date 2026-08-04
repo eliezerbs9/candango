@@ -115,26 +115,26 @@ export class ProposalsService {
       `<p>Your proposal <strong>${proposal.title}</strong> is ready. You can review it here:</p>` +
       `<p><a href="${link}">View your proposal</a></p>`;
 
-    if (proposal.emailTemplateId) {
-      const et = await this.prisma.emailTemplate.findFirst({ where: { id: proposal.emailTemplateId, orgId, archivedAt: null } });
-      if (et) {
-        const [owner, org] = await Promise.all([
-          deal?.ownerUserId ? this.prisma.user.findFirst({ where: { id: deal.ownerUserId, orgId }, select: { name: true, email: true, phone: true } }) : null,
-          this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true, timezone: true } }),
-        ]);
-        const ctx = buildTemplateContext({
-          person: deal?.primaryPerson,
-          company: deal?.company,
-          deal: deal ? { title: deal.title, value: deal.value, currency: deal.currency } : null,
-          sender: owner,
-          workspace: org,
-        });
-        ctx['proposal.link'] = link;
-        subject = renderTemplate(et.subject, ctx) || subject;
-        body = renderTemplate(et.body, ctx);
-        // Always ensure the link is present, even if the template didn't reference {{proposal.link}}.
-        if (!et.body.includes('proposal.link')) body += `<p><a href="${link}">View your proposal</a></p>`;
-      }
+    // One proposal-scoped email template covers all proposals (configured in Settings → Proposals).
+    const et = await this.prisma.emailTemplate.findFirst({ where: { orgId, scope: 'proposal', archivedAt: null }, orderBy: { createdAt: 'asc' } });
+    if (et) {
+      const [owner, org] = await Promise.all([
+        deal?.ownerUserId ? this.prisma.user.findFirst({ where: { id: deal.ownerUserId, orgId }, select: { name: true, email: true, phone: true } }) : null,
+        this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true, timezone: true } }),
+      ]);
+      const ctx = buildTemplateContext({
+        person: deal?.primaryPerson,
+        company: deal?.company,
+        deal: deal ? { title: deal.title, value: deal.value, currency: deal.currency } : null,
+        sender: owner,
+        workspace: org,
+      });
+      // {{proposal.url}} renders as a "View your proposal" link; {{proposal.name}} is the title.
+      ctx['proposal.url'] = `<a href="${link}">View your proposal</a>`;
+      ctx['proposal.name'] = proposal.title;
+      subject = renderTemplate(et.subject, ctx) || subject;
+      body = renderTemplate(et.body, ctx);
+      if (!et.body.includes('proposal.url')) body += `<p><a href="${link}">View your proposal</a></p>`;
     }
 
     let emailed = false;

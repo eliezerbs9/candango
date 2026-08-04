@@ -23,14 +23,13 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconDots, IconPencil, IconPlus, IconSparkles, IconTrash } from '@tabler/icons-react';
+import { IconDots, IconMail, IconPencil, IconPlus, IconSparkles, IconTrash } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/useAuth';
 import {
   useCreateProposalTemplate,
   useDeleteProposalTemplate,
   useProposalMeta,
-  useEmailTemplates,
   useOrganization,
   useProposalTemplates,
   useSeedProposalTemplates,
@@ -62,29 +61,24 @@ export default function ProposalTemplatesPage() {
   const del = useDeleteProposalTemplate();
   const seed = useSeedProposalTemplates();
 
-  const { data: emailTemplates = [] } = useEmailTemplates();
-  const dealEmailTemplates = emailTemplates.filter((t) => t.scope === 'deal');
-
   const [opened, ctl] = useDisclosure(false);
   const [name, setName] = useState('');
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const [layoutKey, setLayoutKey] = useState('blank');
-  const [emailTemplateId, setEmailTemplateId] = useState<string | null>(null);
 
   const submit = () => {
-    if (!name.trim() || !emailTemplateId) return;
+    if (!name.trim()) return;
     // Orientation + starting layout are chosen once, at creation, and can't change afterwards.
     const preset = PAGE_PRESETS.find((p) => p.key === layoutKey) ?? PAGE_PRESETS[0];
     const firstPage = { id: uid(), elements: preset.build() };
     create.mutate(
-      { name: name.trim(), theme: { ...(meta?.defaultTheme as ProposalTheme), orientation }, layout: [firstPage], emailTemplateId },
+      { name: name.trim(), theme: { ...(meta?.defaultTheme as ProposalTheme), orientation }, layout: [firstPage] },
       {
         onSuccess: (t) => {
           ctl.close();
           setName('');
           setLayoutKey('blank');
           setOrientation('portrait');
-          setEmailTemplateId(null);
           router.push(`/settings/proposals/${t.id}`);
         },
         onError: fail,
@@ -125,6 +119,9 @@ export default function ProposalTemplatesPage() {
           </Text>
         </div>
         <Group gap="xs">
+          <Button variant="default" leftSection={<IconMail size={16} />} component={Link} href="/settings/email-templates">
+            Proposal email
+          </Button>
           <Button
             variant="default"
             leftSection={<IconSparkles size={16} />}
@@ -143,6 +140,10 @@ export default function ProposalTemplatesPage() {
           </Button>
         </Group>
       </Group>
+
+      <Text size="xs" c="dimmed" mt={-8}>
+        One proposal email (type “Proposals” in Email templates) is sent with every proposal link — edit it via “Proposal email”.
+      </Text>
 
       {templates.length === 0 ? (
         <Card withBorder radius="md" padding="lg">
@@ -243,17 +244,7 @@ export default function ProposalTemplatesPage() {
             onChange={(v) => setLayoutKey(v ?? 'blank')}
             allowDeselect={false}
           />
-          <Select
-            label="Covering email"
-            description="Sent with the proposal link. Manage these in Settings → Email templates."
-            placeholder={dealEmailTemplates.length === 0 ? 'Create a deal email template first' : 'Pick an email template'}
-            required
-            searchable
-            data={dealEmailTemplates.map((t) => ({ value: t.id, label: t.name }))}
-            value={emailTemplateId}
-            onChange={setEmailTemplateId}
-          />
-          <Button onClick={submit} loading={create.isPending} disabled={!name.trim() || !emailTemplateId}>
+          <Button onClick={submit} loading={create.isPending} disabled={!name.trim()}>
             Create &amp; edit
           </Button>
         </Stack>
