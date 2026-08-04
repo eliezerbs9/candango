@@ -9,6 +9,7 @@ const FIELD_TYPE: Record<string, string> = {
   date: 'DATE',
   text: 'TEXT',
   checkbox: 'CHECKBOX',
+  name: 'NAME', // auto-fills the recipient's name
 };
 
 /**
@@ -56,7 +57,7 @@ export class DocumensoService {
     fields: DocusealField[];
     recipients: { email: string; name?: string }[];
     sendEmail: boolean;
-  }): Promise<{ documentId: number; signingUrl?: string }> {
+  }): Promise<{ documentId: number; signingUrl?: string; recipients: { email: string; name: string; signingUrl?: string }[] }> {
     if (input.recipients.length === 0) throw new BadRequestException('At least one signer is required');
     const created = await this.req('POST', '/api/v1/documents', {
       title: input.name,
@@ -65,9 +66,10 @@ export class DocumensoService {
     });
     const documentId = Number(created.documentId ?? created.id);
     const uploadUrl = String(created.uploadUrl ?? '');
-    const recipients = (created.recipients as Record<string, unknown>[] | undefined) ?? [];
-    const recipientIds = recipients.map((r) => Number(r.recipientId ?? r.id));
-    const signingUrl = recipients[0]?.signingUrl as string | undefined;
+    const created_recipients = (created.recipients as Record<string, unknown>[] | undefined) ?? [];
+    const recipientIds = created_recipients.map((r) => Number(r.recipientId ?? r.id));
+    const outRecipients = created_recipients.map((r) => ({ email: String(r.email ?? ''), name: String(r.name ?? ''), signingUrl: r.signingUrl as string | undefined }));
+    const signingUrl = outRecipients[0]?.signingUrl;
     if (!documentId || !uploadUrl || recipientIds.length === 0) throw new BadRequestException('Documenso create returned an unexpected shape');
 
     // Upload the PDF bytes straight to the presigned (S3) URL.
@@ -95,7 +97,7 @@ export class DocumensoService {
     }
 
     await this.req('POST', `/api/v1/documents/${documentId}/send`, { sendEmail: input.sendEmail });
-    return { documentId, signingUrl };
+    return { documentId, signingUrl, recipients: outRecipients };
   }
 
   /** Current document status (DRAFT | PENDING | COMPLETED | REJECTED …) for reconciliation. */

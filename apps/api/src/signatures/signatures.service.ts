@@ -8,7 +8,8 @@ import { INITIALS_ZONE, PDFDocument, addAcceptancePage } from './acceptance-page
 import { CreateSignatureDto } from './dto/signature.dto';
 import type { DrawnFieldDto } from './dto/signature-template.dto';
 import { GenerateSignatureDto } from './dto/signable-document.dto';
-import { buildTemplateContext, renderTemplate } from '../email-templates/template-vars';
+import { MessagesService } from '../messages/messages.service';
+import { buildSignatureValues, buildTemplateContext, normalizeSignature, renderSignatureHtml, renderTemplate } from '../email-templates/template-vars';
 
 /** Resolve an initials rule + page list to concrete 1-indexed content pages (clamped to the doc). */
 function resolveInitialsPages(rule: string, pages: number[], pageCount: number): number[] {
@@ -52,6 +53,7 @@ const shape = (r: {
   signerName: r.signerName,
   signerEmail: r.signerEmail,
   sourceFileKey: r.sourceFileKey,
+  signedFileKey: r.signedFileKey,
   hasSigned: !!r.signedFileKey,
   auditUrl: r.auditUrl,
   sentAt: r.sentAt?.toISOString() ?? null,
@@ -68,8 +70,62 @@ export class SignaturesService {
     private readonly prisma: PrismaService,
     private readonly spaces: SpacesService,
     private readonly documenso: DocumensoService,
+    private readonly messages: MessagesService,
     private readonly events: EventEmitter2,
   ) {}
+
+  /** True when the deal owner has a connected mailbox (so Candango can send the invite itself). */
+  private async ownerHasMailbox(orgId: string, ownerUserId: string | null | undefined): Promise<boolean> {
+    if (!ownerUserId) return false;
+    return (await this.prisma.mailboxConnection.count({ where: { orgId, userId: ownerUserId } })) > 0;
+  }
+
+  /**
+   * Send the signing invite(s) from the deal owner's mailbox with the workspace signature + the
+   * "Signature request" email template (Candango email). Falls back to a default body if untemplated.
+   */
+  private async sendInvites(orgId: string, ownerUserId: string, dealId: string, title: string, recipients: { email: string; name: string; signingUrl?: string }[]) {
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: dealId, orgId },
+      select: { title: true, value: true, currency: true, company: { select: { name: true } } },
+    });
+    const [owner, org] = await Promise.all([
+      this.prisma.user.findFirst({ where: { id: ownerUserId, orgId }, select: { name: true, email: true, phone: true, avatarUrl: true } }),
+      this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true, timezone: true, logoUrl: true, emailSignature: true } }),
+    ]);
+    const tpl = await this.prisma.emailTemplate.findFirst({ where: { orgId, scope: 'signature', archivedAt: null }, orderBy: { createdAt: 'asc' } });
+    const signatureHtml = renderSignatureHtml(
+      normalizeSignature(org?.emailSignature),
+      buildSignatureValues({ name: owner?.name, email: owner?.email, phone: owner?.phone, avatarUrl: owner?.avatarUrl }, { name: org?.name, logoUrl: org?.logoUrl }),
+    );
+
+    for (const r of recipients) {
+      if (!r.email || !r.signingUrl) continue;
+      const link = `<a href="${r.signingUrl}">Review &amp; sign</a>`;
+      const ctx = buildTemplateContext({
+        person: { firstName: r.name, name: r.name },
+        company: deal?.company ?? null,
+        deal: deal ? { title: deal.title, value: deal.value, currency: deal.currency } : null,
+        sender: owner,
+        workspace: org,
+      });
+      ctx['signature.url'] = link;
+      ctx['signature.name'] = title;
+      let subject = `Please sign: ${title}`;
+      let body = `<p>Hi ${r.name || 'there'},</p><p>Please review and sign <strong>${title}</strong> — ${link}.</p>`;
+      if (tpl) {
+        subject = renderTemplate(tpl.subject, ctx) || subject;
+        body = renderTemplate(tpl.body, ctx);
+        if (!tpl.body.includes('signature.url')) body += `<p>${link}</p>`;
+      }
+      if (signatureHtml.trim()) body += signatureHtml;
+      try {
+        await this.messages.send(orgId, ownerUserId, { to: [r.email], subject, body, html: true, dealId });
+      } catch {
+        /* mailbox send failed — the link still exists on the request/Documenso */
+      }
+    }
+  }
 
   async list(orgId: string, dealId: string) {
     let rows = await this.prisma.signatureRequest.findMany({ where: { orgId, dealId }, orderBy: { createdAt: 'desc' } });
@@ -187,13 +243,19 @@ export class SignaturesService {
 
     const pdf = Buffer.from(await doc.save());
 
+    // Email from Candango (owner's mailbox + template) when a mailbox is connected; else Documenso sends.
+    const ownerUserId = (await this.prisma.deal.findFirst({ where: { id: dto.dealId, orgId }, select: { ownerUserId: true } }))?.ownerUserId ?? null;
+    const wantEmail = dto.sendEmail ?? true;
+    const candangoEmail = wantEmail && (await this.ownerHasMailbox(orgId, ownerUserId));
+
     const sub = await this.documenso.createPdfSubmission({
       name: dto.title,
       fileBytes: pdf,
       fields,
       recipients,
-      sendEmail: dto.sendEmail ?? true,
+      sendEmail: wantEmail && !candangoEmail,
     });
+    if (candangoEmail && ownerUserId) await this.sendInvites(orgId, ownerUserId, dto.dealId, dto.title, sub.recipients);
 
     const row = await this.prisma.signatureRequest.create({
       data: {
@@ -246,7 +308,12 @@ export class SignaturesService {
       fields.push(...(await addAcceptancePage(doc, { title: tpl.name, parties })));
     }
     const pdf = Buffer.from(await doc.save());
-    const sub = await this.documenso.createPdfSubmission({ name: tpl.name, fileBytes: pdf, fields, recipients, sendEmail: dto.sendEmail ?? true });
+    const ownerUserId = (await this.prisma.deal.findFirst({ where: { id: dto.dealId, orgId }, select: { ownerUserId: true } }))?.ownerUserId ?? null;
+    const wantEmail = dto.sendEmail ?? true;
+    const candangoEmail = wantEmail && (await this.ownerHasMailbox(orgId, ownerUserId));
+
+    const sub = await this.documenso.createPdfSubmission({ name: tpl.name, fileBytes: pdf, fields, recipients, sendEmail: wantEmail && !candangoEmail });
+    if (candangoEmail && ownerUserId) await this.sendInvites(orgId, ownerUserId, dto.dealId, tpl.name, sub.recipients);
 
     const row = await this.prisma.signatureRequest.create({
       data: {

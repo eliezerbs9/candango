@@ -4,7 +4,7 @@ import { apiFetch } from './client';
 export type TemplateBodyFormat = 'richtext' | 'html';
 
 /** Which variable context a template renders against + where it can be used. */
-export type TemplateScope = 'deal' | 'marketing' | 'proposal';
+export type TemplateScope = 'deal' | 'marketing' | 'proposal' | 'signature';
 
 export interface EmailTemplate {
   id: string;

@@ -17,8 +17,8 @@
  *  - `marketing` — broadcast to an audience of contacts from the workspace (no single deal, no
  *                  personal sender): contact, company, workspace only. Used by marketing automations.
  */
-export type TemplateScope = 'deal' | 'marketing' | 'proposal';
-export const TEMPLATE_SCOPES: TemplateScope[] = ['deal', 'marketing', 'proposal'];
+export type TemplateScope = 'deal' | 'marketing' | 'proposal' | 'signature';
+export const TEMPLATE_SCOPES: TemplateScope[] = ['deal', 'marketing', 'proposal', 'signature'];
 
 export interface TemplateVariable {
   key: string;
@@ -34,9 +34,10 @@ export interface TemplateVariable {
 
 // BOTH = available in every scope (contact/company/workspace/date). DEAL_ONLY = scopes that carry a
 // deal + sender context (deal + proposal, never marketing). PROPOSAL = proposal-only variables.
-const BOTH: TemplateScope[] = ['deal', 'marketing', 'proposal'];
-const DEAL_ONLY: TemplateScope[] = ['deal', 'proposal'];
+const BOTH: TemplateScope[] = ['deal', 'marketing', 'proposal', 'signature'];
+const DEAL_ONLY: TemplateScope[] = ['deal', 'proposal', 'signature'];
 const PROPOSAL: TemplateScope[] = ['proposal'];
+const SIGNATURE: TemplateScope[] = ['signature'];
 
 export const TEMPLATE_VARIABLES: TemplateVariable[] = [
   { key: 'contact.first_name', label: 'Contact first name', group: 'Contact', example: 'John', scopes: BOTH },
@@ -54,6 +55,8 @@ export const TEMPLATE_VARIABLES: TemplateVariable[] = [
   { key: 'date.today', label: "Today's date", group: 'Date', example: '08/03/2026', scopes: BOTH },
   { key: 'proposal.url', label: 'Proposal link', group: 'Proposal', example: 'View your proposal', scopes: PROPOSAL },
   { key: 'proposal.name', label: 'Proposal name', group: 'Proposal', example: 'Kitchen remodel proposal', scopes: PROPOSAL },
+  { key: 'signature.url', label: 'Signing link', group: 'Signature', example: 'Review & sign', scopes: SIGNATURE },
+  { key: 'signature.name', label: 'Document name', group: 'Signature', example: 'Service Agreement', scopes: SIGNATURE },
 ];
 
 const VALID_KEYS = new Set(TEMPLATE_VARIABLES.map((v) => v.key));
@@ -229,6 +232,16 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
       '<p>Hi {{contact.first_name}},</p>' +
       '<p>Your proposal <strong>{{proposal.name}}</strong> for {{deal.title}} is ready — {{proposal.url}}.</p>' +
       '<p>Please take a look and let us know what you think.</p>',
+  },
+  {
+    systemKey: 'send_signature',
+    scope: 'signature',
+    name: 'Signature request',
+    subject: 'Please sign: {{signature.name}}',
+    body:
+      '<p>Hi {{contact.first_name}},</p>' +
+      '<p>Please review and sign <strong>{{signature.name}}</strong> — {{signature.url}}.</p>' +
+      '<p>Let me know if you have any questions.</p>',
   },
   {
     scope: 'deal',

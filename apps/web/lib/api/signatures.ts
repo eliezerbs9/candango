@@ -11,6 +11,7 @@ export interface SignatureRequest {
   signerName: string | null;
   signerEmail: string | null;
   sourceFileKey: string | null;
+  signedFileKey: string | null;
   hasSigned: boolean;
   auditUrl: string | null;
   sentAt: string | null;

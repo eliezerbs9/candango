@@ -67,7 +67,8 @@ export async function addAcceptancePage(doc: PDFDocument, opts: { title: string;
     fields.push(
       { name: `Signature ${i + 1}`, type: 'signature', role: 'Client', recipient: party.recipient, areas: [{ page: signPage, ...z.signature }] },
       { name: `Date ${i + 1}`, type: 'date', role: 'Client', recipient: party.recipient, areas: [{ page: signPage, ...z.date }] },
-      { name: `Printed name ${i + 1}`, type: 'text', role: 'Client', recipient: party.recipient, areas: [{ page: signPage, ...z.name }] },
+      // NAME auto-fills the signer's name (no typing needed).
+      { name: `Printed name ${i + 1}`, type: 'name', role: 'Client', recipient: party.recipient, areas: [{ page: signPage, ...z.name }] },
     );
   });
 

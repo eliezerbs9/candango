@@ -115,7 +115,8 @@ export function DealSignatures({ dealId }: { dealId: string }) {
 /** A signature request as a card: document preview, status, signer, and manage actions. */
 function SignatureCard({ r, dealId }: { r: SignatureRequest; dealId: string }) {
   const token = useAuthStore((s) => s.token);
-  const { data: preview } = useFileUrl(r.sourceFileKey);
+  // Once signed, always show the signed document (preview + open).
+  const { data: preview } = useFileUrl(r.hasSigned ? r.signedFileKey : r.sourceFileKey);
   const del = useDeleteSignature(dealId);
   const resend = useResendSignature(dealId);
   const finished = r.status === 'signed' || r.status === 'declined';
@@ -145,7 +146,7 @@ function SignatureCard({ r, dealId }: { r: SignatureRequest; dealId: string }) {
             <IconFileText size={28} color="var(--mantine-color-gray-5)" />
           </Group>
         )}
-        <Badge variant="light" color={STATUS_COLOR[r.status]} style={{ position: 'absolute', top: 8, right: 8, textTransform: 'none' }}>
+        <Badge variant="filled" color={STATUS_COLOR[r.status]} style={{ position: 'absolute', top: 8, right: 8, textTransform: 'none', boxShadow: '0 1px 4px rgba(0,0,0,0.25)' }}>
           {r.status}
         </Badge>
       </div>

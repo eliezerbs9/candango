@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 /** A signing field placed on a document. `areas` use normalized (0–1) page coordinates, page 1-indexed. */
 export interface DocusealField {
   name: string;
-  type: 'signature' | 'initials' | 'date' | 'text' | 'checkbox';
+  type: 'signature' | 'initials' | 'date' | 'text' | 'checkbox' | 'name';
   role: string;
   /** Index into the submission's recipients (0 = first signer). Defaults to 0. */
   recipient?: number;

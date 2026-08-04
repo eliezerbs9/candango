@@ -85,6 +85,8 @@ services:
       - NEXT_PRIVATE_SMTP_FROM_ADDRESS=${NEXT_PRIVATE_SMTP_FROM_ADDRESS:?err}
       - NEXT_PRIVATE_SIGNING_LOCAL_FILE_PATH=/opt/documenso/cert.p12
       - NEXT_PRIVATE_SIGNING_PASSPHRASE=${NEXT_PRIVATE_SIGNING_PASSPHRASE}
+      # Hide the "Claim account" signup upsell shown to signers after signing.
+      - NEXT_PUBLIC_DISABLE_SIGNUP=true
     ports:
       - '${PORT:-3060}:${PORT:-3060}'
     volumes:
