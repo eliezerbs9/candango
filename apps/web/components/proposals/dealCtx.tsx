@@ -1,5 +1,6 @@
 import type { ProposalDocFile, ProposalImageFile, ProposalRenderCore } from '@/lib/api/proposals';
 import type { MediaPick, ProposalRenderCtx } from './ProposalRenderer';
+import { imageGrid } from './mediaGrid';
 
 const money = (cents: number, currency: string) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency }).format((cents ?? 0) / 100);
@@ -26,29 +27,16 @@ export function buildDealCtx(data: ProposalRenderCore): ProposalRenderCtx {
       // "fixed" (template-owned) images arrive as resolved URLs; otherwise pull from the deal field.
       const fixed = urls?.map((url) => ({ key: url, url }));
       const all: ProposalImageFile[] = fixed ?? (fieldKey ? data.imagesByField[fieldKey] ?? [] : Object.values(data.imagesByField).flat());
-      const files = fixed ?? selectFiles(all, pick, picked);
-      const c = Math.max(1, cols);
-      const slots = fixed ? Math.max(1, files.length) : pick === 'manual' ? Math.max(1, files.length) : Math.max(1, count);
-      return (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${c}, 1fr)`,
-            gridAutoRows: '1fr',
-            gap: 8,
-            width: '100%',
-            height: '100%',
-          }}
-        >
-          {Array.from({ length: slots }).map((_, i) =>
-            files[i] ? (
-              <img key={i} src={files[i].url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }} />
-            ) : (
-              <div key={i} style={{ background: '#e9ecef', borderRadius: 8, minHeight: 48 }} />
-            ),
-          )}
-        </div>
-      );
+      const selected = fixed ?? selectFiles(all, pick, picked);
+      const seen = new Set<string>();
+      const files = selected.filter((f) => {
+        const k = f.key || f.url;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      const slots = fixed || pick === 'manual' ? Math.max(1, files.length) : Math.max(1, count);
+      return imageGrid(Math.max(1, cols), slots, (i) => files[i]?.url);
     },
     document: ({ fieldKey, pick = 'recent', picked, docs: fixedDocs }) => {
       const all: ProposalDocFile[] = fieldKey ? data.documentsByField[fieldKey] ?? [] : Object.values(data.documentsByField).flat();

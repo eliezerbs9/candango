@@ -1,4 +1,5 @@
 import type { ProposalRenderCtx } from './ProposalRenderer';
+import { imageGrid } from './mediaGrid';
 
 /**
  * A render context that fills a template with example data — for the settings preview (no real deal).
@@ -13,42 +14,8 @@ export function buildPreviewCtx(exampleByKey: Record<string, string>, fileUrlByK
     resolveText,
     fileUrl: (key: string) => fileUrlByKey[key],
     image: ({ cols = 1, count = 1, urls }) => {
-      const c = Math.max(1, cols);
       const n = urls ? Math.max(1, urls.length) : Math.max(1, count);
-      return (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${c}, 1fr)`,
-            gridAutoRows: '1fr',
-            gap: 8,
-            width: '100%',
-            height: '100%',
-          }}
-        >
-          {Array.from({ length: n }).map((_, i) =>
-            urls?.[i] ? (
-              <img key={i} src={urls[i]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }} />
-            ) : (
-              <div
-                key={i}
-                style={{
-                  background: '#e9ecef',
-                  borderRadius: 8,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#868e96',
-                  fontSize: 12,
-                  minHeight: 48,
-                }}
-              >
-                Photo
-              </div>
-            ),
-          )}
-        </div>
-      );
+      return imageGrid(Math.max(1, cols), n, (i) => urls?.[i], 'Photo');
     },
     document: ({ docs } = {}) => {
       const list = docs && docs.length ? docs : [{ name: 'Document.pdf', url: '' }];
