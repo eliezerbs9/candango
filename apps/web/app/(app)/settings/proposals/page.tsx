@@ -29,9 +29,11 @@ import { useAuth } from '@/lib/auth/useAuth';
 import {
   useCreateProposalTemplate,
   useDeleteProposalTemplate,
+  useEmailTemplates,
   useProposalMeta,
   useOrganization,
   useProposalTemplates,
+  useSeedDefaultTemplates,
   useSeedProposalTemplates,
   useTemplateVariables,
 } from '@/lib/api/hooks';
@@ -60,6 +62,23 @@ export default function ProposalTemplatesPage() {
   const create = useCreateProposalTemplate();
   const del = useDeleteProposalTemplate();
   const seed = useSeedProposalTemplates();
+  const { data: emailTemplates = [] } = useEmailTemplates();
+  const seedEmail = useSeedDefaultTemplates();
+
+  // "Proposal email" — open the single proposal-scoped email template, creating the default if missing.
+  const openProposalEmail = () => {
+    if (emailTemplates.some((t) => t.scope === 'proposal')) {
+      router.push('/settings/email-templates');
+      return;
+    }
+    seedEmail.mutate(undefined, {
+      onSuccess: () => {
+        notifications.show({ message: 'Created the default proposal email — edit it here', color: 'green' });
+        router.push('/settings/email-templates');
+      },
+      onError: fail,
+    });
+  };
 
   const [opened, ctl] = useDisclosure(false);
   const [name, setName] = useState('');
@@ -119,7 +138,7 @@ export default function ProposalTemplatesPage() {
           </Text>
         </div>
         <Group gap="xs">
-          <Button variant="default" leftSection={<IconMail size={16} />} component={Link} href="/settings/email-templates">
+          <Button variant="default" leftSection={<IconMail size={16} />} onClick={openProposalEmail} loading={seedEmail.isPending}>
             Proposal email
           </Button>
           <Button

@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SpacesService } from '../uploads/spaces.service';
 import { MessagesService } from '../messages/messages.service';
-import { buildTemplateContext, renderTemplate } from '../email-templates/template-vars';
+import { buildSignatureValues, buildTemplateContext, normalizeSignature, renderSignatureHtml, renderTemplate } from '../email-templates/template-vars';
 import { CreateProposalDto, SendProposalDto, UpdateProposalDto } from './dto/proposal.dto';
 
 /** Walk a proposal's layout (pages → elements) and collect object keys of "fixed" image/document files. */
@@ -115,13 +115,14 @@ export class ProposalsService {
       `<p>Your proposal <strong>${proposal.title}</strong> is ready. You can review it here:</p>` +
       `<p><a href="${link}">View your proposal</a></p>`;
 
+    const [owner, org] = await Promise.all([
+      deal?.ownerUserId ? this.prisma.user.findFirst({ where: { id: deal.ownerUserId, orgId }, select: { name: true, email: true, phone: true, avatarUrl: true } }) : null,
+      this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true, timezone: true, logoUrl: true, emailSignature: true } }),
+    ]);
+
     // One proposal-scoped email template covers all proposals (configured in Settings → Proposals).
     const et = await this.prisma.emailTemplate.findFirst({ where: { orgId, scope: 'proposal', archivedAt: null }, orderBy: { createdAt: 'asc' } });
     if (et) {
-      const [owner, org] = await Promise.all([
-        deal?.ownerUserId ? this.prisma.user.findFirst({ where: { id: deal.ownerUserId, orgId }, select: { name: true, email: true, phone: true } }) : null,
-        this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true, timezone: true } }),
-      ]);
       const ctx = buildTemplateContext({
         person: deal?.primaryPerson,
         company: deal?.company,
@@ -136,6 +137,16 @@ export class ProposalsService {
       body = renderTemplate(et.body, ctx);
       if (!et.body.includes('proposal.url')) body += `<p><a href="${link}">View your proposal</a></p>`;
     }
+
+    // Append the resolved workspace signature (same one used elsewhere).
+    const signature = renderSignatureHtml(
+      normalizeSignature(org?.emailSignature),
+      buildSignatureValues(
+        { name: owner?.name, email: owner?.email, phone: owner?.phone, avatarUrl: owner?.avatarUrl },
+        { name: org?.name, logoUrl: org?.logoUrl },
+      ),
+    );
+    if (signature.trim()) body += signature;
 
     let emailed = false;
     if (to.length) {

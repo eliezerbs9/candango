@@ -29,6 +29,7 @@ import type { Editor } from '@tiptap/react';
 import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/useAuth';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
+import { VariableTextInput } from '@/components/common/VariableTextInput';
 import { RichTextBody } from '@/components/common/RichTextBody';
 import { ConnectGoogleNotice } from '@/components/email/ConnectGoogleNotice';
 import {
@@ -529,7 +530,7 @@ function TemplateModal({
                 scope === 'deal'
                   ? 'Sent from a deal — can use contact, company, deal and your (sender) details. Available in the deal send box and deal automations.'
                   : scope === 'proposal'
-                    ? 'The covering email sent with a proposal — contact, company, deal, sender details plus the proposal link/name. One is used for every proposal.'
+                    ? 'The email sent with a proposal — contact, company, deal and sender details plus the proposal link/name. One is used for every proposal.'
                     : 'Broadcast to an audience of contacts — contact, company and workspace details only (no deal or sender). Available in marketing automations.'
               }
             />
@@ -538,13 +539,14 @@ function TemplateModal({
                 The type can’t be changed after creation.
               </Text>
             )}
-            <TextInput
-              ref={subjectRef}
+            <VariableTextInput
+              inputRef={subjectRef}
               label="Subject"
               required
               value={subject}
-              onChange={(e) => setSubject(e.currentTarget.value)}
+              onChange={setSubject}
               onFocus={() => (active.current = 'subject')}
+              variables={scopedVariables}
             />
             <CreatableMultiSelect
               label="Tags"
