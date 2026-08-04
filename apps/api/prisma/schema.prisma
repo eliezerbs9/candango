@@ -949,8 +949,9 @@ model SignatureRequest {
   signerEmail          String?
   sourceFileKey        String? // Spaces key of the document sent for signature
   signedFileKey        String? // Spaces key of the completed/signed PDF (pulled from DocuSeal)
-  auditUrl             String? // DocuSeal audit-log URL
-  docusealSubmissionId String?   @unique // DocuSeal submission id (webhook correlation)
+  auditUrl             String? // audit-log URL (engine-provided)
+  docusealSubmissionId String?   @unique // legacy DocuSeal submission id (pre-Documenso)
+  documensoDocumentId  Int?      @unique // Documenso document id (webhook correlation)
   createdByUserId      String?
   sentAt               DateTime?
   viewedAt             DateTime?

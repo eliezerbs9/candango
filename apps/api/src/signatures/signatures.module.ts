@@ -8,12 +8,12 @@ import { SignatureWebhookController } from './signature-webhook.controller';
 import { SignaturesService } from './signatures.service';
 import { SignatureTemplatesService } from './signature-templates.service';
 import { SignableDocumentsService } from './signable-documents.service';
-import { DocusealService } from './docuseal.service';
+import { DocumensoService } from './documenso.service';
 
 @Module({
   imports: [PrismaModule, UploadsModule],
   controllers: [SignaturesController, SignatureTemplatesController, SignableDocumentsController, SignatureWebhookController],
-  providers: [SignaturesService, SignatureTemplatesService, SignableDocumentsService, DocusealService],
+  providers: [SignaturesService, SignatureTemplatesService, SignableDocumentsService, DocumensoService],
   exports: [SignaturesService],
 })
 export class SignaturesModule {}

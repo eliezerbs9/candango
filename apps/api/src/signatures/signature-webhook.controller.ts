@@ -1,8 +1,8 @@
 import { Body, Controller, HttpCode, Post } from '@nestjs/common';
 import { SignaturesService } from './signatures.service';
 
-/** Unauthenticated DocuSeal webhook receiver. Correlated by submission id; RLS is bypassed (no tenant). */
-@Controller('public/docuseal')
+/** Unauthenticated Documenso webhook receiver. Correlated by document id; RLS is bypassed (no tenant). */
+@Controller('public/documenso')
 export class SignatureWebhookController {
   constructor(private readonly svc: SignaturesService) {}
 

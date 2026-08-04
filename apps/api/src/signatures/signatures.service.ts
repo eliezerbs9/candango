@@ -2,35 +2,13 @@ import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableE
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { SpacesService } from '../uploads/spaces.service';
-import { DocusealService, type DocusealField } from './docuseal.service';
+import { type DocusealField } from './docuseal.service';
+import { DocumensoService } from './documenso.service';
 import { ACCEPTANCE_FIELDS, INITIALS_ZONE, PDFDocument, addAcceptancePage } from './acceptance-page';
 import { CreateSignatureDto } from './dto/signature.dto';
 import type { DrawnFieldDto } from './dto/signature-template.dto';
 import { GenerateSignatureDto } from './dto/signable-document.dto';
-import { docusealSize, layoutHasField, layoutToHtml } from './layout-to-html';
 import { buildTemplateContext, renderTemplate } from '../email-templates/template-vars';
-
-const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-/** Appended to a generated document that declares no signature field, so it's always signable. */
-const DEFAULT_ACCEPTANCE_HTML = `
-<div style="margin-top:36px;padding-top:16px;border-top:1px solid #e5e5e5">
-  <p style="font-weight:bold;font-size:15px;margin:0 0 6px">Acceptance &amp; Signature</p>
-  <p style="margin:0 0 20px;color:#444">By signing below, I acknowledge and accept this document.</p>
-  <table style="width:100%"><tr>
-    <td style="width:55%;vertical-align:bottom">Signature:<br/><signature-field name="Signature" role="Client" required="true"></signature-field></td>
-    <td style="vertical-align:bottom">Date:<br/><date-field name="Date" role="Client"></date-field></td>
-  </tr></table>
-  <p style="margin-top:16px">Printed name:<br/><text-field name="Printed name" role="Client"></text-field></p>
-</div>`;
-
-/** Wrap generated body HTML in a minimal styled document for DocuSeal's HTML API. */
-function wrapSignableHtml(title: string, inner: string): string {
-  return (
-    `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head>` +
-    `<body style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#1a1a1a;line-height:1.6;max-width:720px;margin:0 auto;padding:40px">${inner}</body></html>`
-  );
-}
 
 /** Resolve an initials rule + page list to concrete 1-indexed content pages (clamped to the doc). */
 function resolveInitialsPages(rule: string, pages: number[], pageCount: number): number[] {
@@ -87,7 +65,7 @@ export class SignaturesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly spaces: SpacesService,
-    private readonly docuseal: DocusealService,
+    private readonly documenso: DocumensoService,
     private readonly events: EventEmitter2,
   ) {}
 
@@ -107,10 +85,10 @@ export class SignaturesService {
     await this.prisma.signatureRequest.delete({ where: { id } });
   }
 
-  /** Append an acceptance page to the source document and send it for signature via DocuSeal. */
+  /** Append an acceptance page to the source document and send it for signature via Documenso. */
   async create(orgId: string, userId: string, dto: CreateSignatureDto) {
     if (!this.spaces.configured) throw new ServiceUnavailableException('File storage is not configured.');
-    if (!this.docuseal.configured) throw new ServiceUnavailableException('E-signature is not configured (set DOCUSEAL_URL, DOCUSEAL_API_KEY).');
+    if (!this.documenso.configured) throw new ServiceUnavailableException('E-signature is not configured (set DOCUMENSO_URL, DOCUMENSO_API_KEY).');
     if (!dto.fileKey.startsWith(`org-${orgId}/`)) throw new BadRequestException('Not your file');
 
     // Resolve the signing rules — from a saved SignatureTemplate, else from the inline flags.
@@ -157,12 +135,11 @@ export class SignaturesService {
 
     const pdf = Buffer.from(await doc.save());
 
-    const sub = await this.docuseal.createPdfSubmission({
+    const sub = await this.documenso.createPdfSubmission({
       name: dto.title,
-      fileName: `${dto.title}.pdf`,
-      fileBase64: pdf.toString('base64'),
+      fileBytes: pdf,
       fields,
-      submitter: { role: 'Client', email: dto.signerEmail, name: dto.signerName },
+      signer: { email: dto.signerEmail, name: dto.signerName },
       sendEmail: dto.sendEmail ?? true,
     });
 
@@ -177,7 +154,7 @@ export class SignaturesService {
         signerName: dto.signerName ?? null,
         signerEmail: dto.signerEmail,
         sourceFileKey: dto.fileKey,
-        docusealSubmissionId: sub.submissionId || null,
+        documensoDocumentId: sub.documentId,
         createdByUserId: userId,
         sentAt: new Date(),
       },
@@ -185,54 +162,42 @@ export class SignaturesService {
     return { ...shape(row), signingUrl: sub.signingUrl };
   }
 
-  /** Generate a document from a SignableDocumentTemplate (HTML + variables) and send it for signature. */
+  /** Generate a document from a SignableDocumentTemplate and send it for signature. */
   async createGenerated(orgId: string, userId: string, dto: GenerateSignatureDto) {
-    if (!this.docuseal.configured) throw new ServiceUnavailableException('E-signature is not configured (set DOCUSEAL_URL, DOCUSEAL_API_KEY).');
+    if (!this.documenso.configured) throw new ServiceUnavailableException('E-signature is not configured (set DOCUMENSO_URL, DOCUMENSO_API_KEY).');
     const tpl = await this.prisma.signableDocumentTemplate.findFirst({ where: { id: dto.signableDocumentTemplateId, orgId, archivedAt: null } });
     if (!tpl) throw new BadRequestException('Document template not found');
+
+    // builder / raw-HTML templates render to HTML; the new engine (Documenso) signs PDFs — the
+    // HTML→PDF step lands in a later phase. Upload-mode (a template-owned PDF) works today.
+    if (tpl.mode !== 'upload') {
+      throw new BadRequestException('Generated (visual builder / HTML) documents aren’t available yet with the new signing engine — use an Upload-PDF document template for now.');
+    }
+    if (!tpl.fileKey || !tpl.fileKey.startsWith(`org-${orgId}/`)) throw new BadRequestException('This template has no source document');
 
     const ctx = await this.dealContext(orgId, userId, dto.dealId);
     const signerEmail = (dto.signerEmail || ctx['contact.email'] || '').trim();
     if (!signerEmail) throw new BadRequestException('No signer email — set a primary contact with an email on the deal.');
     const signerName = (dto.signerName || ctx['contact.name'] || '').trim() || undefined;
-    const submitter = { role: 'Client' as const, email: signerEmail, name: signerName };
-    const sendEmail = dto.sendEmail ?? true;
 
-    let sub: { submissionId: string; signingUrl?: string };
-    if (tpl.mode === 'upload') {
-      // A template-owned PDF with fields placed on it (or a default acceptance page when none).
-      if (!tpl.fileKey || !tpl.fileKey.startsWith(`org-${orgId}/`)) throw new BadRequestException('This template has no source document');
-      const source = await this.spaces.getBytes(tpl.fileKey);
-      let doc: Awaited<ReturnType<typeof PDFDocument.load>>;
-      try {
-        doc = await PDFDocument.load(source);
-      } catch {
-        throw new BadRequestException('The template document must be a PDF.');
-      }
-      const fields: DocusealField[] = drawnToDocusealFields((tpl.fields as DrawnFieldDto[] | null) ?? []);
-      if (fields.length === 0) {
-        const signPage = await addAcceptancePage(doc, { title: tpl.name });
-        fields.push(
-          { name: 'Signature', type: 'signature', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.signature }] },
-          { name: 'Date', type: 'date', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.date }] },
-          { name: 'Printed name', type: 'text', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.name }] },
-        );
-      }
-      const pdf = Buffer.from(await doc.save());
-      sub = await this.docuseal.createPdfSubmission({ name: tpl.name, fileName: `${tpl.name}.pdf`, fileBase64: pdf.toString('base64'), fields, submitter, sendEmail });
-    } else if (tpl.mode === 'builder') {
-      // Free-canvas layout rendered to HTML (same model as the proposal builder).
-      const org = await this.prisma.organization.findFirst({ where: { id: orgId }, select: { logoUrl: true } });
-      const theme = tpl.theme as { accentColor?: string; fontHeading?: string; fontBody?: string; orientation?: string; paperSize?: string } | null;
-      let html = layoutToHtml(tpl.layout, theme, ctx, org?.logoUrl ?? null);
-      if (!layoutHasField(tpl.layout)) html = html.replace('</body>', `<div style="margin:0 auto;padding:40px">${DEFAULT_ACCEPTANCE_HTML}</div></body>`);
-      sub = await this.docuseal.createHtmlSubmission({ name: tpl.name, html, submitter, sendEmail, size: docusealSize(theme) });
-    } else {
-      // Raw-HTML mode.
-      let inner = renderTemplate(tpl.bodyHtml || '', ctx);
-      if (!/<(signature|initials|date|text|checkbox)-field/i.test(inner)) inner += DEFAULT_ACCEPTANCE_HTML;
-      sub = await this.docuseal.createHtmlSubmission({ name: tpl.name, html: wrapSignableHtml(tpl.name, inner), submitter, sendEmail });
+    const source = await this.spaces.getBytes(tpl.fileKey);
+    let doc: Awaited<ReturnType<typeof PDFDocument.load>>;
+    try {
+      doc = await PDFDocument.load(source);
+    } catch {
+      throw new BadRequestException('The template document must be a PDF.');
     }
+    const fields: DocusealField[] = drawnToDocusealFields((tpl.fields as DrawnFieldDto[] | null) ?? []);
+    if (fields.length === 0) {
+      const signPage = await addAcceptancePage(doc, { title: tpl.name });
+      fields.push(
+        { name: 'Signature', type: 'signature', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.signature }] },
+        { name: 'Date', type: 'date', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.date }] },
+        { name: 'Printed name', type: 'text', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.name }] },
+      );
+    }
+    const pdf = Buffer.from(await doc.save());
+    const sub = await this.documenso.createPdfSubmission({ name: tpl.name, fileBytes: pdf, fields, signer: { email: signerEmail, name: signerName }, sendEmail: dto.sendEmail ?? true });
 
     const row = await this.prisma.signatureRequest.create({
       data: {
@@ -242,8 +207,8 @@ export class SignaturesService {
         status: 'sent',
         signerName: signerName ?? null,
         signerEmail,
-        sourceFileKey: tpl.mode === 'upload' ? tpl.fileKey : null,
-        docusealSubmissionId: sub.submissionId || null,
+        sourceFileKey: tpl.fileKey,
+        documensoDocumentId: sub.documentId,
         createdByUserId: userId,
         sentAt: new Date(),
       },
@@ -282,29 +247,29 @@ export class SignaturesService {
     return { url: await this.spaces.presignGet(row.signedFileKey) };
   }
 
-  /** DocuSeal webhook (no tenant context — RLS bypassed, correlated by docusealSubmissionId). */
+  /** Documenso webhook (no tenant context — RLS bypassed, correlated by documensoDocumentId). */
   async handleWebhook(payload: unknown) {
-    const p = (payload ?? {}) as { event_type?: string; submission?: Record<string, unknown> };
-    const submission = p.submission ?? {};
-    const subId = submission.id ? String(submission.id) : null;
-    if (!subId) return;
-    const row = await this.prisma.signatureRequest.findFirst({ where: { docusealSubmissionId: subId } });
+    const p = (payload ?? {}) as { event?: string; payload?: Record<string, unknown> };
+    const data = p.payload ?? {};
+    const nested = (data.document as Record<string, unknown> | undefined) ?? {};
+    const docId = Number(data.documentId ?? data.id ?? nested.id ?? 0);
+    if (!docId) return;
+    const row = await this.prisma.signatureRequest.findFirst({ where: { documensoDocumentId: docId } });
     if (!row) return;
 
-    const type = p.event_type ?? '';
-    if (type === 'submission_completed' || submission.status === 'completed') {
-      const documents = (submission.documents as { url?: string }[] | undefined) ?? [];
+    const event = p.event ?? '';
+    if (event === 'DOCUMENT_COMPLETED') {
       let signedFileKey = row.signedFileKey;
-      const docUrl = documents[0]?.url;
-      if (docUrl && this.spaces.configured) {
-        const bytes = await this.docuseal.downloadFile(docUrl);
-        signedFileKey = `org-${row.orgId}/signature/${row.id}-signed.pdf`;
-        await this.spaces.putBytes(signedFileKey, bytes, 'application/pdf');
+      if (this.documenso.configured && this.spaces.configured) {
+        try {
+          const bytes = await this.documenso.downloadSignedPdf(docId);
+          signedFileKey = `org-${row.orgId}/signature/${row.id}-signed.pdf`;
+          await this.spaces.putBytes(signedFileKey, bytes, 'application/pdf');
+        } catch {
+          /* couldn't pull the PDF now — still mark signed; a manual re-fetch can recover it */
+        }
       }
-      await this.prisma.signatureRequest.update({
-        where: { id: row.id },
-        data: { status: 'signed', signedAt: new Date(), signedFileKey, auditUrl: (submission.audit_log_url as string) ?? null },
-      });
+      await this.prisma.signatureRequest.update({ where: { id: row.id }, data: { status: 'signed', signedAt: new Date(), signedFileKey } });
       const author = row.createdByUserId ?? (await this.prisma.deal.findFirst({ where: { id: row.dealId }, select: { ownerUserId: true } }))?.ownerUserId;
       if (author) {
         await this.prisma.note.create({
@@ -312,15 +277,12 @@ export class SignaturesService {
         });
       }
       this.events.emit('webhook.event', { orgId: row.orgId, type: 'document.signed', data: { deal: { id: row.dealId }, signature: { id: row.id } } });
-    } else if (type === 'submission_viewed' || submission.status === 'opened') {
+    } else if (event === 'DOCUMENT_OPENED') {
       if (!row.viewedAt) {
         await this.prisma.signatureRequest.update({ where: { id: row.id }, data: { status: row.status === 'sent' ? 'viewed' : row.status, viewedAt: new Date() } });
       }
-    } else if (type === 'submission_declined' || type === 'submission_expired') {
-      await this.prisma.signatureRequest.update({
-        where: { id: row.id },
-        data: { status: type === 'submission_declined' ? 'declined' : 'expired', declinedAt: new Date() },
-      });
+    } else if (event === 'DOCUMENT_REJECTED' || event === 'DOCUMENT_CANCELLED') {
+      await this.prisma.signatureRequest.update({ where: { id: row.id }, data: { status: 'declined', declinedAt: new Date() } });
     }
   }
 }
