@@ -26,7 +26,15 @@ import { IconDots, IconDownload, IconInfoCircle, IconLink, IconPlus, IconTrash, 
 import Link from 'next/link';
 import { ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/auth/store';
-import { useCreateSignature, useCustomFields, useDealSignatures, useDeleteSignature, useFileUrl, useUploadFile } from '@/lib/api/hooks';
+import {
+  useCreateSignature,
+  useCustomFields,
+  useDealSignatures,
+  useDeleteSignature,
+  useFileUrl,
+  useSignatureTemplates,
+  useUploadFile,
+} from '@/lib/api/hooks';
 import { getSignatureSignedUrl, type SignatureRequest, type SignatureStatus } from '@/lib/api/signatures';
 import { useDealCtx } from '@/components/deals/DealContext';
 
@@ -144,9 +152,11 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
 
   const create = useCreateSignature();
   const upload = useUploadFile();
+  const { data: templates = [] } = useSignatureTemplates();
 
   const [fieldKey, setFieldKey] = useState<string | null>(null);
   const [fileKey, setFileKey] = useState<string | null>(null);
+  const [templateId, setTemplateId] = useState<string>(''); // '' = custom (inline options)
   const [title, setTitle] = useState('');
   const [signerName, setSignerName] = useState('');
   const [signerEmail, setSignerEmail] = useState('');
@@ -155,6 +165,7 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
   const [initials, setInitials] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const useTemplate = templateId !== '';
 
   // Signable documents currently held by the selected custom field.
   const files: StoredDoc[] = useMemo(() => {
@@ -166,6 +177,7 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
   const reset = () => {
     setFieldKey(null);
     setFileKey(null);
+    setTemplateId('');
     setTitle('');
     setSignerName('');
     setSignerEmail('');
@@ -222,7 +234,7 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
       notifications.show({ message: 'Choose a document, a title and the signer email', color: 'red' });
       return;
     }
-    if (!acceptance && !initials) {
+    if (!useTemplate && !acceptance && !initials) {
       notifications.show({ message: 'Select at least one signing option', color: 'red' });
       return;
     }
@@ -235,8 +247,7 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
         signerName: signerName.trim() || undefined,
         signerEmail: signerEmail.trim(),
         sendEmail,
-        acceptance,
-        initialsEveryPage: initials,
+        ...(useTemplate ? { signatureTemplateId: templateId } : { acceptance, initialsEveryPage: initials }),
       });
       setLink(res.signingUrl ?? null);
       notifications.show({ message: sendEmail ? 'Sent to the signer' : 'Signature request created', color: 'green' });
@@ -321,20 +332,34 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
             <Text size="sm" fw={500} mb={4}>
               Signing options
             </Text>
-            <Stack gap={6}>
-              <Checkbox
-                label="Acceptance & Signature page"
-                description="Appends a page with signature, date and printed name at the end."
-                checked={acceptance}
-                onChange={(e) => setAcceptance(e.currentTarget.checked)}
-              />
-              <Checkbox
-                label="Initials on every page"
-                description="Adds an initials field to the footer of every page."
-                checked={initials}
-                onChange={(e) => setInitials(e.currentTarget.checked)}
-              />
-            </Stack>
+            <Select
+              placeholder="Custom (choose below)"
+              data={[
+                { value: '', label: 'Custom (choose below)' },
+                ...templates.map((t) => ({ value: t.id, label: t.name })),
+              ]}
+              value={templateId}
+              onChange={(v) => setTemplateId(v ?? '')}
+              comboboxProps={{ withinPortal: true }}
+              allowDeselect={false}
+              description={templates.length === 0 ? 'Tip: save reusable recipes in Settings → Signatures.' : 'Reuse a saved signature template, or configure options for this request.'}
+            />
+            {!useTemplate && (
+              <Stack gap={6} mt={8}>
+                <Checkbox
+                  label="Acceptance & Signature page"
+                  description="Appends a page with signature, date and printed name at the end."
+                  checked={acceptance}
+                  onChange={(e) => setAcceptance(e.currentTarget.checked)}
+                />
+                <Checkbox
+                  label="Initials on every page"
+                  description="Adds an initials field to the footer of every page."
+                  checked={initials}
+                  onChange={(e) => setInitials(e.currentTarget.checked)}
+                />
+              </Stack>
+            )}
           </div>
 
           <Group grow>

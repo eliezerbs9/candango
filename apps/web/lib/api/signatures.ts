@@ -1,4 +1,5 @@
 import { apiFetch } from './client';
+import type { DrawnField } from './signature-templates';
 
 export type SignatureStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'declined' | 'expired';
 
@@ -31,8 +32,10 @@ export interface SignatureBody {
   signerName?: string;
   signerEmail: string;
   sendEmail?: boolean;
+  signatureTemplateId?: string;
   acceptance?: boolean;
   initialsEveryPage?: boolean;
+  drawnFields?: DrawnField[];
 }
 
 export function getDealSignatures(token: string, dealId: string) {

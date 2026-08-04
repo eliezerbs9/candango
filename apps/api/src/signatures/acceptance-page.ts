@@ -20,14 +20,18 @@ export { PDFDocument };
  * Append a clean "Acceptance & Signature" page to a loaded PDF and return the 1-indexed page number
  * of the appended page. Length-proof: the signature fields always land on this known page.
  */
-export async function addAcceptancePage(doc: PDFDocument, opts: { title: string }): Promise<number> {
+export async function addAcceptancePage(doc: PDFDocument, opts: { title: string; body?: string }): Promise<number> {
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const page = doc.addPage([PAGE_W, PAGE_H]);
   const topY = (frac: number) => PAGE_H * (1 - frac); // "from top" fraction → pdf-lib bottom-origin y
 
+  const body = (opts.body?.trim() || `By signing below, I acknowledge and accept: ${opts.title}.`)
+    // pdf-lib's WinAnsi encoding rejects characters like curly quotes / em dashes — normalize them.
+    .replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-').replace(/…/g, '...');
+
   page.drawText('Acceptance & Signature', { x: MARGIN, y: PAGE_H - MARGIN - 6, size: 20, font: bold, color: rgb(0.12, 0.16, 0.2) });
-  page.drawText(`By signing below, I acknowledge and accept: ${opts.title}.`, {
+  page.drawText(body, {
     x: MARGIN,
     y: PAGE_H - MARGIN - 40,
     size: 12,

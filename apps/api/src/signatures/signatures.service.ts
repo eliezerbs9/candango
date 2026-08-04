@@ -5,6 +5,26 @@ import { SpacesService } from '../uploads/spaces.service';
 import { DocusealService, type DocusealField } from './docuseal.service';
 import { ACCEPTANCE_FIELDS, INITIALS_ZONE, PDFDocument, addAcceptancePage } from './acceptance-page';
 import { CreateSignatureDto } from './dto/signature.dto';
+import type { DrawnFieldDto } from './dto/signature-template.dto';
+import { buildTemplateContext, renderTemplate } from '../email-templates/template-vars';
+
+/** Resolve an initials rule + page list to concrete 1-indexed content pages (clamped to the doc). */
+function resolveInitialsPages(rule: string, pages: number[], pageCount: number): number[] {
+  if (rule === 'every_page') return Array.from({ length: pageCount }, (_, i) => i + 1);
+  if (rule === 'last_page') return [pageCount];
+  if (rule === 'specified_pages') return [...new Set(pages)].filter((p) => p >= 1 && p <= pageCount).sort((a, b) => a - b);
+  return [];
+}
+
+/** Turn visually-placed fields into DocuSeal fields with unique names. */
+function drawnToDocusealFields(drawn: DrawnFieldDto[]): DocusealField[] {
+  return drawn.map((f, i) => ({
+    name: f.label?.trim() || `${f.type[0].toUpperCase()}${f.type.slice(1)} ${i + 1}`,
+    type: f.type,
+    role: 'Client',
+    areas: [{ page: f.page, x: f.x, y: f.y, w: f.w, h: f.h }],
+  }));
+}
 
 const shape = (r: {
   id: string;
@@ -69,9 +89,18 @@ export class SignaturesService {
     if (!this.docuseal.configured) throw new ServiceUnavailableException('E-signature is not configured (set DOCUSEAL_URL, DOCUSEAL_API_KEY).');
     if (!dto.fileKey.startsWith(`org-${orgId}/`)) throw new BadRequestException('Not your file');
 
-    const acceptance = dto.acceptance ?? true;
-    const initialsEveryPage = dto.initialsEveryPage ?? false;
-    if (!acceptance && !initialsEveryPage) throw new BadRequestException('Select at least one signing option.');
+    // Resolve the signing rules — from a saved SignatureTemplate, else from the inline flags.
+    const template = dto.signatureTemplateId
+      ? await this.prisma.signatureTemplate.findFirst({ where: { id: dto.signatureTemplateId, orgId, archivedAt: null } })
+      : null;
+    if (dto.signatureTemplateId && !template) throw new BadRequestException('Signature template not found');
+
+    const acceptance = template ? template.acceptance : dto.acceptance ?? true;
+    const initialsRule = template ? template.initialsRule : dto.initialsEveryPage ? 'every_page' : 'none';
+    const initialsPageList = template ? ((template.initialsPages as number[] | null) ?? []) : [];
+    const acceptanceText = template?.acceptanceText ?? null;
+    // Drawn fields: from the template plus any placed ad-hoc on this request.
+    const drawn = [...((template?.fields as DrawnFieldDto[] | null) ?? []), ...(dto.drawnFields ?? [])];
 
     const source = await this.spaces.getBytes(dto.fileKey);
     let doc: Awaited<ReturnType<typeof PDFDocument.load>>;
@@ -80,25 +109,26 @@ export class SignaturesService {
     } catch {
       throw new BadRequestException('Only PDF documents can be sent for signature.');
     }
+    const contentPages = doc.getPageCount(); // page count of the original doc (before any appended page)
+    const initialsPages = resolveInitialsPages(initialsRule, initialsPageList, contentPages);
 
-    const fields: DocusealField[] = [];
+    if (!acceptance && initialsPages.length === 0 && drawn.length === 0) {
+      throw new BadRequestException('Select at least one signing option.');
+    }
+
+    const fields: DocusealField[] = [...drawnToDocusealFields(drawn)];
     if (acceptance) {
-      const signPage = await addAcceptancePage(doc, { title: dto.title });
+      const body = acceptanceText ? renderTemplate(acceptanceText, await this.dealContext(orgId, userId, dto.dealId)) : undefined;
+      const signPage = await addAcceptancePage(doc, { title: dto.title, body });
       fields.push(
         { name: 'Signature', type: 'signature', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.signature }] },
         { name: 'Date', type: 'date', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.date }] },
         { name: 'Printed name', type: 'text', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.name }] },
       );
     }
-    if (initialsEveryPage) {
-      const pageCount = doc.getPageCount();
-      // One field repeated on every page: the signer draws initials once and they stamp all pages.
-      fields.push({
-        name: 'Initials',
-        type: 'initials',
-        role: 'Client',
-        areas: Array.from({ length: pageCount }, (_, i) => ({ page: i + 1, ...INITIALS_ZONE })),
-      });
+    if (initialsPages.length > 0) {
+      // One field repeated on the target pages: the signer draws initials once and they stamp all pages.
+      fields.push({ name: 'Initials', type: 'initials', role: 'Client', areas: initialsPages.map((page) => ({ page, ...INITIALS_ZONE })) });
     }
 
     const pdf = Buffer.from(await doc.save());
@@ -118,6 +148,8 @@ export class SignaturesService {
         dealId: dto.dealId,
         title: dto.title,
         status: 'sent',
+        signatureTemplateId: template?.id ?? null,
+        drawnFields: (dto.drawnFields ?? []) as object,
         signerName: dto.signerName ?? null,
         signerEmail: dto.signerEmail,
         sourceFileKey: dto.fileKey,
@@ -127,6 +159,31 @@ export class SignaturesService {
       },
     });
     return { ...shape(row), signingUrl: sub.signingUrl };
+  }
+
+  /** Build the {{variable}} context for a deal (contact/company/deal + sender + workspace). */
+  private async dealContext(orgId: string, userId: string, dealId: string): Promise<Record<string, string>> {
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: dealId, orgId },
+      select: {
+        title: true,
+        value: true,
+        currency: true,
+        primaryPerson: { select: { firstName: true, lastName: true, name: true, emails: true, phones: true } },
+        company: { select: { name: true } },
+      },
+    });
+    const [user, org] = await Promise.all([
+      this.prisma.user.findFirst({ where: { id: userId, orgId }, select: { name: true, email: true, phone: true } }),
+      this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true, timezone: true } }),
+    ]);
+    return buildTemplateContext({
+      person: deal?.primaryPerson ?? null,
+      company: deal?.company ?? null,
+      deal: deal ? { title: deal.title, value: deal.value, currency: deal.currency } : null,
+      sender: user,
+      workspace: org,
+    });
   }
 
   async signedUrl(orgId: string, id: string) {

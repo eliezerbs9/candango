@@ -126,6 +126,13 @@ import {
 import { getFileUrl, getUploadStatus, uploadFile } from './uploads';
 import { createSignature, deleteSignature, getDealSignatures, type SignatureBody } from './signatures';
 import {
+  createSignatureTemplate,
+  deleteSignatureTemplate,
+  getSignatureTemplates,
+  updateSignatureTemplate,
+  type SignatureTemplateBody,
+} from './signature-templates';
+import {
   createProposal,
   createProposalTemplate,
   deleteProposal,
@@ -1290,6 +1297,38 @@ export function useDeleteSignature(dealId: string) {
   return useMutation({
     mutationFn: (id: string) => deleteSignature(token!, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['signatures', dealId] }),
+  });
+}
+
+export function useSignatureTemplates() {
+  const token = useToken();
+  return useQuery({ queryKey: ['signature-templates'], queryFn: () => getSignatureTemplates(token!), enabled: !!token });
+}
+
+export function useCreateSignatureTemplate() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SignatureTemplateBody) => createSignatureTemplate(token!, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['signature-templates'] }),
+  });
+}
+
+export function useUpdateSignatureTemplate() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: SignatureTemplateBody }) => updateSignatureTemplate(token!, id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['signature-templates'] }),
+  });
+}
+
+export function useDeleteSignatureTemplate() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteSignatureTemplate(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['signature-templates'] }),
   });
 }
 

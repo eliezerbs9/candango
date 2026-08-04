@@ -1,4 +1,6 @@
-import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsBoolean, IsEmail, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
+import { DrawnFieldDto } from './signature-template.dto';
 
 export class CreateSignatureDto {
   @IsString()
@@ -24,13 +26,25 @@ export class CreateSignatureDto {
   @IsBoolean()
   sendEmail?: boolean;
 
-  /** Append an Acceptance & Signature page (default true). */
+  /** Apply a saved SignatureTemplate's field rules (overrides the inline flags below). */
+  @IsOptional()
+  @IsString()
+  signatureTemplateId?: string;
+
+  /** Append an Acceptance & Signature page (default true) — inline mode. */
   @IsOptional()
   @IsBoolean()
   acceptance?: boolean;
 
-  /** Add an initials field on every page. */
+  /** Add an initials field on every page — inline mode. */
   @IsOptional()
   @IsBoolean()
   initialsEveryPage?: boolean;
+
+  /** Per-request visually-placed fields (Phase 3). */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DrawnFieldDto)
+  drawnFields?: DrawnFieldDto[];
 }

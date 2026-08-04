@@ -69,6 +69,7 @@ model Organization {
   proposalTemplates ProposalTemplate[]
   proposals      Proposal[]
   signatureRequests SignatureRequest[]
+  signatureTemplates SignatureTemplate[]
 }
 
 model User {
@@ -941,6 +942,8 @@ model SignatureRequest {
   dealId               String
   title                String
   status               String    @default("draft") // draft | sent | viewed | signed | declined | expired
+  signatureTemplateId  String? // optional SignatureTemplate whose field rules were applied
+  drawnFields          Json      @default("[]") // per-request visually-placed fields (Phase 3)
   signerName           String?
   signerEmail          String?
   sourceFileKey        String? // Spaces key of the document sent for signature
@@ -955,8 +958,33 @@ model SignatureRequest {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  organization Organization @relation(fields: [orgId], references: [id])
-  deal         Deal         @relation(fields: [dealId], references: [id])
+  organization      Organization       @relation(fields: [orgId], references: [id])
+  deal              Deal               @relation(fields: [dealId], references: [id])
+  signatureTemplate SignatureTemplate? @relation(fields: [signatureTemplateId], references: [id])
 
   @@index([orgId, dealId])
+}
+
+// A reusable signing *field-layout recipe* (not content) applied to any document when
+// requesting a signature: an initials rule, an optional acceptance page (wording may use
+// {{variables}}), and — Phase 3 — visually-drawn fields. See [[E-Signature — Design & Plan]].
+model SignatureTemplate {
+  id              String    @id @default(cuid())
+  orgId           String
+  name            String
+  initialsRule    String    @default("none") // none | every_page | specified_pages | last_page
+  initialsPages   Json      @default("[]") // 1-indexed page numbers for specified_pages
+  acceptance      Boolean   @default(true) // append the Acceptance & Signature page
+  acceptanceText  String? // acceptance-page wording; may contain {{variables}}; null = default
+  fields          Json      @default("[]") // Phase 3: drawn signature/initials/date/text fields
+  requireCounterSigner Boolean @default(false) // Phase 4: workspace counter-signs
+  createdByUserId String?
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization      Organization       @relation(fields: [orgId], references: [id])
+  signatureRequests SignatureRequest[]
+
+  @@index([orgId])
 }
