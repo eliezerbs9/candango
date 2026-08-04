@@ -98,6 +98,26 @@ export class DocumensoService {
     return { documentId, signingUrl };
   }
 
+  /** Current document status (DRAFT | PENDING | COMPLETED | REJECTED …) for reconciliation. */
+  async getDocumentStatus(documentId: number): Promise<string | null> {
+    try {
+      const doc = await this.req('GET', `/api/v1/documents/${documentId}`);
+      return (doc.status as string) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Re-send the signing request emails for a pending document. */
+  async resend(documentId: number): Promise<void> {
+    await this.req('POST', `/api/v1/documents/${documentId}/resend`, { recipients: [] });
+  }
+
+  /** Delete/void a document. */
+  async deleteDocument(documentId: number): Promise<void> {
+    await this.req('DELETE', `/api/v1/documents/${documentId}`);
+  }
+
   /** Pull the completed/signed PDF (S3 transport) — a presigned download URL, then the bytes. */
   async downloadSignedPdf(documentId: number): Promise<Buffer> {
     const dl = await this.req('GET', `/api/v1/documents/${documentId}/download`);

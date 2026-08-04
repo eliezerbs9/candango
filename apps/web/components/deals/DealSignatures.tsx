@@ -17,6 +17,7 @@ import {
   Paper,
   SegmentedControl,
   Select,
+  SimpleGrid,
   Stack,
   Switch,
   Text,
@@ -24,7 +25,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconDots, IconDownload, IconFileText, IconInfoCircle, IconLink, IconPlus, IconTrash, IconUpload } from '@tabler/icons-react';
+import { IconDots, IconDownload, IconExternalLink, IconFileText, IconInfoCircle, IconLink, IconPlus, IconRefresh, IconTrash, IconUpload } from '@tabler/icons-react';
 import Link from 'next/link';
 import { ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/auth/store';
@@ -37,6 +38,7 @@ import {
   useDealSignatures,
   useDeleteSignature,
   useFileUrl,
+  useResendSignature,
   useGenerateSignature,
   useSignableDocuments,
   useSignatureTemplates,
@@ -69,25 +71,10 @@ interface StoredDoc {
 const fail = (e: unknown) => notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
 
 export function DealSignatures({ dealId }: { dealId: string }) {
-  const token = useAuthStore((s) => s.token);
   const { data: rows = [], isLoading } = useDealSignatures(dealId);
   const { data: docTemplates = [] } = useSignableDocuments();
-  const del = useDeleteSignature(dealId);
   const [opened, ctl] = useDisclosure(false);
   const [genOpened, genCtl] = useDisclosure(false);
-
-  const download = async (id: string) => {
-    try {
-      const { url } = await getSignatureSignedUrl(token!, id);
-      window.open(url, '_blank');
-    } catch (e) {
-      fail(e);
-    }
-  };
-  const remove = (r: SignatureRequest) => {
-    if (!window.confirm(`Delete signature request “${r.title}”?`)) return;
-    del.mutate(r.id, { onSuccess: () => notifications.show({ message: 'Deleted', color: 'green' }), onError: fail });
-  };
 
   return (
     <Card withBorder radius="md" padding="md">
@@ -112,54 +99,100 @@ export function DealSignatures({ dealId }: { dealId: string }) {
           No signature requests yet. Pick a document from the deal and send it for signature.
         </Text>
       ) : (
-        <Stack gap="xs">
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
           {rows.map((r) => (
-            <Paper key={r.id} withBorder radius="sm" p="xs">
-              <Group justify="space-between" wrap="nowrap">
-                <div style={{ minWidth: 0 }}>
-                  <Text fw={500} lineClamp={1}>
-                    {r.title}
-                  </Text>
-                  <Text size="xs" c="dimmed" lineClamp={1}>
-                    {r.signerName || r.signerEmail || '—'} ·{' '}
-                    {r.signedAt ? `Signed ${new Date(r.signedAt).toLocaleDateString()}` : r.sentAt ? `Sent ${new Date(r.sentAt).toLocaleDateString()}` : 'Draft'}
-                  </Text>
-                </div>
-                <Group gap="xs" wrap="nowrap">
-                  <Badge variant="light" color={STATUS_COLOR[r.status]} style={{ textTransform: 'none' }}>
-                    {r.status}
-                  </Badge>
-                  {r.hasSigned && (
-                    <ActionIcon variant="subtle" color="gray" onClick={() => download(r.id)} aria-label="Download signed" title="Download signed PDF">
-                      <IconDownload size={16} />
-                    </ActionIcon>
-                  )}
-                  <Menu position="bottom-end" withinPortal shadow="sm">
-                    <Menu.Target>
-                      <ActionIcon variant="subtle" color="gray" aria-label="Actions">
-                        <IconDots size={16} />
-                      </ActionIcon>
-                    </Menu.Target>
-                    <Menu.Dropdown>
-                      {r.auditUrl && (
-                        <Menu.Item component="a" href={r.auditUrl} target="_blank">
-                          Audit trail
-                        </Menu.Item>
-                      )}
-                      <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => remove(r)}>
-                        Delete
-                      </Menu.Item>
-                    </Menu.Dropdown>
-                  </Menu>
-                </Group>
-              </Group>
-            </Paper>
+            <SignatureCard key={r.id} r={r} dealId={dealId} />
           ))}
-        </Stack>
+        </SimpleGrid>
       )}
 
       <RequestModal opened={opened} onClose={ctl.close} dealId={dealId} />
       <GenerateModal opened={genOpened} onClose={genCtl.close} dealId={dealId} templates={docTemplates} />
+    </Card>
+  );
+}
+
+/** A signature request as a card: document preview, status, signer, and manage actions. */
+function SignatureCard({ r, dealId }: { r: SignatureRequest; dealId: string }) {
+  const token = useAuthStore((s) => s.token);
+  const { data: preview } = useFileUrl(r.sourceFileKey);
+  const del = useDeleteSignature(dealId);
+  const resend = useResendSignature(dealId);
+  const finished = r.status === 'signed' || r.status === 'declined';
+  const when = r.signedAt ? `Signed ${new Date(r.signedAt).toLocaleDateString()}` : r.sentAt ? `Sent ${new Date(r.sentAt).toLocaleDateString()}` : 'Draft';
+
+  const downloadSigned = async () => {
+    try {
+      const { url } = await getSignatureSignedUrl(token!, r.id);
+      window.open(url, '_blank');
+    } catch (e) {
+      fail(e);
+    }
+  };
+  const doResend = () => resend.mutate(r.id, { onSuccess: () => notifications.show({ message: 'Re-sent to the signer', color: 'green' }), onError: fail });
+  const remove = () => {
+    if (!window.confirm(`Delete “${r.title}”? This also voids the document in the signing service.`)) return;
+    del.mutate(r.id, { onSuccess: () => notifications.show({ message: 'Deleted', color: 'green' }), onError: fail });
+  };
+
+  return (
+    <Card withBorder radius="md" p={0} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'relative', height: 150, background: 'var(--mantine-color-gray-1)' }}>
+        {preview?.url ? (
+          <iframe src={`${preview.url}#toolbar=0&navpanes=0&view=FitH`} title={r.title} style={{ width: '100%', height: '100%', border: 0, pointerEvents: 'none' }} />
+        ) : (
+          <Group justify="center" align="center" h="100%">
+            <IconFileText size={28} color="var(--mantine-color-gray-5)" />
+          </Group>
+        )}
+        <Badge variant="light" color={STATUS_COLOR[r.status]} style={{ position: 'absolute', top: 8, right: 8, textTransform: 'none' }}>
+          {r.status}
+        </Badge>
+      </div>
+      <div style={{ padding: 12, display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <Text fw={600} lineClamp={1}>
+          {r.title}
+        </Text>
+        <Text size="xs" c="dimmed" lineClamp={1}>
+          {r.signerName || r.signerEmail || '—'} · {when}
+        </Text>
+        <Group justify="space-between" mt="sm" gap="xs" wrap="nowrap">
+          {r.hasSigned ? (
+            <Button size="compact-xs" variant="light" leftSection={<IconDownload size={13} />} onClick={downloadSigned}>
+              Signed PDF
+            </Button>
+          ) : (
+            <span />
+          )}
+          <Menu position="bottom-end" withinPortal shadow="sm">
+            <Menu.Target>
+              <ActionIcon variant="subtle" color="gray" aria-label="Actions">
+                <IconDots size={16} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              {preview?.url && (
+                <Menu.Item leftSection={<IconExternalLink size={14} />} component="a" href={preview.url} target="_blank">
+                  View document
+                </Menu.Item>
+              )}
+              {!finished && (
+                <Menu.Item leftSection={<IconRefresh size={14} />} onClick={doResend}>
+                  Resend
+                </Menu.Item>
+              )}
+              {r.auditUrl && (
+                <Menu.Item component="a" href={r.auditUrl} target="_blank">
+                  Audit trail
+                </Menu.Item>
+              )}
+              <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={remove}>
+                Delete
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        </Group>
+      </div>
     </Card>
   );
 }

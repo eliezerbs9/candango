@@ -125,7 +125,7 @@ import {
   updateCustomField,
 } from './customFields';
 import { getFileUrl, getUploadStatus, uploadFile } from './uploads';
-import { createSignature, deleteSignature, generateSignature, getDealSignatures, type GenerateSignatureBody, type SignatureBody } from './signatures';
+import { createSignature, deleteSignature, generateSignature, getDealSignatures, resendSignature, type GenerateSignatureBody, type SignatureBody } from './signatures';
 import {
   createSignatureTemplate,
   deleteSignatureTemplate,
@@ -1297,6 +1297,15 @@ export function useDealSignatures(dealId: string | null) {
     queryKey: ['signatures', dealId],
     queryFn: () => getDealSignatures(token!, dealId!),
     enabled: !!token && !!dealId,
+  });
+}
+
+export function useResendSignature(dealId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => resendSignature(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['signatures', dealId] }),
   });
 }
 

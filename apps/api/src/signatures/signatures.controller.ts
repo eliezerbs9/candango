@@ -33,6 +33,12 @@ export class SignaturesController {
     return this.svc.signedUrl(u.orgId, id);
   }
 
+  /** Re-send the signing invitation email(s). */
+  @Post(':id/resend')
+  resend(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.resend(u.orgId, id);
+  }
+
   @Delete(':id')
   @HttpCode(204)
   remove(@CurrentUser() u: AuthContext, @Param('id') id: string) {

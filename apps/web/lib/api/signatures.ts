@@ -10,6 +10,7 @@ export interface SignatureRequest {
   status: SignatureStatus;
   signerName: string | null;
   signerEmail: string | null;
+  sourceFileKey: string | null;
   hasSigned: boolean;
   auditUrl: string | null;
   sentAt: string | null;
@@ -62,6 +63,10 @@ export function generateSignature(token: string, body: GenerateSignatureBody) {
 
 export function deleteSignature(token: string, id: string) {
   return apiFetch<void>(`/signatures/${id}`, { method: 'DELETE', token });
+}
+
+export function resendSignature(token: string, id: string) {
+  return apiFetch<{ ok: boolean }>(`/signatures/${id}/resend`, { method: 'POST', token });
 }
 
 export function getSignatureSignedUrl(token: string, id: string) {

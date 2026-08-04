@@ -35,6 +35,7 @@ const shape = (r: {
   status: string;
   signerName: string | null;
   signerEmail: string | null;
+  sourceFileKey: string | null;
   signedFileKey: string | null;
   auditUrl: string | null;
   sentAt: Date | null;
@@ -50,6 +51,7 @@ const shape = (r: {
   status: r.status,
   signerName: r.signerName,
   signerEmail: r.signerEmail,
+  sourceFileKey: r.sourceFileKey,
   hasSigned: !!r.signedFileKey,
   auditUrl: r.auditUrl,
   sentAt: r.sentAt?.toISOString() ?? null,
@@ -70,8 +72,46 @@ export class SignaturesService {
   ) {}
 
   async list(orgId: string, dealId: string) {
-    const rows = await this.prisma.signatureRequest.findMany({ where: { orgId, dealId }, orderBy: { createdAt: 'desc' } });
+    let rows = await this.prisma.signatureRequest.findMany({ where: { orgId, dealId }, orderBy: { createdAt: 'desc' } });
+    // Self-heal: reconcile any still-pending requests against Documenso (in case a webhook was missed).
+    const pending = rows.filter((r) => (r.status === 'sent' || r.status === 'viewed') && r.documensoDocumentId);
+    if (pending.length && this.documenso.configured) {
+      await Promise.all(pending.map((r) => this.reconcile(r).catch(() => {})));
+      rows = await this.prisma.signatureRequest.findMany({ where: { orgId, dealId }, orderBy: { createdAt: 'desc' } });
+    }
     return rows.map(shape);
+  }
+
+  /** Poll Documenso for a pending request and apply the completed/declined outcome if reached. */
+  private async reconcile(row: { id: string; orgId: string; dealId: string; title: string; signerName: string | null; signerEmail: string | null; createdByUserId: string | null; signedFileKey: string | null; documensoDocumentId: number | null }) {
+    if (!row.documensoDocumentId) return;
+    const status = await this.documenso.getDocumentStatus(row.documensoDocumentId);
+    if (status === 'COMPLETED') await this.markSigned(row);
+    else if (status === 'REJECTED' || status === 'CANCELLED') {
+      await this.prisma.signatureRequest.update({ where: { id: row.id }, data: { status: 'declined', declinedAt: new Date() } });
+    }
+  }
+
+  /** Pull the signed PDF into Spaces, mark signed, log a deal note, and emit document.signed. */
+  private async markSigned(row: { id: string; orgId: string; dealId: string; title: string; signerName: string | null; signerEmail: string | null; createdByUserId: string | null; signedFileKey: string | null; documensoDocumentId: number | null }) {
+    let signedFileKey = row.signedFileKey;
+    if (row.documensoDocumentId && this.documenso.configured && this.spaces.configured) {
+      try {
+        const bytes = await this.documenso.downloadSignedPdf(row.documensoDocumentId);
+        signedFileKey = `org-${row.orgId}/signature/${row.id}-signed.pdf`;
+        await this.spaces.putBytes(signedFileKey, bytes, 'application/pdf');
+      } catch {
+        /* couldn't pull the PDF now — still mark signed; a later reconcile can recover it */
+      }
+    }
+    await this.prisma.signatureRequest.update({ where: { id: row.id }, data: { status: 'signed', signedAt: new Date(), signedFileKey } });
+    const author = row.createdByUserId ?? (await this.prisma.deal.findFirst({ where: { id: row.dealId }, select: { ownerUserId: true } }))?.ownerUserId;
+    if (author) {
+      await this.prisma.note.create({
+        data: { orgId: row.orgId, dealId: row.dealId, authorUserId: author, body: `“${row.title}” was signed by ${row.signerName || row.signerEmail || 'the customer'}.` },
+      });
+    }
+    this.events.emit('webhook.event', { orgId: row.orgId, type: 'document.signed', data: { deal: { id: row.dealId }, signature: { id: row.id } } });
   }
 
   async get(orgId: string, id: string) {
@@ -81,8 +121,21 @@ export class SignaturesService {
   }
 
   async remove(orgId: string, id: string) {
-    await this.get(orgId, id);
+    const row = await this.get(orgId, id);
+    // Best-effort: void the Documenso document so it isn't left orphaned/signable.
+    if (row.documensoDocumentId && this.documenso.configured) {
+      await this.documenso.deleteDocument(row.documensoDocumentId).catch(() => {});
+    }
     await this.prisma.signatureRequest.delete({ where: { id } });
+  }
+
+  /** Re-send the signing invitation email(s) for a pending request. */
+  async resend(orgId: string, id: string) {
+    const row = await this.get(orgId, id);
+    if (row.status === 'signed' || row.status === 'declined') throw new BadRequestException('This request is already finished.');
+    if (!row.documensoDocumentId) throw new BadRequestException('Nothing to resend.');
+    await this.documenso.resend(row.documensoDocumentId);
+    return { ok: true };
   }
 
   /** Append an acceptance page to the source document and send it for signature via Documenso. */
@@ -267,24 +320,7 @@ export class SignaturesService {
 
     const event = p.event ?? '';
     if (event === 'DOCUMENT_COMPLETED') {
-      let signedFileKey = row.signedFileKey;
-      if (this.documenso.configured && this.spaces.configured) {
-        try {
-          const bytes = await this.documenso.downloadSignedPdf(docId);
-          signedFileKey = `org-${row.orgId}/signature/${row.id}-signed.pdf`;
-          await this.spaces.putBytes(signedFileKey, bytes, 'application/pdf');
-        } catch {
-          /* couldn't pull the PDF now — still mark signed; a manual re-fetch can recover it */
-        }
-      }
-      await this.prisma.signatureRequest.update({ where: { id: row.id }, data: { status: 'signed', signedAt: new Date(), signedFileKey } });
-      const author = row.createdByUserId ?? (await this.prisma.deal.findFirst({ where: { id: row.dealId }, select: { ownerUserId: true } }))?.ownerUserId;
-      if (author) {
-        await this.prisma.note.create({
-          data: { orgId: row.orgId, dealId: row.dealId, authorUserId: author, body: `“${row.title}” was signed by ${row.signerName || row.signerEmail || 'the customer'}.` },
-        });
-      }
-      this.events.emit('webhook.event', { orgId: row.orgId, type: 'document.signed', data: { deal: { id: row.dealId }, signature: { id: row.id } } });
+      if (row.status !== 'signed') await this.markSigned(row);
     } else if (event === 'DOCUMENT_OPENED') {
       if (!row.viewedAt) {
         await this.prisma.signatureRequest.update({ where: { id: row.id }, data: { status: row.status === 'sent' ? 'viewed' : row.status, viewedAt: new Date() } });
