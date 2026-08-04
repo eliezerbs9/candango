@@ -50,11 +50,12 @@ export class PublicProposalService {
       data: { status: dto.decision, feedback, respondedAt: new Date() },
     });
 
-    // Roll the decision onto the linked estimates (accepted → accepted, declined → rejected).
+    // Roll the decision onto the linked estimates' INTERNAL status (accepted → accepted, declined →
+    // rejected). Only native estimates — QuickBooks-sourced estimates are left untouched (no QBO sync).
     const estStatus = dto.decision === 'accepted' ? 'accepted' : dto.decision === 'denied' ? 'rejected' : null;
     if (estStatus && p.estimateIds.length) {
       await this.prisma.dealEstimate.updateMany({
-        where: { id: { in: p.estimateIds }, orgId: p.orgId, deletedAt: null, status: { notIn: ['closed'] } },
+        where: { id: { in: p.estimateIds }, orgId: p.orgId, deletedAt: null, source: 'native', status: { notIn: ['closed'] } },
         data: { status: estStatus },
       });
     }
