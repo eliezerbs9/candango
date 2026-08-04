@@ -75,6 +75,8 @@ export interface ProposalTheme {
   transition?: 'none' | 'fade' | 'slide';
   /** Animate elements into view as each slide appears. */
   animate?: boolean;
+  /** Backdrop color behind the page in slides / full-screen presentation. */
+  presentBg?: string;
 }
 
 export interface ProposalTemplate {

@@ -410,6 +410,13 @@ export function ProposalCanvasEditor({
                   checked={theme.animate ?? true}
                   onChange={(e) => onThemeChange({ ...theme, animate: e.currentTarget.checked })}
                 />
+                <ColorInput
+                  size="xs"
+                  label="Background color"
+                  description="Behind the page in Slides / Full screen."
+                  value={theme.presentBg ?? '#15161a'}
+                  onChange={(v) => onThemeChange({ ...theme, presentBg: v })}
+                />
               </Stack>
             </Popover.Dropdown>
           </Popover>
@@ -678,7 +685,7 @@ export function ProposalCanvasEditor({
         <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 92px)' }}>
           {(theme.present ?? 'slides') === 'fullscreen' ? (
             <div style={{ flex: 1, minHeight: 0 }}>
-              <ProposalSlides pages={pages} theme={theme} ctx={previewCtx ?? ctx} fill />
+              <ProposalSlides pages={pages} theme={theme} ctx={previewCtx ?? ctx} fill immersive bg={theme.presentBg ?? '#15161a'} />
             </div>
           ) : (
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>

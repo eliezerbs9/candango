@@ -77,6 +77,61 @@ export default function PublicProposalPage() {
   const landscape = (data.theme?.orientation ?? 'portrait') === 'landscape';
   const fullscreen = mode === 'fullscreen' && isCanvas && !responded; // one slide filling the screen
   const deck = isCanvas && (mode === 'slides' || (mode === 'fullscreen' && responded)); // framed slide deck
+  const presentBg = data.theme?.presentBg ?? '#15161a';
+
+  const feedbackModal = (
+    <Modal
+      opened={feedbackOpen}
+      onClose={feedbackCtl.close}
+      title={pendingDecision === 'denied' ? 'Decline proposal' : 'Decide later'}
+      centered
+    >
+      <Stack>
+        <Text size="sm" c="dimmed">
+          Please share a short note so we know how to help.
+        </Text>
+        <Textarea autosize minRows={3} value={feedback} onChange={(e) => setFeedback(e.currentTarget.value)} data-autofocus />
+        <Group justify="flex-end">
+          <Button variant="default" onClick={feedbackCtl.close}>
+            Cancel
+          </Button>
+          <Button color={pendingDecision === 'denied' ? 'red' : 'yellow'} disabled={!feedback.trim()} loading={busy} onClick={() => pendingDecision && respond(pendingDecision, feedback.trim())}>
+            Submit
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+
+  // True full-screen: the page fills the viewport (letterboxed), chrome hidden, controls on interaction.
+  if (fullscreen) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: presentBg }}>
+        <ProposalSlides
+          pages={data.content as CanvasPage[]}
+          theme={data.theme}
+          ctx={buildDealCtx(data)}
+          fill
+          immersive
+          bg={presentBg}
+          overlay={
+            <Group gap="sm" wrap="nowrap">
+              <Button color="teal" size="sm" leftSection={<IconCheck size={16} />} onClick={() => choose('accepted')} loading={busy}>
+                Accept
+              </Button>
+              <Button variant="white" size="sm" leftSection={<IconClock size={16} />} onClick={() => choose('deferred')}>
+                Decide later
+              </Button>
+              <Button variant="white" color="red" size="sm" leftSection={<IconX size={16} />} onClick={() => choose('denied')}>
+                Decline
+              </Button>
+            </Group>
+          }
+        />
+        {feedbackModal}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -111,23 +166,17 @@ export default function PublicProposalPage() {
       </Group>
 
       {/* Proposal — rendered at the template's orientation */}
-      {fullscreen ? (
-        <div style={{ flex: 1, minHeight: 0, background: '#15161a', padding: 10 }}>
-          <ProposalSlides pages={data.content as CanvasPage[]} theme={data.theme} ctx={buildDealCtx(data)} fill />
-        </div>
-      ) : (
-        <div style={{ maxWidth: landscape ? 1000 : 760, margin: '0 auto', padding: '24px 16px', width: '100%' }}>
-          {deck ? (
-            <ProposalSlides pages={data.content as CanvasPage[]} theme={data.theme} ctx={buildDealCtx(data)} />
-          ) : (
-            <ProposalRenderer layout={data.content} theme={data.theme} ctx={buildDealCtx(data)} paged />
-          )}
-        </div>
-      )}
+      <div style={{ maxWidth: landscape ? 1000 : 760, margin: '0 auto', padding: '24px 16px', width: '100%' }}>
+        {deck ? (
+          <ProposalSlides pages={data.content as CanvasPage[]} theme={data.theme} ctx={buildDealCtx(data)} />
+        ) : (
+          <ProposalRenderer layout={data.content} theme={data.theme} ctx={buildDealCtx(data)} paged />
+        )}
+      </div>
 
-      {/* Response bar — in-flow footer in full-screen, fixed otherwise */}
+      {/* Fixed response bar */}
       {!responded && (
-        <div style={{ position: fullscreen ? 'static' : 'fixed', left: 0, right: 0, bottom: 0, background: '#fff', borderTop: '1px solid var(--mantine-color-gray-3)', padding: '12px 16px' }}>
+        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: '#fff', borderTop: '1px solid var(--mantine-color-gray-3)', padding: '12px 16px' }}>
           <Group justify="center" gap="sm" wrap="wrap">
             <Button color="teal" leftSection={<IconCheck size={16} />} onClick={() => choose('accepted')} loading={busy}>
               Accept
@@ -142,32 +191,7 @@ export default function PublicProposalPage() {
         </div>
       )}
 
-      <Modal
-        opened={feedbackOpen}
-        onClose={feedbackCtl.close}
-        title={pendingDecision === 'denied' ? 'Decline proposal' : 'Decide later'}
-        centered
-      >
-        <Stack>
-          <Text size="sm" c="dimmed">
-            Please share a short note so we know how to help.
-          </Text>
-          <Textarea autosize minRows={3} value={feedback} onChange={(e) => setFeedback(e.currentTarget.value)} data-autofocus />
-          <Group justify="flex-end">
-            <Button variant="default" onClick={feedbackCtl.close}>
-              Cancel
-            </Button>
-            <Button
-              color={pendingDecision === 'denied' ? 'red' : 'yellow'}
-              disabled={!feedback.trim()}
-              loading={busy}
-              onClick={() => pendingDecision && respond(pendingDecision, feedback.trim())}
-            >
-              Submit
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+      {feedbackModal}
 
       {responded && (
         <Center px="md">
