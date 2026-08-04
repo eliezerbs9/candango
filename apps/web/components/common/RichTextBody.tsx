@@ -108,7 +108,12 @@ export function RichTextBody({
       const to = sel.from;
       const from = to - match[0].length;
       const coords = editor.view.coordsAtPos(to);
-      setMenu((prev) => ({ items, index: prev && prev.from === from ? Math.min(prev.index, items.length - 1) : 0, from, to, left: coords.left, top: coords.bottom }));
+      // Keep the popup on screen: clamp horizontally, flip above the caret if it would overflow below.
+      const width = 300;
+      const estH = Math.min(items.length, 8) * 40 + 8;
+      const left = Math.max(8, Math.min(coords.left, window.innerWidth - width - 8));
+      const top = coords.bottom + estH + 8 <= window.innerHeight ? coords.bottom + 4 : Math.max(8, coords.top - estH - 4);
+      setMenu((prev) => ({ items, index: prev && prev.from === from ? Math.min(prev.index, items.length - 1) : 0, from, to, left, top }));
     };
     editor.on('update', recompute);
     editor.on('selectionUpdate', recompute);
@@ -169,7 +174,7 @@ export function RichTextBody({
             shadow="md"
             radius="sm"
             p={4}
-            style={{ position: 'fixed', left: menu.left, top: menu.top + 4, zIndex: 400, minWidth: 220, maxWidth: 300 }}
+            style={{ position: 'fixed', left: menu.left, top: menu.top, zIndex: 400, minWidth: 220, maxWidth: 300 }}
           >
             {menu.items.map((v, i) => (
               <div

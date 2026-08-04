@@ -36,6 +36,7 @@ import {
   useUpdateProposal,
 } from '@/lib/api/hooks';
 import type { CanvasPage, Proposal, ProposalBody, ProposalStatus, ProposalTheme } from '@/lib/api/proposals';
+import type { DealDoc } from '@/lib/api/types';
 import { useAutosave } from '@/lib/useAutosave';
 import { ProposalCanvasEditor, toCanvasPages, type FieldOption } from './ProposalCanvasEditor';
 import { ProposalMiniPreview } from './ProposalMiniPreview';
@@ -48,6 +49,39 @@ const fail = (e: unknown) =>
 
 const money = (cents: number, currency: string) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency }).format((cents ?? 0) / 100);
+
+const ESTIMATE_STATUS_COLOR: Record<string, string> = {
+  draft: 'gray',
+  sent: 'blue',
+  accepted: 'teal',
+  rejected: 'red',
+  closed: 'dark',
+};
+
+/** Rich estimate option: number · total · status · created date. */
+function makeEstimateRenderer(estimates: DealDoc[]) {
+  const byId = new Map(estimates.map((e) => [e.id, e]));
+  return ({ option }: { option: { value: string; label: string } }) => {
+    const e = byId.get(option.value);
+    if (!e) return option.label;
+    return (
+      <div style={{ minWidth: 0 }}>
+        <Group gap={6} wrap="nowrap">
+          <Text size="sm" fw={500}>
+            {e.docNumber ? `#${e.docNumber}` : 'Estimate'}
+          </Text>
+          <Text size="sm">{money(e.totalAmount, e.currency)}</Text>
+          <Badge size="xs" variant="light" color={ESTIMATE_STATUS_COLOR[e.status] ?? 'gray'} style={{ textTransform: 'none' }}>
+            {e.status}
+          </Badge>
+        </Group>
+        <Text size="xs" c="dimmed">
+          Created {new Date(e.createdAt).toLocaleDateString()}
+        </Text>
+      </div>
+    );
+  };
+}
 
 const STATUS_COLOR: Record<ProposalStatus, string> = {
   draft: 'gray',
@@ -201,6 +235,7 @@ function NewProposalModal({
             value: e.id,
             label: `${e.docNumber ? `#${e.docNumber}` : 'Estimate'} · ${money(e.totalAmount, e.currency)}`,
           }))}
+          renderOption={makeEstimateRenderer(estimates)}
           value={estimateIds}
           onChange={setEstimateIds}
         />
@@ -314,6 +349,7 @@ function ProposalBuilder({ id, onBack }: { id: string; onBack: () => void }) {
               value: e.id,
               label: `${e.docNumber ? `#${e.docNumber}` : 'Estimate'} · ${money(e.totalAmount, e.currency)}`,
             }))}
+            renderOption={makeEstimateRenderer(estimates)}
             value={estimateIds}
             onChange={setEstimateIds}
           />

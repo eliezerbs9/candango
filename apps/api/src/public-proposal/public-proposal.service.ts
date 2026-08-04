@@ -34,16 +34,45 @@ export class PublicProposalService {
     return { ...shapeProposal(p), ...render };
   }
 
-  /** Record the recipient's decision. Feedback is required to deny/defer; accepting fires an automation event. */
+  /**
+   * Record the recipient's decision. Feedback is required to deny/defer. Accepting/declining also
+   * updates the linked estimates' status and logs the outcome on the deal timeline; accepting fires
+   * an automation event.
+   */
   async respond(token: string, dto: RespondProposalDto) {
     const p = await this.byToken(token);
     if ((dto.decision === 'denied' || dto.decision === 'deferred') && !dto.feedback?.trim()) {
       throw new BadRequestException('Please add a short note so we know how to help.');
     }
+    const feedback = dto.feedback?.trim() || null;
     const row = await this.prisma.proposal.update({
       where: { id: p.id },
-      data: { status: dto.decision, feedback: dto.feedback?.trim() || null, respondedAt: new Date() },
+      data: { status: dto.decision, feedback, respondedAt: new Date() },
     });
+
+    // Roll the decision onto the linked estimates (accepted → accepted, declined → rejected).
+    const estStatus = dto.decision === 'accepted' ? 'accepted' : dto.decision === 'denied' ? 'rejected' : null;
+    if (estStatus && p.estimateIds.length) {
+      await this.prisma.dealEstimate.updateMany({
+        where: { id: { in: p.estimateIds }, orgId: p.orgId, deletedAt: null, status: { notIn: ['closed'] } },
+        data: { status: estStatus },
+      });
+    }
+
+    // Log the outcome on the deal timeline (as a note authored by the proposal's creator / deal owner).
+    const author = p.createdByUserId ?? (await this.prisma.deal.findFirst({ where: { id: p.dealId }, select: { ownerUserId: true } }))?.ownerUserId;
+    if (author) {
+      const verb = dto.decision === 'accepted' ? 'accepted' : dto.decision === 'denied' ? 'declined' : 'chose to decide later on';
+      await this.prisma.note.create({
+        data: {
+          orgId: p.orgId,
+          dealId: p.dealId,
+          authorUserId: author,
+          body: `Proposal “${p.title}” was ${verb} by the customer.${feedback ? ` Note: ${feedback}` : ''}`,
+        },
+      });
+    }
+
     if (dto.decision === 'accepted') {
       this.events.emit('webhook.event', { orgId: p.orgId, type: 'proposal.accepted', data: { deal: { id: p.dealId }, proposal: { id: p.id } } });
     }
