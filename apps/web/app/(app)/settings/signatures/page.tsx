@@ -15,7 +15,6 @@ import {
   Switch,
   Text,
   TextInput,
-  Textarea,
   ThemeIcon,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -35,6 +34,7 @@ import {
 } from '@/lib/api/hooks';
 import type { InitialsRule, SignatureTemplate, SignatureTemplateBody } from '@/lib/api/signature-templates';
 import type { SignableDocumentBody, SignableDocumentTemplate } from '@/lib/api/signable-documents';
+import { VariableTextarea } from '@/components/common/VariableTextarea';
 
 const INITIALS_LABELS: Record<InitialsRule, string> = {
   none: 'No initials',
@@ -297,28 +297,20 @@ function DocumentModal({ opened, onClose, doc }: { opened: boolean; onClose: () 
               ))}
             </Group>
           </Group>
-          <Textarea
-            ref={bodyRef}
+          <VariableTextarea
+            inputRef={bodyRef}
             placeholder={'<h2>Service Agreement</h2>\n<p>This agreement is between {{company.name}} and ...</p>'}
             autosize
             minRows={8}
             maxRows={20}
             styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)', fontSize: 12 } }}
             value={bodyHtml}
-            onChange={(e) => setBodyHtml(e.currentTarget.value)}
+            onChange={setBodyHtml}
+            variables={dealVars}
           />
           <Text size="xs" c="dimmed" mt={4}>
             Write HTML. Insert signature fields with the buttons above (they flow with the content). If you add none, a standard Acceptance &amp; Signature block is appended automatically.
           </Text>
-          {dealVars.length > 0 && (
-            <Group gap={4} mt={6}>
-              {dealVars.map((v) => (
-                <Badge key={v.key} variant="light" color="gray" style={{ cursor: 'pointer', textTransform: 'none' }} onClick={() => insert(`{{${v.key}}}`)}>
-                  {v.label}
-                </Badge>
-              ))}
-            </Group>
-          )}
         </div>
 
         <Group justify="flex-end">
@@ -347,7 +339,6 @@ function TemplateModal({ opened, onClose, template }: { opened: boolean; onClose
   const [pagesText, setPagesText] = useState('');
   const [acceptance, setAcceptance] = useState(true);
   const [acceptanceText, setAcceptanceText] = useState('');
-  const textRef = useRef<HTMLTextAreaElement>(null);
 
   // Re-seed the form whenever the modal opens for a different template.
   const seededFor = useRef<string | null>(null);
@@ -361,24 +352,6 @@ function TemplateModal({ opened, onClose, template }: { opened: boolean; onClose
     setAcceptanceText(template?.acceptanceText ?? '');
   }
   if (!opened && seededFor.current) seededFor.current = null;
-
-  const insertVar = (key: string) => {
-    const el = textRef.current;
-    const token = `{{${key}}}`;
-    if (!el) {
-      setAcceptanceText((t) => t + token);
-      return;
-    }
-    const start = el.selectionStart ?? acceptanceText.length;
-    const end = el.selectionEnd ?? acceptanceText.length;
-    const next = acceptanceText.slice(0, start) + token + acceptanceText.slice(end);
-    setAcceptanceText(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      const caret = start + token.length;
-      el.setSelectionRange(caret, caret);
-    });
-  };
 
   const busy = create.isPending || update.isPending;
   const submit = () => {
@@ -432,27 +405,16 @@ function TemplateModal({ opened, onClose, template }: { opened: boolean; onClose
           onChange={(e) => setAcceptance(e.currentTarget.checked)}
         />
         {acceptance && (
-          <div>
-            <Textarea
-              ref={textRef}
-              label="Acceptance wording"
-              description="Shown on the appended page. Leave empty for the default. Variables resolve against the deal."
-              placeholder="By signing below, I acknowledge and accept the terms of {{deal.title}}."
-              autosize
-              minRows={2}
-              value={acceptanceText}
-              onChange={(e) => setAcceptanceText(e.currentTarget.value)}
-            />
-            {dealVars.length > 0 && (
-              <Group gap={4} mt={6}>
-                {dealVars.map((v) => (
-                  <Badge key={v.key} variant="light" color="gray" style={{ cursor: 'pointer', textTransform: 'none' }} onClick={() => insertVar(v.key)}>
-                    {v.label}
-                  </Badge>
-                ))}
-              </Group>
-            )}
-          </div>
+          <VariableTextarea
+            label="Acceptance wording"
+            description="Shown on the appended page. Leave empty for the default. Variables resolve against the deal."
+            placeholder="By signing below, I acknowledge and accept the terms of {{deal.title}}."
+            autosize
+            minRows={2}
+            value={acceptanceText}
+            onChange={setAcceptanceText}
+            variables={dealVars}
+          />
         )}
 
         <Text size="xs" c="dimmed">
