@@ -49,6 +49,7 @@ export const TEMPLATE_VARIABLES: TemplateVariable[] = [
   { key: 'sender.phone', label: 'Your phone', group: 'Sender', example: '(555) 987-6543', scopes: DEAL_ONLY },
   { key: 'workspace.name', label: 'Workspace name', group: 'Workspace', example: 'Your Company', scopes: BOTH },
   { key: 'date.today', label: "Today's date", group: 'Date', example: '08/03/2026', scopes: BOTH },
+  { key: 'proposal.link', label: 'Proposal link', group: 'Proposal', example: 'https://app.example.com/proposal/…', scopes: DEAL_ONLY },
 ];
 
 const VALID_KEYS = new Set(TEMPLATE_VARIABLES.map((v) => v.key));

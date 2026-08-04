@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SpacesService } from '../uploads/spaces.service';
 import { MessagesService } from '../messages/messages.service';
-import { buildTemplateContext } from '../email-templates/template-vars';
+import { buildTemplateContext, renderTemplate } from '../email-templates/template-vars';
 import { CreateProposalDto, SendProposalDto, UpdateProposalDto } from './dto/proposal.dto';
 
 /** Walk a proposal's layout (pages → elements) and collect object keys of "fixed" image/document files. */
@@ -30,6 +30,7 @@ export const shapeProposal = (p: {
   id: string;
   dealId: string;
   templateId: string | null;
+  emailTemplateId: string | null;
   title: string;
   theme: Prisma.JsonValue;
   content: Prisma.JsonValue;
@@ -45,6 +46,7 @@ export const shapeProposal = (p: {
   id: p.id,
   dealId: p.dealId,
   templateId: p.templateId,
+  emailTemplateId: p.emailTemplateId,
   title: p.title,
   theme: (p.theme ?? {}) as Record<string, unknown>,
   content: (p.content ?? []) as unknown[],
@@ -85,7 +87,14 @@ export class ProposalsService {
 
     const deal = await this.prisma.deal.findFirst({
       where: { id: proposal.dealId, orgId },
-      select: { primaryPerson: { select: { name: true, firstName: true, emails: true } } },
+      select: {
+        title: true,
+        value: true,
+        currency: true,
+        ownerUserId: true,
+        primaryPerson: { select: { name: true, firstName: true, lastName: true, emails: true, phones: true } },
+        company: { select: { name: true } },
+      },
     });
     const firstEmail = (() => {
       const raw = deal?.primaryPerson?.emails;
@@ -98,15 +107,40 @@ export class ProposalsService {
     })();
     const to = (dto.to && dto.to.length ? dto.to : firstEmail ? [firstEmail] : []).filter(Boolean);
 
+    // Build subject/body from the proposal's email template (falls back to a default message).
+    const name = deal?.primaryPerson?.firstName || deal?.primaryPerson?.name || 'there';
+    let subject = `Proposal: ${proposal.title}`;
+    let body =
+      `<p>Hi ${name},</p>` +
+      `<p>Your proposal <strong>${proposal.title}</strong> is ready. You can review it here:</p>` +
+      `<p><a href="${link}">View your proposal</a></p>`;
+
+    if (proposal.emailTemplateId) {
+      const et = await this.prisma.emailTemplate.findFirst({ where: { id: proposal.emailTemplateId, orgId, archivedAt: null } });
+      if (et) {
+        const [owner, org] = await Promise.all([
+          deal?.ownerUserId ? this.prisma.user.findFirst({ where: { id: deal.ownerUserId, orgId }, select: { name: true, email: true, phone: true } }) : null,
+          this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true, timezone: true } }),
+        ]);
+        const ctx = buildTemplateContext({
+          person: deal?.primaryPerson,
+          company: deal?.company,
+          deal: deal ? { title: deal.title, value: deal.value, currency: deal.currency } : null,
+          sender: owner,
+          workspace: org,
+        });
+        ctx['proposal.link'] = link;
+        subject = renderTemplate(et.subject, ctx) || subject;
+        body = renderTemplate(et.body, ctx);
+        // Always ensure the link is present, even if the template didn't reference {{proposal.link}}.
+        if (!et.body.includes('proposal.link')) body += `<p><a href="${link}">View your proposal</a></p>`;
+      }
+    }
+
     let emailed = false;
     if (to.length) {
-      const name = deal?.primaryPerson?.firstName || deal?.primaryPerson?.name || 'there';
-      const body =
-        `<p>Hi ${name},</p>` +
-        `<p>Your proposal <strong>${proposal.title}</strong> is ready. You can review it here:</p>` +
-        `<p><a href="${link}">View your proposal</a></p>`;
       try {
-        await this.messages.send(orgId, userId, { to, subject: `Proposal: ${proposal.title}`, body, html: true, dealId: proposal.dealId });
+        await this.messages.send(orgId, userId, { to, subject, body, html: true, dealId: proposal.dealId });
         emailed = true;
       } catch {
         // Mailbox not connected / send failed — the link is still returned so it can be shared manually.
@@ -151,6 +185,7 @@ export class ProposalsService {
         orgId,
         dealId: dto.dealId,
         templateId: template?.id ?? null,
+        emailTemplateId: template?.emailTemplateId ?? null,
         createdByUserId: userId,
         title: dto.title?.trim() || deal.title,
         theme: (template?.theme ?? {}) as Prisma.InputJsonValue,

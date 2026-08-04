@@ -9,6 +9,7 @@ const shape = (t: {
   name: string;
   theme: Prisma.JsonValue;
   layout: Prisma.JsonValue;
+  emailTemplateId: string | null;
   systemKey: string | null;
   updatedAt: Date;
 }) => ({
@@ -16,6 +17,7 @@ const shape = (t: {
   name: t.name,
   theme: (t.theme ?? {}) as Record<string, unknown>,
   layout: (t.layout ?? []) as unknown[],
+  emailTemplateId: t.emailTemplateId,
   systemKey: t.systemKey,
   system: t.systemKey != null,
   updatedAt: t.updatedAt.toISOString(),
@@ -47,6 +49,7 @@ export class ProposalTemplatesService {
         name: dto.name.trim(),
         theme: (dto.theme ?? DEFAULT_THEME) as Prisma.InputJsonValue,
         layout: (dto.layout ?? []) as Prisma.InputJsonValue,
+        emailTemplateId: dto.emailTemplateId ?? null,
       },
     });
     return shape(row);
@@ -60,6 +63,7 @@ export class ProposalTemplatesService {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
         ...(dto.theme !== undefined ? { theme: dto.theme as Prisma.InputJsonValue } : {}),
         ...(dto.layout !== undefined ? { layout: dto.layout as Prisma.InputJsonValue } : {}),
+        ...(dto.emailTemplateId !== undefined ? { emailTemplateId: dto.emailTemplateId || null } : {}),
       },
     });
     return shape(row);

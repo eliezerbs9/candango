@@ -890,6 +890,7 @@ model ProposalTemplate {
   name            String
   theme           Json      @default("{}") // { primaryColor, accentColor, fontHeading, fontBody, coverStyle }
   layout          Json      @default("[]") // rows: [{ id, columns: [{ id, width, block: { type, props } | null }] }]
+  emailTemplateId String? // EmailTemplate used for the covering email when a proposal is sent
   systemKey       String? // non-null = protected built-in starter
   createdByUserId String?
   archivedAt      DateTime?
@@ -909,6 +910,7 @@ model Proposal {
   orgId           String
   dealId          String
   templateId      String?
+  emailTemplateId String? // EmailTemplate for the covering email (copied from the proposal template)
   title           String
   theme           Json      @default("{}")
   content         Json      @default("[]") // resolved layout snapshot (stable once sent)

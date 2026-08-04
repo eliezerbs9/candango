@@ -96,6 +96,7 @@ export interface ProposalTemplate {
   name: string;
   theme: ProposalTheme;
   layout: CanvasPage[];
+  emailTemplateId: string | null;
   systemKey: string | null;
   system: boolean;
   updatedAt: string;
@@ -111,6 +112,7 @@ export interface ProposalTemplateBody {
   name?: string;
   theme?: ProposalTheme;
   layout?: CanvasPage[];
+  emailTemplateId?: string;
 }
 
 export function getProposalMeta(token: string) {
@@ -148,6 +150,7 @@ export interface Proposal {
   id: string;
   dealId: string;
   templateId: string | null;
+  emailTemplateId: string | null;
   title: string;
   theme: ProposalTheme;
   content: CanvasPage[];

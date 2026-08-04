@@ -30,6 +30,7 @@ import {
   useCreateProposalTemplate,
   useDeleteProposalTemplate,
   useProposalMeta,
+  useEmailTemplates,
   useOrganization,
   useProposalTemplates,
   useSeedProposalTemplates,
@@ -61,24 +62,29 @@ export default function ProposalTemplatesPage() {
   const del = useDeleteProposalTemplate();
   const seed = useSeedProposalTemplates();
 
+  const { data: emailTemplates = [] } = useEmailTemplates();
+  const dealEmailTemplates = emailTemplates.filter((t) => t.scope === 'deal');
+
   const [opened, ctl] = useDisclosure(false);
   const [name, setName] = useState('');
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const [layoutKey, setLayoutKey] = useState('blank');
+  const [emailTemplateId, setEmailTemplateId] = useState<string | null>(null);
 
   const submit = () => {
-    if (!name.trim()) return;
+    if (!name.trim() || !emailTemplateId) return;
     // Orientation + starting layout are chosen once, at creation, and can't change afterwards.
     const preset = PAGE_PRESETS.find((p) => p.key === layoutKey) ?? PAGE_PRESETS[0];
     const firstPage = { id: uid(), elements: preset.build() };
     create.mutate(
-      { name: name.trim(), theme: { ...(meta?.defaultTheme as ProposalTheme), orientation }, layout: [firstPage] },
+      { name: name.trim(), theme: { ...(meta?.defaultTheme as ProposalTheme), orientation }, layout: [firstPage], emailTemplateId },
       {
         onSuccess: (t) => {
           ctl.close();
           setName('');
           setLayoutKey('blank');
           setOrientation('portrait');
+          setEmailTemplateId(null);
           router.push(`/settings/proposals/${t.id}`);
         },
         onError: fail,
@@ -237,7 +243,17 @@ export default function ProposalTemplatesPage() {
             onChange={(v) => setLayoutKey(v ?? 'blank')}
             allowDeselect={false}
           />
-          <Button onClick={submit} loading={create.isPending}>
+          <Select
+            label="Covering email"
+            description="Sent with the proposal link. Manage these in Settings → Email templates."
+            placeholder={dealEmailTemplates.length === 0 ? 'Create a deal email template first' : 'Pick an email template'}
+            required
+            searchable
+            data={dealEmailTemplates.map((t) => ({ value: t.id, label: t.name }))}
+            value={emailTemplateId}
+            onChange={setEmailTemplateId}
+          />
+          <Button onClick={submit} loading={create.isPending} disabled={!name.trim() || !emailTemplateId}>
             Create &amp; edit
           </Button>
         </Stack>
