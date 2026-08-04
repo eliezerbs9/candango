@@ -1,0 +1,92 @@
+# Isolated proof-of-concept for evaluating Documenso as the e-signature engine.
+# Not part of the app's infra — self-contained. Bring up with:
+#   docker-compose -f docker/documenso/compose.yml --env-file docker/documenso/.env up -d
+# Then open http://localhost:3060 (Documenso) and http://localhost:8025 (Mailpit, to read the
+# verification email). Postgres is internal-only (no host port) so it won't clash with the
+# native Postgres on 5432.
+name: candango-documenso-poc
+
+services:
+  database:
+    image: postgres:15
+    container_name: candango-documenso-db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:?err}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?err}
+      - POSTGRES_DB=${POSTGRES_DB:?err}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - documenso_db:/var/lib/postgresql/data
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: candango-documenso-mail
+    ports:
+      - '8025:8025' # web UI to read captured emails
+    # SMTP on 1025 is reachable inside the compose network as mailpit:1025
+
+  # S3-compatible storage — Documenso's API requires S3 transport to create documents.
+  # (In production this role is played by DigitalOcean Spaces, which is S3-compatible.)
+  minio:
+    image: minio/minio:latest
+    container_name: candango-documenso-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - documenso_minio:/data
+
+  createbucket:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "until /usr/bin/mc alias set m http://minio:9000 minioadmin minioadmin; do sleep 2; done; /usr/bin/mc mb -p m/documenso; exit 0"
+
+  documenso:
+    image: documenso/documenso:latest
+    container_name: candango-documenso
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      - PORT=${PORT:-3060}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:?err}
+      - NEXT_PRIVATE_ENCRYPTION_KEY=${NEXT_PRIVATE_ENCRYPTION_KEY:?err}
+      - NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY=${NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY:?err}
+      - NEXT_PUBLIC_WEBAPP_URL=${NEXT_PUBLIC_WEBAPP_URL:?err}
+      - NEXT_PRIVATE_INTERNAL_WEBAPP_URL=http://localhost:${PORT:-3060}
+      - NEXT_PRIVATE_DATABASE_URL=${NEXT_PRIVATE_DATABASE_URL:?err}
+      - NEXT_PRIVATE_DIRECT_DATABASE_URL=${NEXT_PRIVATE_DATABASE_URL}
+      - NEXT_PUBLIC_UPLOAD_TRANSPORT=s3
+      - NEXT_PRIVATE_UPLOAD_ENDPOINT=http://minio:9000
+      - NEXT_PRIVATE_UPLOAD_FORCE_PATH_STYLE=true
+      - NEXT_PRIVATE_UPLOAD_REGION=us-east-1
+      - NEXT_PRIVATE_UPLOAD_BUCKET=documenso
+      - NEXT_PRIVATE_UPLOAD_ACCESS_KEY_ID=minioadmin
+      - NEXT_PRIVATE_UPLOAD_SECRET_ACCESS_KEY=minioadmin
+      - NEXT_PRIVATE_SMTP_TRANSPORT=${NEXT_PRIVATE_SMTP_TRANSPORT:?err}
+      - NEXT_PRIVATE_SMTP_HOST=${NEXT_PRIVATE_SMTP_HOST}
+      - NEXT_PRIVATE_SMTP_PORT=${NEXT_PRIVATE_SMTP_PORT}
+      - NEXT_PRIVATE_SMTP_SECURE=${NEXT_PRIVATE_SMTP_SECURE}
+      - NEXT_PRIVATE_SMTP_UNSAFE_IGNORE_TLS=${NEXT_PRIVATE_SMTP_UNSAFE_IGNORE_TLS}
+      - NEXT_PRIVATE_SMTP_FROM_NAME=${NEXT_PRIVATE_SMTP_FROM_NAME:?err}
+      - NEXT_PRIVATE_SMTP_FROM_ADDRESS=${NEXT_PRIVATE_SMTP_FROM_ADDRESS:?err}
+      - NEXT_PRIVATE_SIGNING_LOCAL_FILE_PATH=/opt/documenso/cert.p12
+      - NEXT_PRIVATE_SIGNING_PASSPHRASE=${NEXT_PRIVATE_SIGNING_PASSPHRASE}
+    ports:
+      - '${PORT:-3060}:${PORT:-3060}'
+    volumes:
+      - ./cert.p12:/opt/documenso/cert.p12:ro
+
+volumes:
+  documenso_db:
+  documenso_minio:
