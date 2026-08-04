@@ -17,8 +17,8 @@ export function buildPreviewCtx(exampleByKey: Record<string, string>, fileUrlByK
       const n = urls ? Math.max(1, urls.length) : Math.max(1, count);
       return imageGrid(Math.max(1, cols), n, (i) => urls?.[i], 'Photo');
     },
-    document: ({ docs, count = 1 } = {}) => {
-      const list = docs && docs.length ? docs : Array.from({ length: Math.max(1, count) }).map(() => ({ name: 'Document.pdf', url: '' }));
+    document: ({ docs } = {}) => {
+      const list = docs && docs.length ? docs : [{ name: 'Document.pdf', url: '' }];
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {list.map((d, i) => (

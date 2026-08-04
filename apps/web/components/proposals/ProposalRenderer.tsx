@@ -23,8 +23,8 @@ export interface ProposalDocOpts {
   fieldKey?: string;
   pick?: MediaPick;
   picked?: string[];
-  /** How many documents to show (field source, non-manual). */
-  count?: number;
+  /** Show a single document (field source); off shows the whole selection. */
+  single?: boolean;
   /** When set (template-owned "fixed" source), render exactly these documents. */
   docs?: { name?: string; url: string }[];
 }
@@ -118,7 +118,7 @@ export function ElementView({ element, theme, ctx }: { element: CanvasElement; t
             fieldKey: element.props.fieldKey as string | undefined,
             pick: element.props.pick as MediaPick | undefined,
             picked: element.props.picked as string[] | undefined,
-            count: element.props.count as number | undefined,
+            single: element.props.single !== false,
             docs: fixedDocs(element.props, ctx),
           })}
         </div>
