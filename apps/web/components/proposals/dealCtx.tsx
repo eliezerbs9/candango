@@ -38,7 +38,7 @@ export function buildDealCtx(data: ProposalRenderCore): ProposalRenderCtx {
       const slots = fixed || pick === 'manual' ? Math.max(1, files.length) : Math.max(1, count);
       return imageGrid(Math.max(1, cols), slots, (i) => files[i]?.url);
     },
-    document: ({ fieldKey, pick = 'recent', picked, docs: fixedDocs }) => {
+    document: ({ fieldKey, pick = 'recent', picked, count = 1, docs: fixedDocs }) => {
       const all: ProposalDocFile[] = fieldKey ? data.documentsByField[fieldKey] ?? [] : Object.values(data.documentsByField).flat();
       const raw = fixedDocs ? fixedDocs.map((d) => ({ key: d.url, name: d.name ?? 'Document', url: d.url })) : selectFiles(all, pick, picked);
       // De-duplicate so an accidentally repeated file doesn't render a phantom second row.
@@ -49,9 +49,9 @@ export function buildDealCtx(data: ProposalRenderCore): ProposalRenderCtx {
         seen.add(k);
         return true;
       });
-      // A field-bound document shows exactly one (most recent / oldest / the picked one); creator-uploaded
-      // "fixed" documents show all the files they attached.
-      const docs = fixedDocs ? deduped : deduped.slice(0, 1);
+      // Field-bound documents show up to `count` (most recent / oldest) or exactly the picked ones;
+      // creator-uploaded "fixed" documents show all the files they attached.
+      const docs = fixedDocs ? deduped : pick === 'manual' ? deduped : deduped.slice(0, Math.max(1, count));
       if (docs.length === 0) return null;
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

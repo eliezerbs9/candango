@@ -104,7 +104,7 @@ function newElement(type: ElementType): CanvasElement {
     case 'image':
       return { ...base, w: 45, h: 26, props: { label: 'Photos', cols: 1, count: 1 } };
     case 'document':
-      return { ...base, w: 45, h: 8, props: { label: 'Document' } };
+      return { ...base, w: 45, h: 8, props: { label: 'Document', count: 1 } };
     case 'logo':
       return { ...base, w: 30, h: 10, props: { fit: 'contain' } };
     case 'pricing':
@@ -898,7 +898,7 @@ function ElementSettings({
   const source = (el.props.source as string) ?? 'field';
   const pick = (el.props.pick as MediaPick) ?? 'recent';
   const media = isMedia ? (
-    <MediaPicker el={el} onProp={onProp} imageFilesByField={imageFilesByField} documentFilesByField={documentFilesByField} single={el.type === 'document'} />
+    <MediaPicker el={el} onProp={onProp} imageFilesByField={imageFilesByField} documentFilesByField={documentFilesByField} />
   ) : null;
 
   // Locked media element: only its file selection is editable — and only when it pulls from a deal field
@@ -997,6 +997,9 @@ function ElementSettings({
                   )}
                   <NumberInput size="xs" label="Columns" min={1} max={4} value={(el.props.cols as number) ?? 1} onChange={(v) => onProp('cols', Math.max(1, Number(v) || 1))} />
                 </Group>
+              )}
+              {el.type === 'document' && pick !== 'manual' && (
+                <NumberInput size="xs" label="How many" description="How many documents to show." min={1} max={12} value={(el.props.count as number) ?? 1} onChange={(v) => onProp('count', Math.max(1, Number(v) || 1))} />
               )}
               {media}
             </>
@@ -1115,7 +1118,7 @@ function MediaPicker({
     <Stack gap={6}>
       <Select
         size="xs"
-        label={isImage ? 'Which photos' : 'Which document'}
+        label={isImage ? 'Which photos' : 'Which documents'}
         data={[
           { value: 'recent', label: 'Most recent' },
           { value: 'oldest', label: 'Oldest' },
