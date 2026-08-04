@@ -59,18 +59,23 @@ export class DocumensoService {
     sendEmail: boolean;
   }): Promise<{ documentId: number; signingUrl?: string; recipients: { email: string; name: string; signingUrl?: string }[] }> {
     if (input.recipients.length === 0) throw new BadRequestException('At least one signer is required');
+    // No signingOrder → parties can sign in parallel (any order).
     const created = await this.req('POST', '/api/v1/documents', {
       title: input.name,
-      recipients: input.recipients.map((r, i) => ({ name: r.name || r.email, email: r.email, role: 'SIGNER', signingOrder: i + 1 })),
+      recipients: input.recipients.map((r) => ({ name: r.name || r.email, email: r.email, role: 'SIGNER' })),
       meta: {},
     });
     const documentId = Number(created.documentId ?? created.id);
     const uploadUrl = String(created.uploadUrl ?? '');
     const created_recipients = (created.recipients as Record<string, unknown>[] | undefined) ?? [];
-    const recipientIds = created_recipients.map((r) => Number(r.recipientId ?? r.id));
-    const outRecipients = created_recipients.map((r) => ({ email: String(r.email ?? ''), name: String(r.name ?? ''), signingUrl: r.signingUrl as string | undefined }));
+    // Documenso may return recipients in a different order — match back to our input by email so
+    // field.recipient (an index into OUR ordered recipients) lands on the correct signer.
+    const byEmail = new Map(created_recipients.map((r) => [String(r.email ?? '').toLowerCase(), r]));
+    const ordered = input.recipients.map((r) => byEmail.get(r.email.toLowerCase()) ?? {});
+    const recipientIds = ordered.map((r) => Number(r.recipientId ?? r.id));
+    const outRecipients = ordered.map((r, i) => ({ email: input.recipients[i].email, name: String(r.name ?? input.recipients[i].name ?? ''), signingUrl: r.signingUrl as string | undefined }));
     const signingUrl = outRecipients[0]?.signingUrl;
-    if (!documentId || !uploadUrl || recipientIds.length === 0) throw new BadRequestException('Documenso create returned an unexpected shape');
+    if (!documentId || !uploadUrl || recipientIds.some((n) => !n)) throw new BadRequestException('Documenso create returned an unexpected shape');
 
     // Upload the PDF bytes straight to the presigned (S3) URL.
     const put = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'application/pdf' }, body: new Uint8Array(input.fileBytes) });

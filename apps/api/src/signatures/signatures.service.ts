@@ -34,6 +34,7 @@ const shape = (r: {
   dealId: string;
   title: string;
   status: string;
+  recipients: unknown;
   signerName: string | null;
   signerEmail: string | null;
   sourceFileKey: string | null;
@@ -55,6 +56,11 @@ const shape = (r: {
   sourceFileKey: r.sourceFileKey,
   signedFileKey: r.signedFileKey,
   hasSigned: !!r.signedFileKey,
+  // The workspace's own signing link (the deal-owner party), so it can sign its part from the deal.
+  ownerSignUrl:
+    r.status !== 'signed'
+      ? ((r.recipients as { owner?: boolean; signingUrl?: string }[] | null) ?? []).find((x) => x.owner)?.signingUrl ?? null
+      : null,
   auditUrl: r.auditUrl,
   sentAt: r.sentAt?.toISOString() ?? null,
   viewedAt: r.viewedAt?.toISOString() ?? null,
@@ -265,6 +271,7 @@ export class SignaturesService {
         status: 'sent',
         signatureTemplateId: template?.id ?? null,
         drawnFields: (dto.drawnFields ?? []) as object,
+        recipients: this.mergeRecipients(recipients, sub.recipients) as object,
         signerName: dto.signerName ?? null,
         signerEmail: dto.signerEmail,
         sourceFileKey: dto.fileKey,
@@ -321,6 +328,7 @@ export class SignaturesService {
         dealId: dto.dealId,
         title: tpl.name,
         status: 'sent',
+        recipients: this.mergeRecipients(recipients, sub.recipients) as object,
         signerName: signerName ?? null,
         signerEmail,
         sourceFileKey: tpl.fileKey,
@@ -333,15 +341,20 @@ export class SignaturesService {
   }
 
   /** The signing parties: the client, plus the deal owner (salesperson) when both parties sign. */
-  private async resolveRecipients(orgId: string, dealId: string, client: { email: string; name?: string }, bothParties: boolean): Promise<{ email: string; name?: string }[]> {
-    const recipients: { email: string; name?: string }[] = [{ email: client.email, name: client.name }];
+  private async resolveRecipients(orgId: string, dealId: string, client: { email: string; name?: string }, bothParties: boolean): Promise<{ email: string; name?: string; owner: boolean }[]> {
+    const recipients: { email: string; name?: string; owner: boolean }[] = [{ email: client.email, name: client.name, owner: false }];
     if (bothParties) {
       const deal = await this.prisma.deal.findFirst({ where: { id: dealId, orgId }, select: { owner: { select: { name: true, email: true } } } });
       const owner = deal?.owner;
       if (!owner?.email) throw new BadRequestException('The deal owner has no email — can’t add them as the second signer.');
-      if (owner.email.toLowerCase() !== client.email.toLowerCase()) recipients.push({ email: owner.email, name: owner.name ?? undefined });
+      if (owner.email.toLowerCase() !== client.email.toLowerCase()) recipients.push({ email: owner.email, name: owner.name ?? undefined, owner: true });
     }
     return recipients;
+  }
+
+  /** Merge our recipients (with owner flags) with Documenso's signing URLs for storage. */
+  private mergeRecipients(recipients: { email: string; name?: string; owner: boolean }[], subRecipients: { email: string; name: string; signingUrl?: string }[]) {
+    return recipients.map((r, i) => ({ email: r.email, name: r.name ?? subRecipients[i]?.name ?? '', owner: r.owner, signingUrl: subRecipients[i]?.signingUrl ?? null }));
   }
 
   /** Build the {{variable}} context for a deal (contact/company/deal + sender + workspace). */

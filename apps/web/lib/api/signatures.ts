@@ -13,6 +13,8 @@ export interface SignatureRequest {
   sourceFileKey: string | null;
   signedFileKey: string | null;
   hasSigned: boolean;
+  /** The workspace's own signing link (both-parties), so the owner can sign their part. */
+  ownerSignUrl: string | null;
   auditUrl: string | null;
   sentAt: string | null;
   viewedAt: string | null;

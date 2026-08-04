@@ -945,6 +945,7 @@ model SignatureRequest {
   status               String    @default("draft") // draft | sent | viewed | signed | declined | expired
   signatureTemplateId  String? // optional SignatureTemplate whose field rules were applied
   drawnFields          Json      @default("[]") // per-request visually-placed fields (Phase 3)
+  recipients           Json      @default("[]") // [{ email, name, owner, signingUrl }] — signers + their links
   signerName           String?
   signerEmail          String?
   sourceFileKey        String? // Spaces key of the document sent for signature

@@ -25,7 +25,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconDots, IconDownload, IconExternalLink, IconFileText, IconInfoCircle, IconLink, IconPlus, IconRefresh, IconTrash, IconUpload } from '@tabler/icons-react';
+import { IconDots, IconDownload, IconExternalLink, IconFileText, IconInfoCircle, IconLink, IconPlus, IconRefresh, IconSignature, IconTrash, IconUpload } from '@tabler/icons-react';
 import Link from 'next/link';
 import { ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/auth/store';
@@ -161,6 +161,10 @@ function SignatureCard({ r, dealId }: { r: SignatureRequest; dealId: string }) {
           {r.hasSigned ? (
             <Button size="compact-xs" variant="light" leftSection={<IconDownload size={13} />} onClick={downloadSigned}>
               Signed PDF
+            </Button>
+          ) : r.ownerSignUrl ? (
+            <Button size="compact-xs" component="a" href={r.ownerSignUrl} target="_blank" leftSection={<IconSignature size={13} />}>
+              Sign your part
             </Button>
           ) : (
             <span />
