@@ -81,4 +81,18 @@ export class SpacesService {
     if (!this.client) return;
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
+
+  /** Download an object's bytes (server-side, e.g. to stamp/append or re-store a signed PDF). */
+  async getBytes(key: string): Promise<Buffer> {
+    if (!this.client) throw new Error('Spaces not configured');
+    const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    const arr = await res.Body!.transformToByteArray();
+    return Buffer.from(arr);
+  }
+
+  /** Upload bytes directly (server-side), e.g. a completed/signed PDF pulled from DocuSeal. */
+  async putBytes(key: string, body: Buffer, contentType: string): Promise<void> {
+    if (!this.client) throw new Error('Spaces not configured');
+    await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }));
+  }
 }

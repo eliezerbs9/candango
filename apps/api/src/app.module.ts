@@ -30,6 +30,7 @@ import { PublicEmailModule } from './public-email/public-email.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { ProposalsModule } from './proposals/proposals.module';
 import { PublicProposalModule } from './public-proposal/public-proposal.module';
+import { SignaturesModule } from './signatures/signatures.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -80,6 +81,7 @@ import { HealthController } from './health.controller';
     UploadsModule,
     ProposalsModule,
     PublicProposalModule,
+    SignaturesModule,
   ],
   controllers: [HealthController],
 })

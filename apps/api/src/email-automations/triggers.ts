@@ -79,6 +79,14 @@ export const AUTOMATION_TRIGGERS: TriggerDef[] = [
     fields: [],
   },
   {
+    key: 'document_signed',
+    label: 'Document signed',
+    description: 'When a customer completes an e-signature request.',
+    kind: 'event',
+    events: ['document.signed'],
+    fields: [],
+  },
+  {
     key: 'doc_overdue',
     label: 'Estimate/invoice overdue',
     description: 'A set number of days after an estimate/invoice was sent without being accepted/paid.',

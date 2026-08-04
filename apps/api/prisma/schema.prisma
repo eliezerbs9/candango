@@ -68,6 +68,7 @@ model Organization {
   dealInvoices   DealInvoice[]
   proposalTemplates ProposalTemplate[]
   proposals      Proposal[]
+  signatureRequests SignatureRequest[]
 }
 
 model User {
@@ -240,6 +241,7 @@ model Deal {
   estimates    DealEstimate[]
   invoices     DealInvoice[]
   proposals    Proposal[]
+  signatureRequests SignatureRequest[]
 
   @@unique([orgId, refNumber])
   @@index([orgId, stageId])
@@ -928,6 +930,33 @@ model Proposal {
   organization Organization      @relation(fields: [orgId], references: [id])
   deal         Deal              @relation(fields: [dealId], references: [id])
   template     ProposalTemplate? @relation(fields: [templateId], references: [id])
+
+  @@index([orgId, dealId])
+}
+
+/// A document sent for e-signature (via self-hosted DocuSeal). See 06 - Delivery/E-Signature — Design & Plan.
+model SignatureRequest {
+  id                   String    @id @default(cuid())
+  orgId                String
+  dealId               String
+  title                String
+  status               String    @default("draft") // draft | sent | viewed | signed | declined | expired
+  signerName           String?
+  signerEmail          String?
+  sourceFileKey        String? // Spaces key of the document sent for signature
+  signedFileKey        String? // Spaces key of the completed/signed PDF (pulled from DocuSeal)
+  auditUrl             String? // DocuSeal audit-log URL
+  docusealSubmissionId String?   @unique // DocuSeal submission id (webhook correlation)
+  createdByUserId      String?
+  sentAt               DateTime?
+  viewedAt             DateTime?
+  signedAt             DateTime?
+  declinedAt           DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  deal         Deal         @relation(fields: [dealId], references: [id])
 
   @@index([orgId, dealId])
 }

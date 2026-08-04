@@ -10,6 +10,7 @@ const EVENT_TO_TRIGGER: Record<string, string> = {
   'deal.lost': 'deal_lost',
   'deal.doc_sent': 'doc_sent',
   'proposal.accepted': 'proposal_accepted',
+  'document.signed': 'document_signed',
 };
 
 interface WebhookEvent {
