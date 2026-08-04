@@ -23,4 +23,14 @@ export class CreateSignatureDto {
   @IsOptional()
   @IsBoolean()
   sendEmail?: boolean;
+
+  /** Append an Acceptance & Signature page (default true). */
+  @IsOptional()
+  @IsBoolean()
+  acceptance?: boolean;
+
+  /** Add an initials field on every page. */
+  @IsOptional()
+  @IsBoolean()
+  initialsEveryPage?: boolean;
 }

@@ -31,6 +31,8 @@ export interface SignatureBody {
   signerName?: string;
   signerEmail: string;
   sendEmail?: boolean;
+  acceptance?: boolean;
+  initialsEveryPage?: boolean;
 }
 
 export function getDealSignatures(token: string, dealId: string) {

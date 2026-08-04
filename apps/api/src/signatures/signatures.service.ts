@@ -3,7 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { SpacesService } from '../uploads/spaces.service';
 import { DocusealService, type DocusealField } from './docuseal.service';
-import { ACCEPTANCE_FIELDS, appendAcceptancePage } from './acceptance-page';
+import { ACCEPTANCE_FIELDS, INITIALS_ZONE, PDFDocument, addAcceptancePage } from './acceptance-page';
 import { CreateSignatureDto } from './dto/signature.dto';
 
 const shape = (r: {
@@ -69,14 +69,39 @@ export class SignaturesService {
     if (!this.docuseal.configured) throw new ServiceUnavailableException('E-signature is not configured (set DOCUSEAL_URL, DOCUSEAL_API_KEY).');
     if (!dto.fileKey.startsWith(`org-${orgId}/`)) throw new BadRequestException('Not your file');
 
-    const source = await this.spaces.getBytes(dto.fileKey);
-    const { pdf, signPage } = await appendAcceptancePage(source, { title: dto.title });
+    const acceptance = dto.acceptance ?? true;
+    const initialsEveryPage = dto.initialsEveryPage ?? false;
+    if (!acceptance && !initialsEveryPage) throw new BadRequestException('Select at least one signing option.');
 
-    const fields: DocusealField[] = [
-      { name: 'Signature', type: 'signature', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.signature }] },
-      { name: 'Date', type: 'date', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.date }] },
-      { name: 'Printed name', type: 'text', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.name }] },
-    ];
+    const source = await this.spaces.getBytes(dto.fileKey);
+    let doc: Awaited<ReturnType<typeof PDFDocument.load>>;
+    try {
+      doc = await PDFDocument.load(source);
+    } catch {
+      throw new BadRequestException('Only PDF documents can be sent for signature.');
+    }
+
+    const fields: DocusealField[] = [];
+    if (acceptance) {
+      const signPage = await addAcceptancePage(doc, { title: dto.title });
+      fields.push(
+        { name: 'Signature', type: 'signature', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.signature }] },
+        { name: 'Date', type: 'date', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.date }] },
+        { name: 'Printed name', type: 'text', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.name }] },
+      );
+    }
+    if (initialsEveryPage) {
+      const pageCount = doc.getPageCount();
+      // One field repeated on every page: the signer draws initials once and they stamp all pages.
+      fields.push({
+        name: 'Initials',
+        type: 'initials',
+        role: 'Client',
+        areas: Array.from({ length: pageCount }, (_, i) => ({ page: i + 1, ...INITIALS_ZONE })),
+      });
+    }
+
+    const pdf = Buffer.from(await doc.save());
 
     const sub = await this.docuseal.createPdfSubmission({
       name: dto.title,

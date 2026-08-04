@@ -4,20 +4,23 @@ const PAGE_W = 612;
 const PAGE_H = 792; // US Letter
 const MARGIN = 56;
 
-/** Field zones on the appended page — DocuSeal normalized coords (y measured from the top). */
+/** Field zones on the appended acceptance page — DocuSeal normalized coords (y measured from the top). */
 export const ACCEPTANCE_FIELDS = {
   signature: { x: 0.091, y: 0.55, w: 0.42, h: 0.07 },
   date: { x: 0.58, y: 0.55, w: 0.33, h: 0.05 },
   name: { x: 0.091, y: 0.68, w: 0.42, h: 0.05 },
 };
 
+/** Footer-right zone for a page-initials field (repeated on every page). Normalized, y from top. */
+export const INITIALS_ZONE = { x: 0.8, y: 0.955, w: 0.13, h: 0.028 };
+
+export { PDFDocument };
+
 /**
- * Append a clean "Acceptance & Signature" page to any PDF and return the merged bytes + the 1-indexed
- * page number of the appended page. Length-proof: signature fields always land on this known page,
- * whatever the source document's length/content.
+ * Append a clean "Acceptance & Signature" page to a loaded PDF and return the 1-indexed page number
+ * of the appended page. Length-proof: the signature fields always land on this known page.
  */
-export async function appendAcceptancePage(src: Buffer, opts: { title: string }): Promise<{ pdf: Buffer; signPage: number }> {
-  const doc = await PDFDocument.load(src);
+export async function addAcceptancePage(doc: PDFDocument, opts: { title: string }): Promise<number> {
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const page = doc.addPage([PAGE_W, PAGE_H]);
@@ -46,6 +49,5 @@ export async function appendAcceptancePage(src: Buffer, opts: { title: string })
   label('Printed name', ACCEPTANCE_FIELDS.name);
   line(ACCEPTANCE_FIELDS.name);
 
-  const bytes = await doc.save();
-  return { pdf: Buffer.from(bytes), signPage: doc.getPageCount() };
+  return doc.getPageCount(); // 1-indexed last page
 }

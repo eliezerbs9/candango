@@ -1,14 +1,34 @@
 'use client';
 
-import { useState } from 'react';
-import { ActionIcon, Badge, Button, Card, FileButton, Group, Loader, Menu, Modal, Paper, Stack, Switch, Text, TextInput } from '@mantine/core';
+import { useMemo, useState } from 'react';
+import {
+  ActionIcon,
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  FileButton,
+  Group,
+  Loader,
+  Menu,
+  Modal,
+  Paper,
+  Select,
+  Stack,
+  Switch,
+  Text,
+  TextInput,
+} from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconDots, IconDownload, IconLink, IconPlus, IconTrash, IconUpload } from '@tabler/icons-react';
+import { IconDots, IconDownload, IconInfoCircle, IconLink, IconPlus, IconTrash, IconUpload } from '@tabler/icons-react';
+import Link from 'next/link';
 import { ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/auth/store';
-import { useCreateSignature, useDealSignatures, useDeleteSignature, useUploadFile } from '@/lib/api/hooks';
+import { useCreateSignature, useCustomFields, useDealSignatures, useDeleteSignature, useFileUrl, useUploadFile } from '@/lib/api/hooks';
 import { getSignatureSignedUrl, type SignatureRequest, type SignatureStatus } from '@/lib/api/signatures';
+import { useDealCtx } from '@/components/deals/DealContext';
 
 const STATUS_COLOR: Record<SignatureStatus, string> = {
   draft: 'gray',
@@ -18,6 +38,16 @@ const STATUS_COLOR: Record<SignatureStatus, string> = {
   declined: 'red',
   expired: 'gray',
 };
+
+const DOC_MAX = 25 * 1024 * 1024;
+/** Only documents we can currently place fields on and send for signature. */
+const SIGNABLE = /\.pdf$/i;
+
+interface StoredDoc {
+  name: string;
+  type: string;
+  key: string;
+}
 
 const fail = (e: unknown) => notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
 
@@ -53,7 +83,7 @@ export function DealSignatures({ dealId }: { dealId: string }) {
         <Loader size="sm" />
       ) : rows.length === 0 ? (
         <Text size="sm" c="dimmed">
-          No signature requests yet. Upload a document and send it for signature.
+          No signature requests yet. Pick a document from the deal and send it for signature.
         </Text>
       ) : (
         <Stack gap="xs">
@@ -108,22 +138,40 @@ export function DealSignatures({ dealId }: { dealId: string }) {
 }
 
 function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: () => void; dealId: string }) {
+  const { form, setForm, save } = useDealCtx();
+  const { data: allFields = [] } = useCustomFields('deal');
+  const docFields = useMemo(() => allFields.filter((f) => f.type === 'document'), [allFields]);
+
   const create = useCreateSignature();
   const upload = useUploadFile();
+
+  const [fieldKey, setFieldKey] = useState<string | null>(null);
+  const [fileKey, setFileKey] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [signerName, setSignerName] = useState('');
   const [signerEmail, setSignerEmail] = useState('');
   const [sendEmail, setSendEmail] = useState(true);
-  const [file, setFile] = useState<File | null>(null);
+  const [acceptance, setAcceptance] = useState(true);
+  const [initials, setInitials] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Signable documents currently held by the selected custom field.
+  const files: StoredDoc[] = useMemo(() => {
+    if (!fieldKey) return [];
+    const raw = (form.customFields[fieldKey] as StoredDoc[]) ?? [];
+    return raw.filter((d) => SIGNABLE.test(d.name));
+  }, [fieldKey, form.customFields]);
+
   const reset = () => {
+    setFieldKey(null);
+    setFileKey(null);
     setTitle('');
     setSignerName('');
     setSignerEmail('');
     setSendEmail(true);
-    setFile(null);
+    setAcceptance(true);
+    setInitials(false);
     setLink(null);
   };
   const close = () => {
@@ -131,21 +179,64 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
     onClose();
   };
 
-  const submit = async () => {
-    if (!title.trim() || !file || !signerEmail.trim()) {
-      notifications.show({ message: 'Title, a PDF and the signer email are required', color: 'red' });
+  const pickField = (key: string | null) => {
+    setFieldKey(key);
+    setFileKey(null);
+  };
+  const pickFile = (key: string | null) => {
+    setFileKey(key);
+    const doc = files.find((d) => d.key === key);
+    if (doc && !title.trim()) setTitle(doc.name.replace(/\.[^.]+$/, ''));
+  };
+
+  // Upload a new PDF straight into the selected document custom field, then select it.
+  const uploadToField = async (file: File | null) => {
+    if (!file || !fieldKey) return;
+    if (!SIGNABLE.test(file.name)) {
+      notifications.show({ message: 'Only PDF documents can be sent for signature.', color: 'red' });
+      return;
+    }
+    if (file.size > DOC_MAX) {
+      notifications.show({ message: `${file.name} is larger than 25 MB`, color: 'red' });
       return;
     }
     setBusy(true);
     try {
-      const key = await upload.mutateAsync({ entity: 'signature', file });
+      const key = await upload.mutateAsync({ entity: 'deal', file });
+      const doc: StoredDoc = { name: file.name, type: file.type || 'application/pdf', key };
+      const existing = (form.customFields[fieldKey] as StoredDoc[]) ?? [];
+      const nextCF = { ...form.customFields, [fieldKey]: [...existing, doc] };
+      setForm({ ...form, customFields: nextCF });
+      save({ customFields: nextCF }); // persist the new document onto the deal
+      setFileKey(key);
+      if (!title.trim()) setTitle(file.name.replace(/\.[^.]+$/, ''));
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submit = async () => {
+    if (!fileKey || !title.trim() || !signerEmail.trim()) {
+      notifications.show({ message: 'Choose a document, a title and the signer email', color: 'red' });
+      return;
+    }
+    if (!acceptance && !initials) {
+      notifications.show({ message: 'Select at least one signing option', color: 'red' });
+      return;
+    }
+    setBusy(true);
+    try {
       const res = await create.mutateAsync({
         dealId,
         title: title.trim(),
-        fileKey: key,
+        fileKey,
         signerName: signerName.trim() || undefined,
         signerEmail: signerEmail.trim(),
         sendEmail,
+        acceptance,
+        initialsEveryPage: initials,
       });
       setLink(res.signingUrl ?? null);
       notifications.show({ message: sendEmail ? 'Sent to the signer' : 'Signature request created', color: 'green' });
@@ -157,44 +248,120 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
   };
 
   return (
-    <Modal opened={opened} onClose={close} title="Request signature" centered>
+    <Modal opened={opened} onClose={close} title="Request signature" centered size="lg">
       {link ? (
         <Stack>
           <Text size="sm">Signing link (share it with the signer):</Text>
           <TextInput readOnly value={link} />
           <Group justify="flex-end">
-            <Button variant="default" leftSection={<IconLink size={14} />} onClick={() => { navigator.clipboard.writeText(link); notifications.show({ message: 'Copied', color: 'green' }); }}>
+            <Button
+              variant="default"
+              leftSection={<IconLink size={14} />}
+              onClick={() => {
+                navigator.clipboard.writeText(link);
+                notifications.show({ message: 'Copied', color: 'green' });
+              }}
+            >
               Copy link
             </Button>
             <Button onClick={close}>Done</Button>
           </Group>
         </Stack>
+      ) : docFields.length === 0 ? (
+        <Alert icon={<IconInfoCircle size={16} />} color="gray">
+          There are no <b>document</b> custom fields yet. Create one on the{' '}
+          <Link href="/settings/fields">Fields page</Link> to store documents on deals, then request a signature here.
+        </Alert>
       ) : (
         <Stack>
-          <TextInput label="Title" placeholder="e.g. Service Agreement" required value={title} onChange={(e) => setTitle(e.currentTarget.value)} data-autofocus />
+          <Select
+            label="Document field"
+            placeholder="Pick a document field on this deal"
+            required
+            data={docFields.map((f) => ({ value: f.key, label: f.label }))}
+            value={fieldKey}
+            onChange={pickField}
+          />
+
+          {fieldKey && (
+            <div>
+              <Group justify="space-between" align="flex-end" mb={4}>
+                <Text size="sm" fw={500}>
+                  Document <Text span c="red">*</Text>
+                </Text>
+                <FileButton onChange={uploadToField} accept="application/pdf">
+                  {(props) => (
+                    <Button {...props} size="compact-xs" variant="subtle" leftSection={<IconUpload size={13} />} loading={busy && !create.isPending}>
+                      Upload PDF
+                    </Button>
+                  )}
+                </FileButton>
+              </Group>
+              {files.length === 0 ? (
+                <Text size="xs" c="dimmed">
+                  No PDF documents in this field yet — upload one to sign it.
+                </Text>
+              ) : (
+                <Select
+                  placeholder="Choose a document"
+                  data={files.map((d) => ({ value: d.key, label: d.name }))}
+                  value={fileKey}
+                  onChange={pickFile}
+                  comboboxProps={{ withinPortal: true }}
+                />
+              )}
+            </div>
+          )}
+
+          {fileKey && <DocPreview objectKey={fileKey} />}
+
+          <TextInput label="Title" placeholder="e.g. Service Agreement" required value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
+
           <div>
             <Text size="sm" fw={500} mb={4}>
-              Document (PDF)
+              Signing options
             </Text>
-            <FileButton onChange={setFile} accept="application/pdf">
-              {(props) => (
-                <Button {...props} variant="light" leftSection={<IconUpload size={14} />}>
-                  {file ? file.name : 'Choose PDF'}
-                </Button>
-              )}
-            </FileButton>
-            <Text size="xs" c="dimmed" mt={4}>
-              An “Acceptance &amp; Signature” page is appended to the end automatically.
-            </Text>
+            <Stack gap={6}>
+              <Checkbox
+                label="Acceptance & Signature page"
+                description="Appends a page with signature, date and printed name at the end."
+                checked={acceptance}
+                onChange={(e) => setAcceptance(e.currentTarget.checked)}
+              />
+              <Checkbox
+                label="Initials on every page"
+                description="Adds an initials field to the footer of every page."
+                checked={initials}
+                onChange={(e) => setInitials(e.currentTarget.checked)}
+              />
+            </Stack>
           </div>
-          <TextInput label="Signer name" value={signerName} onChange={(e) => setSignerName(e.currentTarget.value)} />
-          <TextInput label="Signer email" type="email" required value={signerEmail} onChange={(e) => setSignerEmail(e.currentTarget.value)} />
+
+          <Group grow>
+            <TextInput label="Signer name" value={signerName} onChange={(e) => setSignerName(e.currentTarget.value)} />
+            <TextInput label="Signer email" type="email" required value={signerEmail} onChange={(e) => setSignerEmail(e.currentTarget.value)} />
+          </Group>
           <Switch label="Email the signer now" checked={sendEmail} onChange={(e) => setSendEmail(e.currentTarget.checked)} />
-          <Button onClick={submit} loading={busy}>
+          <Button onClick={submit} loading={busy && create.isPending} disabled={!fileKey}>
             Send for signature
           </Button>
         </Stack>
       )}
     </Modal>
+  );
+}
+
+function DocPreview({ objectKey }: { objectKey: string }) {
+  const { data, isLoading } = useFileUrl(objectKey);
+  return (
+    <Paper withBorder radius="md" style={{ overflow: 'hidden', height: 320 }}>
+      {isLoading || !data?.url ? (
+        <Group justify="center" align="center" h="100%">
+          <Loader size="sm" />
+        </Group>
+      ) : (
+        <iframe src={`${data.url}#toolbar=0`} title="Document preview" style={{ width: '100%', height: '100%', border: 0 }} />
+      )}
+    </Paper>
   );
 }

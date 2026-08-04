@@ -20,7 +20,8 @@ export interface DealCtxValue {
   deal: ApiDeal;
   form: DealForm;
   setForm: (f: DealForm) => void;
-  save: () => void;
+  /** Persist the deal. Pass an override to save specific fields without waiting for React state to flush. */
+  save: (override?: Partial<DealForm>) => void;
   saving: boolean;
   /** A compact right-aligned "Save changes" bar — the whole deal saves from any tab. */
   saveBar: ReactNode;

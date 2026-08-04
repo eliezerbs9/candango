@@ -73,18 +73,19 @@ export default function DealLayout({ children }: { children: ReactNode }) {
 
   const stageName = stages.find((s) => s.id === deal.stageId)?.name ?? '—';
 
-  const save = () => {
+  const save = (override?: Partial<DealForm>) => {
+    const f = { ...form, ...override };
     update.mutate(
       {
         id: deal.id,
-        title: form.title,
-        value: Math.round(Number(form.value || 0) * 100),
-        companyId: form.companyId || '',
-        primaryPersonId: form.primaryPersonId || '',
-        expectedCloseDate: form.expectedCloseDate || undefined,
-        shipTo: form.shipTo,
-        billTo: form.billTo,
-        customFields: form.customFields,
+        title: f.title,
+        value: Math.round(Number(f.value || 0) * 100),
+        companyId: f.companyId || '',
+        primaryPersonId: f.primaryPersonId || '',
+        expectedCloseDate: f.expectedCloseDate || undefined,
+        shipTo: f.shipTo,
+        billTo: f.billTo,
+        customFields: f.customFields,
       },
       { onSuccess: () => notifications.show({ message: 'Deal saved', color: 'green' }), onError: fail },
     );
@@ -92,7 +93,7 @@ export default function DealLayout({ children }: { children: ReactNode }) {
 
   const saveBar = (
     <Group justify="flex-end" mt="md">
-      <Button size="xs" onClick={save} loading={update.isPending}>
+      <Button size="xs" onClick={() => save()} loading={update.isPending}>
         Save changes
       </Button>
     </Group>
