@@ -16,6 +16,7 @@ import {
   createDeal,
   getDeal,
   getDeals,
+  addDealParticipant,
   getDealRecipients,
   getStageHistory,
   loseDeal,
@@ -272,6 +273,15 @@ export function useDealRecipients(id: string | null) {
     queryKey: ['deal-recipients', id],
     queryFn: () => getDealRecipients(token!, id!),
     enabled: !!token && !!id,
+  });
+}
+
+export function useAddDealParticipant() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ dealId, personId }: { dealId: string; personId: string }) => addDealParticipant(token!, dealId, personId),
+    onSuccess: (_d, { dealId }) => qc.invalidateQueries({ queryKey: ['deal-recipients', dealId] }),
   });
 }
 

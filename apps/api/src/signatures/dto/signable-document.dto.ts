@@ -59,4 +59,8 @@ export class GenerateSignatureDto {
 
   @IsOptional()
   sendEmail?: boolean;
+
+  /** When true, the deal owner (salesperson) counter-signs as a second party. */
+  @IsOptional()
+  bothParties?: boolean;
 }

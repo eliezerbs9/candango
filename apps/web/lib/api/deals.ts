@@ -45,6 +45,11 @@ export function getDealRecipients(token: string, dealId: string) {
   return apiFetch<DealRecipient[]>(`/deals/${dealId}/recipients`, { token });
 }
 
+/** Link a person to the deal as a participant. */
+export function addDealParticipant(token: string, dealId: string, personId: string) {
+  return apiFetch<{ ok: boolean }>(`/deals/${dealId}/participants`, { method: 'POST', token, body: JSON.stringify({ personId }) });
+}
+
 export function createDeal(
   token: string,
   body: {

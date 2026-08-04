@@ -32,6 +32,7 @@ export interface SignatureBody {
   signerName?: string;
   signerEmail: string;
   sendEmail?: boolean;
+  bothParties?: boolean;
   signatureTemplateId?: string;
   acceptance?: boolean;
   initialsEveryPage?: boolean;
@@ -52,6 +53,7 @@ export interface GenerateSignatureBody {
   signerName?: string;
   signerEmail?: string;
   sendEmail?: boolean;
+  bothParties?: boolean;
 }
 
 export function generateSignature(token: string, body: GenerateSignatureBody) {

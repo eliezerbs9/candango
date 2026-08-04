@@ -274,6 +274,22 @@ export class DealsService {
     return people;
   }
 
+  /** Link a person to the deal as a participant (idempotent) — e.g. a newly-created signer. */
+  async addParticipant(orgId: string, dealId: string, personId: string) {
+    const [deal, person] = await Promise.all([
+      this.prisma.deal.findFirst({ where: { id: dealId, orgId, deletedAt: null }, select: { id: true } }),
+      this.prisma.person.findFirst({ where: { id: personId, orgId }, select: { id: true } }),
+    ]);
+    if (!deal) throw new NotFoundException('Deal not found');
+    if (!person) throw new NotFoundException('Person not found');
+    await this.prisma.dealParticipant.upsert({
+      where: { dealId_personId: { dealId, personId } },
+      create: { dealId, personId },
+      update: {},
+    });
+    return { ok: true };
+  }
+
   private isBlank(v: unknown): boolean {
     if (v === null || v === undefined) return true;
     if (typeof v === 'string') return v.trim() === '';

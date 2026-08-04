@@ -65,6 +65,13 @@ export class DealsController {
     return this.svc.recipients(u.orgId, id);
   }
 
+  /** Link a person to the deal as a participant (e.g. a newly-created signer). */
+  @Post(':id/participants')
+  @Scopes('deals:write')
+  addParticipant(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() body: { personId: string }) {
+    return this.svc.addParticipant(u.orgId, id, body.personId);
+  }
+
   @Get(':id/timeline')
   @Scopes('deals:read')
   timeline(

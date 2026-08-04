@@ -1,11 +1,13 @@
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-/** A DocuSeal field placed on a document. `areas` use normalized (0–1) page coordinates, page 1-indexed. */
+/** A signing field placed on a document. `areas` use normalized (0–1) page coordinates, page 1-indexed. */
 export interface DocusealField {
   name: string;
   type: 'signature' | 'initials' | 'date' | 'text' | 'checkbox';
   role: string;
+  /** Index into the submission's recipients (0 = first signer). Defaults to 0. */
+  recipient?: number;
   areas: { page: number; x: number; y: number; w: number; h: number }[];
 }
 

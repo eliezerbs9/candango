@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -15,6 +15,7 @@ import {
   Menu,
   Modal,
   Paper,
+  SegmentedControl,
   Select,
   Stack,
   Switch,
@@ -28,8 +29,11 @@ import Link from 'next/link';
 import { ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/auth/store';
 import {
+  useAddDealParticipant,
+  useCreatePerson,
   useCreateSignature,
   useCustomFields,
+  useDealRecipients,
   useDealSignatures,
   useDeleteSignature,
   useFileUrl,
@@ -173,15 +177,15 @@ function GenerateModal({
 }) {
   const generate = useGenerateSignature();
   const [templateId, setTemplateId] = useState<string | null>(null);
-  const [signerName, setSignerName] = useState('');
-  const [signerEmail, setSignerEmail] = useState('');
+  const [signer, setSigner] = useState<SignerValue | null>(null);
+  const [bothParties, setBothParties] = useState(false);
   const [sendEmail, setSendEmail] = useState(true);
   const [link, setLink] = useState<string | null>(null);
 
   const close = () => {
     setTemplateId(null);
-    setSignerName('');
-    setSignerEmail('');
+    setSigner(null);
+    setBothParties(false);
     setSendEmail(true);
     setLink(null);
     onClose();
@@ -192,13 +196,18 @@ function GenerateModal({
       notifications.show({ message: 'Pick a document template', color: 'red' });
       return;
     }
+    if (!signer?.email) {
+      notifications.show({ message: 'Pick a signer', color: 'red' });
+      return;
+    }
     try {
       const res = await generate.mutateAsync({
         dealId,
         signableDocumentTemplateId: templateId,
-        signerName: signerName.trim() || undefined,
-        signerEmail: signerEmail.trim() || undefined,
+        signerName: signer.name || undefined,
+        signerEmail: signer.email,
         sendEmail,
+        bothParties,
       });
       setLink(res.signingUrl ?? null);
       notifications.show({ message: sendEmail ? 'Generated and sent to the signer' : 'Document generated', color: 'green' });
@@ -232,14 +241,19 @@ function GenerateModal({
             data-autofocus
           />
           <Text size="xs" c="dimmed">
-            Content is filled from this deal. Leave the signer blank to use the deal&apos;s primary contact.
+            Content is filled from this deal.
           </Text>
-          <Group grow>
-            <TextInput label="Signer name" placeholder="Primary contact" value={signerName} onChange={(e) => setSignerName(e.currentTarget.value)} />
-            <TextInput label="Signer email" type="email" placeholder="Primary contact" value={signerEmail} onChange={(e) => setSignerEmail(e.currentTarget.value)} />
-          </Group>
-          <Switch label="Email the signer now" checked={sendEmail} onChange={(e) => setSendEmail(e.currentTarget.checked)} />
-          <Button onClick={submit} loading={generate.isPending} disabled={!templateId}>
+          <SignerFields
+            dealId={dealId}
+            companyId={null}
+            signer={signer}
+            onSigner={setSigner}
+            bothParties={bothParties}
+            onBothParties={setBothParties}
+            sendEmail={sendEmail}
+            onSendEmail={setSendEmail}
+          />
+          <Button onClick={submit} loading={generate.isPending} disabled={!templateId || !signer}>
             Generate &amp; send
           </Button>
         </Stack>
@@ -249,7 +263,7 @@ function GenerateModal({
 }
 
 function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: () => void; dealId: string }) {
-  const { form, setForm, save } = useDealCtx();
+  const { deal, form, setForm, save } = useDealCtx();
   const { data: allFields = [] } = useCustomFields('deal');
   const docFields = useMemo(() => allFields.filter((f) => f.type === 'document'), [allFields]);
 
@@ -261,8 +275,8 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
   const [fileKey, setFileKey] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState<string>(''); // '' = custom (inline options)
   const [title, setTitle] = useState('');
-  const [signerName, setSignerName] = useState('');
-  const [signerEmail, setSignerEmail] = useState('');
+  const [signer, setSigner] = useState<SignerValue | null>(null);
+  const [bothParties, setBothParties] = useState(false);
   const [sendEmail, setSendEmail] = useState(true);
   const [acceptance, setAcceptance] = useState(true);
   const [initials, setInitials] = useState(false);
@@ -285,8 +299,8 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
     setFileKey(null);
     setTemplateId('');
     setTitle('');
-    setSignerName('');
-    setSignerEmail('');
+    setSigner(null);
+    setBothParties(false);
     setSendEmail(true);
     setAcceptance(true);
     setInitials(false);
@@ -343,8 +357,8 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
   };
 
   const submit = async () => {
-    if (!fileKey || !title.trim() || !signerEmail.trim()) {
-      notifications.show({ message: 'Choose a document, a title and the signer email', color: 'red' });
+    if (!fileKey || !title.trim() || !signer?.email) {
+      notifications.show({ message: 'Choose a document, a title and a signer', color: 'red' });
       return;
     }
     if (!useTemplate && !acceptance && !initials && drawnFields.length === 0) {
@@ -357,9 +371,10 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
         dealId,
         title: title.trim(),
         fileKey,
-        signerName: signerName.trim() || undefined,
-        signerEmail: signerEmail.trim(),
+        signerName: signer.name || undefined,
+        signerEmail: signer.email,
         sendEmail,
+        bothParties,
         ...(useTemplate ? { signatureTemplateId: templateId } : { acceptance, initialsEveryPage: initials }),
         ...(drawnFields.length ? { drawnFields } : {}),
       });
@@ -503,17 +518,153 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
             </div>
           )}
 
-          <Group grow>
-            <TextInput label="Signer name" value={signerName} onChange={(e) => setSignerName(e.currentTarget.value)} />
-            <TextInput label="Signer email" type="email" required value={signerEmail} onChange={(e) => setSignerEmail(e.currentTarget.value)} />
-          </Group>
-          <Switch label="Email the signer now" checked={sendEmail} onChange={(e) => setSendEmail(e.currentTarget.checked)} />
-          <Button onClick={submit} loading={busy && create.isPending} disabled={!fileKey}>
+          <SignerFields
+            dealId={dealId}
+            companyId={deal.companyId ?? null}
+            signer={signer}
+            onSigner={setSigner}
+            bothParties={bothParties}
+            onBothParties={setBothParties}
+            sendEmail={sendEmail}
+            onSendEmail={setSendEmail}
+          />
+          <Button onClick={submit} loading={busy && create.isPending} disabled={!fileKey || !signer}>
             Send for signature
           </Button>
         </Stack>
       )}
     </Modal>
+  );
+}
+
+export interface SignerValue {
+  name: string;
+  email: string;
+}
+
+/**
+ * Signer selection for a signature request: the client is a person ON the deal (pick, or create +
+ * link), and you choose whether just the client signs or both parties (the deal owner counter-signs).
+ */
+function SignerFields({
+  dealId,
+  companyId,
+  signer,
+  onSigner,
+  bothParties,
+  onBothParties,
+  sendEmail,
+  onSendEmail,
+}: {
+  dealId: string;
+  companyId: string | null;
+  signer: SignerValue | null;
+  onSigner: (s: SignerValue | null) => void;
+  bothParties: boolean;
+  onBothParties: (b: boolean) => void;
+  sendEmail: boolean;
+  onSendEmail: (b: boolean) => void;
+}) {
+  const { data: recipients = [] } = useDealRecipients(dealId);
+  const createPerson = useCreatePerson();
+  const addParticipant = useAddDealParticipant();
+  const [personId, setPersonId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [first, setFirst] = useState('');
+  const [last, setLast] = useState('');
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const withEmail = recipients.filter((r) => r.email);
+
+  // Resolve the picked person to a signer (name + email).
+  useEffect(() => {
+    const r = recipients.find((x) => x.id === personId);
+    onSigner(r && r.email ? { name: r.name, email: r.email } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [personId, recipients]);
+
+  const addPerson = async () => {
+    if (!first.trim() || !email.trim()) {
+      notifications.show({ message: 'First name and email are required', color: 'red' });
+      return;
+    }
+    setBusy(true);
+    try {
+      const p = await createPerson.mutateAsync({ firstName: first.trim(), lastName: last.trim(), email: email.trim(), companyIds: companyId ? [companyId] : undefined });
+      await addParticipant.mutateAsync({ dealId, personId: p.id });
+      setPersonId(p.id); // recipients refetch via invalidation; the effect resolves the signer
+      setAdding(false);
+      setFirst('');
+      setLast('');
+      setEmail('');
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Stack gap="sm">
+      <div>
+        <Group justify="space-between" align="flex-end" mb={4}>
+          <Text size="sm" fw={500}>
+            Signer (client) <Text span c="red">*</Text>
+          </Text>
+          <Button size="compact-xs" variant="subtle" leftSection={<IconPlus size={13} />} onClick={() => setAdding((a) => !a)}>
+            New person
+          </Button>
+        </Group>
+        <Select
+          placeholder={withEmail.length ? 'Pick a person on this deal' : 'No deal people with an email — add one'}
+          data={withEmail.map((r) => ({ value: r.id, label: `${r.name} · ${r.email}` }))}
+          value={personId}
+          onChange={setPersonId}
+          searchable
+          comboboxProps={{ withinPortal: true }}
+        />
+        <Collapse in={adding}>
+          <Paper withBorder radius="sm" p="xs" mt="xs">
+            <Group grow>
+              <TextInput size="xs" label="First name" value={first} onChange={(e) => setFirst(e.currentTarget.value)} />
+              <TextInput size="xs" label="Last name" value={last} onChange={(e) => setLast(e.currentTarget.value)} />
+            </Group>
+            <TextInput size="xs" mt="xs" label="Email" type="email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
+            <Text size="xs" c="dimmed" mt={4}>
+              Added to this deal{companyId ? ' and its company' : ''}.
+            </Text>
+            <Group justify="flex-end" mt="xs">
+              <Button size="xs" onClick={addPerson} loading={busy}>
+                Add &amp; select
+              </Button>
+            </Group>
+          </Paper>
+        </Collapse>
+      </div>
+
+      <div>
+        <Text size="sm" fw={500} mb={4}>
+          Signed by
+        </Text>
+        <SegmentedControl
+          fullWidth
+          data={[
+            { value: 'one', label: 'Client only' },
+            { value: 'both', label: 'Both parties' },
+          ]}
+          value={bothParties ? 'both' : 'one'}
+          onChange={(v) => onBothParties(v === 'both')}
+        />
+        {bothParties && (
+          <Text size="xs" c="dimmed" mt={4}>
+            The deal owner (you / the salesperson) counter-signs after the client.
+          </Text>
+        )}
+      </div>
+
+      <Switch label="Email the signer(s) now" checked={sendEmail} onChange={(e) => onSendEmail(e.currentTarget.checked)} />
+    </Stack>
   );
 }
 

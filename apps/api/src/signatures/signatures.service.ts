@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SpacesService } from '../uploads/spaces.service';
 import { type DocusealField } from './docuseal.service';
 import { DocumensoService } from './documenso.service';
-import { ACCEPTANCE_FIELDS, INITIALS_ZONE, PDFDocument, addAcceptancePage } from './acceptance-page';
+import { INITIALS_ZONE, PDFDocument, addAcceptancePage } from './acceptance-page';
 import { CreateSignatureDto } from './dto/signature.dto';
 import type { DrawnFieldDto } from './dto/signature-template.dto';
 import { GenerateSignatureDto } from './dto/signable-document.dto';
@@ -118,19 +118,18 @@ export class SignaturesService {
       throw new BadRequestException('Select at least one signing option.');
     }
 
+    // Recipients: the client, plus (optionally) the deal owner (salesperson) as a counter-signer.
+    const recipients = await this.resolveRecipients(orgId, dto.dealId, { email: dto.signerEmail, name: dto.signerName }, dto.bothParties ?? false);
+
     const fields: DocusealField[] = [...drawnToDocusealFields(drawn)];
     if (acceptance) {
       const body = acceptanceText ? renderTemplate(acceptanceText, await this.dealContext(orgId, userId, dto.dealId)) : undefined;
-      const signPage = await addAcceptancePage(doc, { title: dto.title, body });
-      fields.push(
-        { name: 'Signature', type: 'signature', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.signature }] },
-        { name: 'Date', type: 'date', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.date }] },
-        { name: 'Printed name', type: 'text', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.name }] },
-      );
+      const parties = recipients.map((r, i) => ({ label: i === 0 ? 'Client' : r.name || 'Company', recipient: i }));
+      fields.push(...(await addAcceptancePage(doc, { title: dto.title, body, parties })));
     }
     if (initialsPages.length > 0) {
-      // One field repeated on the target pages: the signer draws initials once and they stamp all pages.
-      fields.push({ name: 'Initials', type: 'initials', role: 'Client', areas: initialsPages.map((page) => ({ page, ...INITIALS_ZONE })) });
+      // One field repeated on the target pages: the client initials once and they stamp all pages.
+      fields.push({ name: 'Initials', type: 'initials', role: 'Client', recipient: 0, areas: initialsPages.map((page) => ({ page, ...INITIALS_ZONE })) });
     }
 
     const pdf = Buffer.from(await doc.save());
@@ -139,7 +138,7 @@ export class SignaturesService {
       name: dto.title,
       fileBytes: pdf,
       fields,
-      signer: { email: dto.signerEmail, name: dto.signerName },
+      recipients,
       sendEmail: dto.sendEmail ?? true,
     });
 
@@ -187,17 +186,14 @@ export class SignaturesService {
     } catch {
       throw new BadRequestException('The template document must be a PDF.');
     }
+    const recipients = await this.resolveRecipients(orgId, dto.dealId, { email: signerEmail, name: signerName }, dto.bothParties ?? false);
     const fields: DocusealField[] = drawnToDocusealFields((tpl.fields as DrawnFieldDto[] | null) ?? []);
     if (fields.length === 0) {
-      const signPage = await addAcceptancePage(doc, { title: tpl.name });
-      fields.push(
-        { name: 'Signature', type: 'signature', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.signature }] },
-        { name: 'Date', type: 'date', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.date }] },
-        { name: 'Printed name', type: 'text', role: 'Client', areas: [{ page: signPage, ...ACCEPTANCE_FIELDS.name }] },
-      );
+      const parties = recipients.map((r, i) => ({ label: i === 0 ? 'Client' : r.name || 'Company', recipient: i }));
+      fields.push(...(await addAcceptancePage(doc, { title: tpl.name, parties })));
     }
     const pdf = Buffer.from(await doc.save());
-    const sub = await this.documenso.createPdfSubmission({ name: tpl.name, fileBytes: pdf, fields, signer: { email: signerEmail, name: signerName }, sendEmail: dto.sendEmail ?? true });
+    const sub = await this.documenso.createPdfSubmission({ name: tpl.name, fileBytes: pdf, fields, recipients, sendEmail: dto.sendEmail ?? true });
 
     const row = await this.prisma.signatureRequest.create({
       data: {
@@ -214,6 +210,18 @@ export class SignaturesService {
       },
     });
     return { ...shape(row), signingUrl: sub.signingUrl };
+  }
+
+  /** The signing parties: the client, plus the deal owner (salesperson) when both parties sign. */
+  private async resolveRecipients(orgId: string, dealId: string, client: { email: string; name?: string }, bothParties: boolean): Promise<{ email: string; name?: string }[]> {
+    const recipients: { email: string; name?: string }[] = [{ email: client.email, name: client.name }];
+    if (bothParties) {
+      const deal = await this.prisma.deal.findFirst({ where: { id: dealId, orgId }, select: { owner: { select: { name: true, email: true } } } });
+      const owner = deal?.owner;
+      if (!owner?.email) throw new BadRequestException('The deal owner has no email — can’t add them as the second signer.');
+      if (owner.email.toLowerCase() !== client.email.toLowerCase()) recipients.push({ email: owner.email, name: owner.name ?? undefined });
+    }
+    return recipients;
   }
 
   /** Build the {{variable}} context for a deal (contact/company/deal + sender + workspace). */

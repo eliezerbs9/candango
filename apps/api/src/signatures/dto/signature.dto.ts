@@ -31,6 +31,11 @@ export class CreateSignatureDto {
   @IsString()
   signatureTemplateId?: string;
 
+  /** When true, the deal owner (salesperson) counter-signs as a second party. */
+  @IsOptional()
+  @IsBoolean()
+  bothParties?: boolean;
+
   /** Append an Acceptance & Signature page (default true) — inline mode. */
   @IsOptional()
   @IsBoolean()
