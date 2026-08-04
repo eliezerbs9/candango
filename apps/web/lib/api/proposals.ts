@@ -62,11 +62,20 @@ export interface CanvasPage {
 // (editor, preview, presentation, thumbnails). That keeps fonts, spacing and positions identical
 // across every surface — the presentation matches the template exactly. Landscape uses 16:9 so it
 // fits tablets/phones/monitors in landscape; portrait stays US-Letter.
-export function pageDims(orientation?: string): { w: number; h: number } {
-  return orientation === 'landscape' ? { w: 1280, h: 720 } : { w: 816, h: 1056 };
+// Signable documents pick a real paper size (Letter/A4); proposals have none → screen geometry
+// (portrait US-Letter, landscape 16:9). @96dpi: Letter 816×1056, A4 794×1123.
+const PAPER: Record<string, { w: number; h: number }> = {
+  letter: { w: 816, h: 1056 },
+  a4: { w: 794, h: 1123 },
+};
+export function pageDims(orientation?: string, paperSize?: string): { w: number; h: number } {
+  const base = paperSize && PAPER[paperSize] ? PAPER[paperSize] : orientation === 'landscape' ? { w: 1280, h: 720 } : { w: 816, h: 1056 };
+  // A chosen paper size rotates with orientation; the proposal (no paper) landscape is already 16:9.
+  return paperSize && PAPER[paperSize] && orientation === 'landscape' ? { w: base.h, h: base.w } : base;
 }
-export function pageAspectCss(orientation?: string): string {
-  return orientation === 'landscape' ? '16 / 9' : '8.5 / 11';
+export function pageAspectCss(orientation?: string, paperSize?: string): string {
+  const { w, h } = pageDims(orientation, paperSize);
+  return `${w} / ${h}`;
 }
 
 export interface ProposalTheme {
@@ -76,6 +85,8 @@ export interface ProposalTheme {
   fontBody: string;
   coverStyle: 'solid' | 'image';
   orientation?: Orientation;
+  /** Real paper size for signable documents ('letter' | 'a4'); absent for proposals (screen geometry). */
+  paperSize?: 'letter' | 'a4';
   /** Optional safe-area margin (percent of the page) shown as a design guide in the editor. */
   margin?: number;
   /**

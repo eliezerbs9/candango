@@ -21,5 +21,24 @@ services:
     ports:
       - '6379:6379'
 
+  # E-signature engine (self-hosted DocuSeal CE). After `docker compose up -d`, open
+  # http://localhost:3030: create the first user, copy the API token (Settings → API) into
+  # apps/api/.env as DOCUSEAL_API_KEY, and add a webhook (Settings → Webhooks) pointing at
+  #   http://host.docker.internal:4000/v1/public/docuseal/webhook
+  docuseal:
+    image: docuseal/docuseal:latest
+    container_name: candango-docuseal
+    ports:
+      - '3030:3000'
+    environment:
+      HOST: localhost:3030
+      # Uses the bundled SQLite by default (persisted in the volume). To use Postgres instead:
+      # DATABASE_URL: postgresql://postgres:postgres@postgres:5432/docuseal
+    volumes:
+      - candango_docuseal:/data
+    depends_on:
+      - postgres
+
 volumes:
   candango_pgdata:
+  candango_docuseal:

@@ -121,7 +121,8 @@ export default function DocumentTemplateEditor() {
         data={[
           { value: 'builder', label: 'Visual builder' },
           { value: 'upload', label: 'Upload PDF' },
-          { value: 'html', label: 'Raw HTML' },
+          // Raw HTML is disabled for new docs; still editable if a template already uses it.
+          ...(mode === 'html' ? [{ value: 'html', label: 'Raw HTML' }] : []),
         ]}
       />
 

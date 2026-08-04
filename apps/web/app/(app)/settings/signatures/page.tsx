@@ -9,6 +9,7 @@ import {
   Group,
   Loader,
   Modal,
+  SegmentedControl,
   Select,
   SimpleGrid,
   Stack,
@@ -149,14 +150,9 @@ const MODE_LABEL: Record<string, string> = { builder: 'Visual', upload: 'Upload'
 function DocumentTemplatesSection() {
   const router = useRouter();
   const { data: docs = [], isLoading } = useSignableDocuments();
-  const create = useCreateSignableDocument();
   const del = useDeleteSignableDocument();
+  const [newOpen, newCtl] = useDisclosure(false);
 
-  const openNew = () =>
-    create.mutate(
-      { name: 'Untitled document', mode: 'builder' },
-      { onSuccess: (d) => router.push(`/settings/signatures/documents/${d.id}`), onError: fail },
-    );
   const openEdit = (d: SignableDocumentTemplate) => router.push(`/settings/signatures/documents/${d.id}`);
   const remove = (d: SignableDocumentTemplate) => {
     if (!window.confirm(`Delete document template “${d.name}”?`)) return;
@@ -174,7 +170,7 @@ function DocumentTemplatesSection() {
             Generated agreements filled per deal — build one visually (paper, drag &amp; drop, variables + signature fields), upload a PDF and place fields, or write raw HTML. Used by the <b>Request signature</b> automation and the deal <b>Generate document</b> button.
           </Text>
         </div>
-        <Button leftSection={<IconPlus size={16} />} onClick={openNew} loading={create.isPending}>
+        <Button leftSection={<IconPlus size={16} />} onClick={newCtl.open}>
           New document
         </Button>
       </Group>
@@ -223,7 +219,104 @@ function DocumentTemplatesSection() {
           ))}
         </SimpleGrid>
       )}
+
+      <CreateDocumentModal opened={newOpen} onClose={newCtl.close} />
     </Stack>
+  );
+}
+
+const BUILDER_THEME_DEFAULTS = {
+  primaryColor: '#e8590c',
+  accentColor: '#1a1a1a',
+  fontHeading: 'Inter',
+  fontBody: 'Inter',
+  coverStyle: 'solid' as const,
+};
+
+function CreateDocumentModal({ opened, onClose }: { opened: boolean; onClose: () => void }) {
+  const router = useRouter();
+  const create = useCreateSignableDocument();
+  const [name, setName] = useState('');
+  const [mode, setMode] = useState<'builder' | 'upload'>('builder');
+  const [paperSize, setPaperSize] = useState<'letter' | 'a4'>('letter');
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
+
+  const submit = () => {
+    const body =
+      mode === 'builder'
+        ? { name: name.trim() || 'Untitled document', mode, theme: { ...BUILDER_THEME_DEFAULTS, orientation, paperSize } }
+        : { name: name.trim() || 'Untitled document', mode };
+    create.mutate(body, {
+      onSuccess: (d) => {
+        onClose();
+        router.push(`/settings/signatures/documents/${d.id}`);
+      },
+      onError: fail,
+    });
+  };
+
+  return (
+    <Modal opened={opened} onClose={onClose} title="New document template" centered>
+      <Stack>
+        <TextInput label="Name" placeholder="e.g. Service Agreement" value={name} onChange={(e) => setName(e.currentTarget.value)} data-autofocus />
+
+        <div>
+          <Text size="sm" fw={500} mb={4}>
+            How do you want to build it?
+          </Text>
+          <SegmentedControl
+            fullWidth
+            value={mode}
+            onChange={(v) => setMode(v as 'builder' | 'upload')}
+            data={[
+              { value: 'builder', label: 'Visual builder' },
+              { value: 'upload', label: 'Upload a PDF' },
+            ]}
+          />
+          <Text size="xs" c="dimmed" mt={4}>
+            {mode === 'builder' ? 'Design the document with drag & drop, variables and signature fields.' : 'Upload a finished PDF and place signature fields on it.'}
+          </Text>
+        </div>
+
+        {mode === 'builder' && (
+          <Group grow>
+            <Select
+              label="Paper size"
+              data={[
+                { value: 'letter', label: 'US Letter (8.5 × 11)' },
+                { value: 'a4', label: 'A4 (210 × 297 mm)' },
+              ]}
+              value={paperSize}
+              onChange={(v) => setPaperSize((v as 'letter' | 'a4') ?? 'letter')}
+              allowDeselect={false}
+            />
+            <div>
+              <Text size="sm" fw={500} mb={4}>
+                Orientation
+              </Text>
+              <SegmentedControl
+                fullWidth
+                value={orientation}
+                onChange={(v) => setOrientation(v as 'portrait' | 'landscape')}
+                data={[
+                  { value: 'portrait', label: 'Portrait' },
+                  { value: 'landscape', label: 'Landscape' },
+                ]}
+              />
+            </div>
+          </Group>
+        )}
+
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={submit} loading={create.isPending}>
+            Create
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   );
 }
 

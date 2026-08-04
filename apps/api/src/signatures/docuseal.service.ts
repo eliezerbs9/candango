@@ -69,11 +69,13 @@ export class DocusealService {
     html: string;
     submitter: { role: string; email: string; name?: string };
     sendEmail: boolean;
+    /** DocuSeal page size for the generated PDF, e.g. 'Letter' | 'A4'. */
+    size?: string;
   }): Promise<{ submissionId: string; signingUrl?: string }> {
     const res = await this.req('POST', '/submissions/html', {
       name: input.name,
       send_email: input.sendEmail,
-      documents: [{ name: `${input.name}.html`, html: input.html }],
+      documents: [{ name: input.name, html: input.html, ...(input.size ? { size: input.size } : {}) }],
       submitters: [{ role: input.submitter.role, email: input.submitter.email, name: input.submitter.name }],
     });
     return this.parseSubmission(res);

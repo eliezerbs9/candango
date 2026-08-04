@@ -56,7 +56,6 @@ export function fixedDocs(props: Record<string, unknown>, ctx: ProposalRenderCtx
 }
 
 const isCanvasPage = (p: unknown): p is CanvasPage => !!p && Array.isArray((p as CanvasPage).elements);
-const pageAspect = (o?: string) => pageAspectCss(o);
 
 function normalize(layout: unknown): (CanvasPage | ProposalPage)[] {
   const arr = Array.isArray(layout) ? layout : [];
@@ -90,14 +89,23 @@ export function ElementView({ element, theme, ctx }: { element: CanvasElement; t
           {ctx.resolveText(String(element.props.text ?? ''))}
         </div>
       );
-    case 'text':
+    case 'text': {
+      const cols = Number(element.props.columns) === 2;
+      const colGap = (element.props.colGap as number) ?? 24;
       return (
         <div
-          style={{ ...base, fontSize: s.fontSize ?? 15, fontWeight: s.fontWeight ?? 400, lineHeight: 1.5 }}
+          style={{
+            ...base,
+            fontSize: s.fontSize ?? 15,
+            fontWeight: s.fontWeight ?? 400,
+            lineHeight: 1.5,
+            ...(cols ? { columnCount: 2, columnGap: colGap } : {}),
+          }}
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: ctx.resolveText(String(element.props.html ?? '')) }}
         />
       );
+    }
     case 'image':
       return (
         <div style={base}>
@@ -179,7 +187,7 @@ export function ProposalRenderer({
             style={{
               position: 'relative',
               width: '100%',
-              aspectRatio: pageAspect(theme.orientation),
+              aspectRatio: pageAspectCss(theme.orientation, theme.paperSize),
               background: '#fff',
               borderRadius: paged ? 10 : 0,
               boxShadow: paged ? '0 1px 6px rgba(0,0,0,0.1)' : undefined,

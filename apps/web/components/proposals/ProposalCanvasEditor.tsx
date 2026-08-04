@@ -502,6 +502,7 @@ export function ProposalCanvasEditor({
             <PageSurface
               ref={pageRef}
               orientation={theme.orientation}
+              paperSize={theme.paperSize}
               fit="width"
               onPointerDown={onPagePointerDown}
               onDragOver={(e) => e.preventDefault()}
@@ -1002,6 +1003,26 @@ function ElementSettings({
             Text
           </Text>
           <RichTextBody value={(el.props.html as string) ?? ''} onChange={(html) => onProp('html', html)} minHeight={120} variables={variables} />
+          <Group gap="xs" mt="xs" align="flex-end">
+            <div style={{ flex: 1 }}>
+              <Text size="xs" fw={500} mb={2}>
+                Layout
+              </Text>
+              <SegmentedControl
+                size="xs"
+                fullWidth
+                data={[
+                  { value: '1', label: '1 column' },
+                  { value: '2', label: '2 columns' },
+                ]}
+                value={String((el.props.columns as number) ?? 1)}
+                onChange={(v) => onProp('columns', Number(v))}
+              />
+            </div>
+            {Number(el.props.columns) === 2 && (
+              <NumberInput size="xs" label="Gap" min={0} max={80} style={{ width: 92 }} value={(el.props.colGap as number) ?? 24} onChange={(v) => onProp('colGap', Number(v) || 0)} />
+            )}
+          </Group>
         </div>
       )}
       {isMedia && (

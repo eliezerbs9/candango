@@ -7,7 +7,7 @@ import { ACCEPTANCE_FIELDS, INITIALS_ZONE, PDFDocument, addAcceptancePage } from
 import { CreateSignatureDto } from './dto/signature.dto';
 import type { DrawnFieldDto } from './dto/signature-template.dto';
 import { GenerateSignatureDto } from './dto/signable-document.dto';
-import { layoutHasField, layoutToHtml } from './layout-to-html';
+import { docusealSize, layoutHasField, layoutToHtml } from './layout-to-html';
 import { buildTemplateContext, renderTemplate } from '../email-templates/template-vars';
 
 const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -223,9 +223,10 @@ export class SignaturesService {
     } else if (tpl.mode === 'builder') {
       // Free-canvas layout rendered to HTML (same model as the proposal builder).
       const org = await this.prisma.organization.findFirst({ where: { id: orgId }, select: { logoUrl: true } });
-      let html = layoutToHtml(tpl.layout, tpl.theme as { accentColor?: string; fontHeading?: string; fontBody?: string } | null, ctx, org?.logoUrl ?? null);
-      if (!layoutHasField(tpl.layout)) html = html.replace('</body>', `<div style="width:816px;margin:0 auto;padding:40px">${DEFAULT_ACCEPTANCE_HTML}</div></body>`);
-      sub = await this.docuseal.createHtmlSubmission({ name: tpl.name, html, submitter, sendEmail });
+      const theme = tpl.theme as { accentColor?: string; fontHeading?: string; fontBody?: string; orientation?: string; paperSize?: string } | null;
+      let html = layoutToHtml(tpl.layout, theme, ctx, org?.logoUrl ?? null);
+      if (!layoutHasField(tpl.layout)) html = html.replace('</body>', `<div style="margin:0 auto;padding:40px">${DEFAULT_ACCEPTANCE_HTML}</div></body>`);
+      sub = await this.docuseal.createHtmlSubmission({ name: tpl.name, html, submitter, sendEmail, size: docusealSize(theme) });
     } else {
       // Raw-HTML mode.
       let inner = renderTemplate(tpl.bodyHtml || '', ctx);

@@ -14,6 +14,7 @@ export const PageSurface = forwardRef<
   HTMLDivElement,
   {
     orientation?: string;
+    paperSize?: string;
     fit?: 'width' | 'contain';
     children: ReactNode;
     surfaceStyle?: CSSProperties;
@@ -21,7 +22,7 @@ export const PageSurface = forwardRef<
     onDrop?: (e: ReactDragEvent) => void;
     onDragOver?: (e: ReactDragEvent) => void;
   }
->(function PageSurface({ orientation, fit = 'width', children, surfaceStyle, onPointerDown, onDrop, onDragOver }, ref) {
+>(function PageSurface({ orientation, paperSize, fit = 'width', children, surfaceStyle, onPointerDown, onDrop, onDragOver }, ref) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   useEffect(() => {
@@ -32,7 +33,7 @@ export const PageSurface = forwardRef<
     return () => ro.disconnect();
   }, []);
 
-  const { w: RW, h: RH } = pageDims(orientation);
+  const { w: RW, h: RH } = pageDims(orientation, paperSize);
   const scale = fit === 'contain' ? (box.w && box.h ? Math.min(box.w / RW, box.h / RH) : 0) : box.w ? box.w / RW : 0;
 
   const surface = (
