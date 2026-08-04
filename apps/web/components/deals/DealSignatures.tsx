@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   Checkbox,
+  Collapse,
   FileButton,
   Group,
   Loader,
@@ -36,7 +37,9 @@ import {
   useUploadFile,
 } from '@/lib/api/hooks';
 import { getSignatureSignedUrl, type SignatureRequest, type SignatureStatus } from '@/lib/api/signatures';
+import type { DrawnField } from '@/lib/api/signature-templates';
 import { useDealCtx } from '@/components/deals/DealContext';
+import { SignatureFieldEditor } from '@/components/deals/SignatureFieldEditor';
 
 const STATUS_COLOR: Record<SignatureStatus, string> = {
   draft: 'gray',
@@ -163,9 +166,12 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
   const [sendEmail, setSendEmail] = useState(true);
   const [acceptance, setAcceptance] = useState(true);
   const [initials, setInitials] = useState(false);
+  const [drawnFields, setDrawnFields] = useState<DrawnField[]>([]);
+  const [placing, setPlacing] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const useTemplate = templateId !== '';
+  const { data: filePreview } = useFileUrl(fileKey);
 
   // Signable documents currently held by the selected custom field.
   const files: StoredDoc[] = useMemo(() => {
@@ -184,6 +190,8 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
     setSendEmail(true);
     setAcceptance(true);
     setInitials(false);
+    setDrawnFields([]);
+    setPlacing(false);
     setLink(null);
   };
   const close = () => {
@@ -191,12 +199,17 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
     onClose();
   };
 
+  // Drawn fields are page-specific to a document, so reset them whenever the document changes.
   const pickField = (key: string | null) => {
     setFieldKey(key);
     setFileKey(null);
+    setDrawnFields([]);
+    setPlacing(false);
   };
   const pickFile = (key: string | null) => {
     setFileKey(key);
+    setDrawnFields([]);
+    setPlacing(false);
     const doc = files.find((d) => d.key === key);
     if (doc && !title.trim()) setTitle(doc.name.replace(/\.[^.]+$/, ''));
   };
@@ -234,8 +247,8 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
       notifications.show({ message: 'Choose a document, a title and the signer email', color: 'red' });
       return;
     }
-    if (!useTemplate && !acceptance && !initials) {
-      notifications.show({ message: 'Select at least one signing option', color: 'red' });
+    if (!useTemplate && !acceptance && !initials && drawnFields.length === 0) {
+      notifications.show({ message: 'Select a signing option or place at least one field', color: 'red' });
       return;
     }
     setBusy(true);
@@ -248,6 +261,7 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
         signerEmail: signerEmail.trim(),
         sendEmail,
         ...(useTemplate ? { signatureTemplateId: templateId } : { acceptance, initialsEveryPage: initials }),
+        ...(drawnFields.length ? { drawnFields } : {}),
       });
       setLink(res.signingUrl ?? null);
       notifications.show({ message: sendEmail ? 'Sent to the signer' : 'Signature request created', color: 'green' });
@@ -361,6 +375,33 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
               </Stack>
             )}
           </div>
+
+          {fileKey && (
+            <div>
+              <Group justify="space-between" align="center">
+                <Text size="sm" fw={500}>
+                  Place fields on the document {drawnFields.length > 0 && <Text span c="candango" fw={600}>· {drawnFields.length}</Text>}
+                </Text>
+                <Button size="compact-xs" variant={placing ? 'light' : 'subtle'} onClick={() => setPlacing((p) => !p)}>
+                  {placing ? 'Hide' : 'Place fields'}
+                </Button>
+              </Group>
+              <Text size="xs" c="dimmed">
+                Optional — drop signature/initials/date/text fields onto exact spots. Combines with the options above.
+              </Text>
+              <Collapse in={placing}>
+                <Paper withBorder radius="md" p="sm" mt="xs">
+                  {filePreview?.url ? (
+                    <SignatureFieldEditor fileUrl={filePreview.url} value={drawnFields} onChange={setDrawnFields} />
+                  ) : (
+                    <Group justify="center" py="md">
+                      <Loader size="sm" />
+                    </Group>
+                  )}
+                </Paper>
+              </Collapse>
+            </div>
+          )}
 
           <Group grow>
             <TextInput label="Signer name" value={signerName} onChange={(e) => setSignerName(e.currentTarget.value)} />
