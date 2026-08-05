@@ -117,3 +117,35 @@ export function layoutHasField(layout: unknown): boolean {
   const pages = (Array.isArray(layout) ? layout : []) as Page[];
   return pages.some((pg) => (pg.elements ?? []).some((el) => el.type === 'field'));
 }
+
+/** A signature field placed on the builder canvas: type + which party signs it + its page/geometry (percent). */
+export interface LayoutField {
+  fieldType: string; // signature | initials | date | text
+  party: string; // client (receiver) | sender
+  page: number; // 1-indexed
+  x: number;
+  y: number;
+  w: number;
+  h: number; // percent of the page (0–100)
+}
+
+/** Extract the builder's placed signature fields (in reading order) so they can become signing fields. */
+export function extractLayoutFields(layout: unknown): LayoutField[] {
+  const pages = (Array.isArray(layout) ? layout : []) as Page[];
+  const out: LayoutField[] = [];
+  pages.forEach((pg, i) => {
+    (pg.elements ?? []).forEach((el) => {
+      if (el.type !== 'field') return;
+      out.push({
+        fieldType: String((el.props?.fieldType as string) ?? 'signature'),
+        party: String((el.props?.party as string) ?? 'client'),
+        page: i + 1,
+        x: el.x,
+        y: el.y,
+        w: el.w,
+        h: el.h,
+      });
+    });
+  });
+  return out;
+}

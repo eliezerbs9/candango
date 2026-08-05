@@ -984,6 +984,20 @@ function ElementSettings({
         value={(el.props.label as string) ?? ''}
         onChange={(e) => onProp('label', e.currentTarget.value)}
       />
+      {el.type === 'field' && (
+        <Select
+          size="xs"
+          label="Who signs this field"
+          description="If no field is assigned to the sender, only the client signs."
+          data={[
+            { value: 'client', label: 'Client (receiver)' },
+            { value: 'sender', label: 'Sender (your side)' },
+          ]}
+          value={(el.props.party as string) ?? 'client'}
+          onChange={(v) => onProp('party', v ?? 'client')}
+          allowDeselect={false}
+        />
+      )}
       {showLock && (
         <Switch
           size="xs"

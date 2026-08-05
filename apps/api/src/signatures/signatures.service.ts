@@ -5,7 +5,7 @@ import { SpacesService } from '../uploads/spaces.service';
 import { type DocusealField } from './docuseal.service';
 import { DocumensoService } from './documenso.service';
 import { GotenbergService } from './gotenberg.service';
-import { layoutToHtml } from './layout-to-html';
+import { extractLayoutFields, layoutToHtml } from './layout-to-html';
 import { initialsZones, PDFDocument, addAcceptancePage } from './acceptance-page';
 import { CreateSignatureDto } from './dto/signature.dto';
 import type { DrawnFieldDto } from './dto/signature-template.dto';
@@ -330,7 +330,11 @@ export class SignaturesService {
     const signerEmail = (dto.signerEmail || ctx['contact.email'] || '').trim();
     if (!signerEmail) throw new BadRequestException('No signer email — set a primary contact with an email on the deal.');
     const signerName = (dto.signerName || ctx['contact.name'] || '').trim() || undefined;
-    const partiesBoth = dto.bothParties ?? tpl.parties === 'both';
+    // Builder docs derive their parties from the placed fields: the second party signs only when a
+    // "sender" field is placed. Other modes take it from the template's parties flag.
+    const layoutFields = tpl.mode === 'builder' ? extractLayoutFields(tpl.layout) : [];
+    const hasSenderField = layoutFields.some((f) => f.party === 'sender');
+    const partiesBoth = tpl.mode === 'builder' ? hasSenderField : dto.bothParties ?? tpl.parties === 'both';
     const party2 = { enabled: partiesBoth, source: (tpl.party2Source as 'owner' | 'user') ?? 'owner', userId: tpl.party2UserId ?? null };
 
     // Build the source PDF for the template's mode (upload = stored PDF; builder/html = HTML→PDF per deal).
@@ -355,15 +359,31 @@ export class SignaturesService {
 
     const contentPages = doc.getPageCount(); // before any appended acceptance page
     const recipients = await this.resolveRecipients(orgId, dto.dealId, { email: signerEmail, name: signerName }, party2);
-    const fields: DocusealField[] = drawnToDocusealFields(tpl.mode === 'upload' ? ((tpl.fields as DrawnFieldDto[] | null) ?? []) : []);
+
+    // Signing fields by mode: upload = drawn on the PDF; builder = placed on the canvas (mapped by %);
+    // html = none up front (the acceptance page + initials rule cover it).
+    const fields: DocusealField[] = [];
+    if (tpl.mode === 'upload') {
+      fields.push(...drawnToDocusealFields((tpl.fields as DrawnFieldDto[] | null) ?? []));
+    } else if (tpl.mode === 'builder') {
+      fields.push(
+        ...layoutFields.map((f, i) => ({
+          name: `${f.fieldType[0].toUpperCase()}${f.fieldType.slice(1)} ${i + 1}`,
+          type: (['signature', 'initials', 'date', 'text'].includes(f.fieldType) ? f.fieldType : 'signature') as DocusealField['type'],
+          role: 'Client',
+          recipient: f.party === 'sender' && partiesBoth ? 1 : 0,
+          areas: [{ page: f.page, x: f.x / 100, y: f.y / 100, w: f.w / 100, h: f.h / 100 }],
+        })),
+      );
+    }
     if (fields.length === 0) {
       const labels = await this.partyBlockLabels(orgId, dto.dealId);
       const clientLabel = dto.clientPartyLabel?.trim() || labels.client;
       const parties = recipients.map((r, i) => ({ label: i === 0 ? clientLabel : labels.workspace, recipient: i }));
       fields.push(...(await addAcceptancePage(doc, { title: tpl.name, parties })));
     }
-    // Footer initials per the template's rule (builder/html docs get them here; upload docs place them visually).
-    if ((tpl.initialsRule ?? 'none') !== 'none') {
+    // Footer initials rule — only for raw-HTML docs (builder places initials on the canvas; upload draws them).
+    if (tpl.mode === 'html' && (tpl.initialsRule ?? 'none') !== 'none') {
       const initialsPages = resolveInitialsPages(tpl.initialsRule, (tpl.initialsPages as number[] | null) ?? [], contentPages);
       if (initialsPages.length) {
         const targets = initialsRecipientIndexes(tpl.initialsParty ?? 'client', recipients.length);
