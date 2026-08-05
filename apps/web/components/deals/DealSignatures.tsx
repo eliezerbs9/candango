@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Alert,
+  Autocomplete,
   Badge,
   Button,
   Card,
@@ -670,6 +671,15 @@ function SignerFields({
 
   const withEmail = recipients.filter((r) => r.email);
 
+  // "Signing on behalf of" suggestions: the deal's company + its people (primary contact, participants).
+  const behalfData = useMemo(() => {
+    const groups: { group: string; items: string[] }[] = [];
+    if (company?.name?.trim()) groups.push({ group: 'Company', items: [company.name.trim()] });
+    const people = Array.from(new Set(recipients.map((r) => r.name).filter(Boolean)));
+    if (people.length) groups.push({ group: 'People on the deal', items: people });
+    return groups;
+  }, [company?.name, recipients]);
+
   // Default the signer to the deal's primary contact (the recipients endpoint returns it first).
   const didInit = useRef(false);
   useEffect(() => {
@@ -754,15 +764,16 @@ function SignerFields({
         </Collapse>
       </div>
 
-      <TextInput
+      <Autocomplete
         label="Signing on behalf of"
-        description="Shown above the client's signature — a company name, or the individual client."
+        description="Shown above the client's signature — pick the deal's company or a contact, or type a name."
         placeholder="e.g. Acme Corp, or the client's name"
         required
+        data={behalfData}
         value={clientLabel}
-        onChange={(e) => {
+        onChange={(v) => {
           labelTouched.current = true;
-          onClientLabel(e.currentTarget.value);
+          onClientLabel(v);
         }}
       />
 
