@@ -374,10 +374,14 @@ export class SignaturesService {
         })),
       );
     }
-    if (fields.length === 0) {
+    // Documenso rejects any signer with no SIGNATURE field. Append an acceptance-page block for every
+    // party that lacks one — covers raw-HTML docs (no placed fields) and both-parties templates whose
+    // builder/upload layout only signed one side.
+    const missing = recipients.map((_, i) => i).filter((i) => !fields.some((f) => (f.recipient ?? 0) === i && f.type === 'signature'));
+    if (missing.length) {
       const labels = await this.partyBlockLabels(orgId, dto.dealId);
       const clientLabel = dto.clientPartyLabel?.trim() || labels.client;
-      const parties = recipients.map((r, i) => ({ label: i === 0 ? clientLabel : labels.workspace, recipient: i }));
+      const parties = missing.map((i) => ({ label: i === 0 ? clientLabel : labels.workspace, recipient: i }));
       fields.push(...(await addAcceptancePage(doc, { title: tpl.name, parties })));
     }
     // Footer initials rule — only for raw-HTML docs (builder places initials on the canvas; upload draws them).

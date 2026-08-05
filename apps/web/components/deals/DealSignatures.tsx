@@ -46,9 +46,11 @@ import {
   useSignableDocuments,
   useSignatureTemplates,
   useUploadFile,
+  useUsers,
 } from '@/lib/api/hooks';
 import { getSignatureSignedUrl, type SignatureRequest, type SignatureStatus } from '@/lib/api/signatures';
 import type { DrawnField } from '@/lib/api/signature-templates';
+import type { SignableDocumentTemplate } from '@/lib/api/signable-documents';
 import { useDealCtx } from '@/components/deals/DealContext';
 import { SignatureFieldEditor } from '@/components/deals/SignatureFieldEditor';
 
@@ -240,16 +242,26 @@ function GenerateModal({
   opened: boolean;
   onClose: () => void;
   dealId: string;
-  templates: { id: string; name: string }[];
+  templates: SignableDocumentTemplate[];
 }) {
   const generate = useGenerateSignature();
   const { data: deal } = useDeal(dealId);
+  const { data: users = [] } = useUsers();
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [signer, setSigner] = useState<SignerValue | null>(null);
   const [clientLabel, setClientLabel] = useState('');
   const [bothParties, setBothParties] = useState(false);
   const [sendEmail, setSendEmail] = useState(true);
   const [link, setLink] = useState<string | null>(null);
+
+  // When the chosen template is signed by both parties, show who signs as the sender (from the template).
+  const tpl = templates.find((t) => t.id === templateId);
+  const senderLabel =
+    tpl?.parties === 'both'
+      ? tpl.party2Source === 'user'
+        ? users.find((u) => u.id === tpl.party2UserId)?.name || 'a specific workspace user'
+        : users.find((u) => u.id === deal?.ownerUserId)?.name || 'the deal owner (sales rep)'
+      : null;
 
   const close = () => {
     setTemplateId(null);
@@ -318,6 +330,13 @@ function GenerateModal({
           <Text size="xs" c="dimmed">
             Content is filled from this deal.
           </Text>
+          {senderLabel && (
+            <Alert color="candango" variant="light" py="xs">
+              <Text size="xs">
+                Both parties sign — <strong>{senderLabel}</strong> signs as the sender (set by the template).
+              </Text>
+            </Alert>
+          )}
           <SignerFields
             dealId={dealId}
             companyId={deal?.companyId ?? null}

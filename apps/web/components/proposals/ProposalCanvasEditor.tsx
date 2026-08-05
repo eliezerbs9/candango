@@ -202,6 +202,20 @@ export function ProposalCanvasEditor({
   signatureFields = false,
   senderFields = false,
 }: ProposalCanvasEditorProps) {
+  // At most ONE signature field per party per document — once placed, disable that party's Signature button.
+  const sigByParty = useMemo(() => {
+    let client = false;
+    let sender = false;
+    for (const pg of pages) {
+      for (const el of pg.elements ?? []) {
+        if (el.type === 'field' && (el.props.fieldType as string) === 'signature') {
+          if ((el.props.party as string) === 'sender') sender = true;
+          else client = true;
+        }
+      }
+    }
+    return { client, sender };
+  }, [pages]);
   const [pageId, setPageId] = useState<string | null>(pages[0]?.id ?? null);
   const [selIds, setSelIds] = useState<string[]>([]);
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
@@ -621,24 +635,33 @@ export function ProposalCanvasEditor({
                   {senderFields ? 'Client fields (receiver)' : 'Signature fields'}
                 </Text>
                 <Group gap={6}>
-                  {FIELD_PALETTE.map((f) => (
-                    <Button
-                      key={`client-${f.fieldType}`}
-                      size="xs"
-                      variant="light"
-                      color="candango"
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData('text/proposal-element', 'field');
-                        e.dataTransfer.setData('text/proposal-field', f.fieldType);
-                        e.dataTransfer.setData('text/proposal-party', 'client');
-                      }}
-                      onClick={() => addElement('field', { fieldType: f.fieldType, party: 'client' })}
-                      style={{ cursor: 'grab' }}
-                    >
-                      {f.label}
-                    </Button>
-                  ))}
+                  {FIELD_PALETTE.map((f) => {
+                    const disabled = f.fieldType === 'signature' && sigByParty.client;
+                    return (
+                      <Button
+                        key={`client-${f.fieldType}`}
+                        size="xs"
+                        variant="light"
+                        color="candango"
+                        disabled={disabled}
+                        draggable={!disabled}
+                        title={disabled ? 'Only one signature per party' : undefined}
+                        onDragStart={(e) => {
+                          if (disabled) {
+                            e.preventDefault();
+                            return;
+                          }
+                          e.dataTransfer.setData('text/proposal-element', 'field');
+                          e.dataTransfer.setData('text/proposal-field', f.fieldType);
+                          e.dataTransfer.setData('text/proposal-party', 'client');
+                        }}
+                        onClick={() => !disabled && addElement('field', { fieldType: f.fieldType, party: 'client' })}
+                        style={{ cursor: disabled ? 'not-allowed' : 'grab' }}
+                      >
+                        {f.label}
+                      </Button>
+                    );
+                  })}
                 </Group>
                 {senderFields && (
                   <>
@@ -646,24 +669,33 @@ export function ProposalCanvasEditor({
                       Sender fields (your side)
                     </Text>
                     <Group gap={6}>
-                      {FIELD_PALETTE.map((f) => (
-                        <Button
-                          key={`sender-${f.fieldType}`}
-                          size="xs"
-                          variant="light"
-                          color="gray"
-                          draggable
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData('text/proposal-element', 'field');
-                            e.dataTransfer.setData('text/proposal-field', f.fieldType);
-                            e.dataTransfer.setData('text/proposal-party', 'sender');
-                          }}
-                          onClick={() => addElement('field', { fieldType: f.fieldType, party: 'sender' })}
-                          style={{ cursor: 'grab' }}
-                        >
-                          {f.label}
-                        </Button>
-                      ))}
+                      {FIELD_PALETTE.map((f) => {
+                        const disabled = f.fieldType === 'signature' && sigByParty.sender;
+                        return (
+                          <Button
+                            key={`sender-${f.fieldType}`}
+                            size="xs"
+                            variant="light"
+                            color="gray"
+                            disabled={disabled}
+                            draggable={!disabled}
+                            title={disabled ? 'Only one signature per party' : undefined}
+                            onDragStart={(e) => {
+                              if (disabled) {
+                                e.preventDefault();
+                                return;
+                              }
+                              e.dataTransfer.setData('text/proposal-element', 'field');
+                              e.dataTransfer.setData('text/proposal-field', f.fieldType);
+                              e.dataTransfer.setData('text/proposal-party', 'sender');
+                            }}
+                            onClick={() => !disabled && addElement('field', { fieldType: f.fieldType, party: 'sender' })}
+                            style={{ cursor: disabled ? 'not-allowed' : 'grab' }}
+                          >
+                            {f.label}
+                          </Button>
+                        );
+                      })}
                     </Group>
                   </>
                 )}
