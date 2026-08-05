@@ -45,8 +45,14 @@ export const TEMPLATE_VARIABLES: TemplateVariable[] = [
   { key: 'contact.name', label: 'Contact full name', group: 'Contact', example: 'John Doe', scopes: BOTH },
   { key: 'contact.email', label: 'Contact email', group: 'Contact', example: 'john.doe@example.com', scopes: BOTH },
   { key: 'contact.phone', label: 'Contact phone', group: 'Contact', example: '(555) 010-1234', scopes: BOTH },
-  { key: 'contact.title', label: 'Contact title', group: 'Contact', example: 'Procurement Manager', scopes: BOTH },
   { key: 'company.name', label: 'Company name', group: 'Company', example: 'Example Co.', scopes: BOTH },
+  // The deal company's contact person — the title is that person's role AT the company.
+  { key: 'company.contact.name', label: 'Company contact full name', group: 'Company', example: 'John Doe', scopes: DEAL_ONLY },
+  { key: 'company.contact.first_name', label: 'Company contact first name', group: 'Company', example: 'John', scopes: DEAL_ONLY },
+  { key: 'company.contact.last_name', label: 'Company contact last name', group: 'Company', example: 'Doe', scopes: DEAL_ONLY },
+  { key: 'company.contact.email', label: 'Company contact email', group: 'Company', example: 'john.doe@example.com', scopes: DEAL_ONLY },
+  { key: 'company.contact.phone', label: 'Company contact phone', group: 'Company', example: '(555) 010-1234', scopes: DEAL_ONLY },
+  { key: 'company.contact.title', label: 'Company contact title', group: 'Company', example: 'Procurement Manager', scopes: DEAL_ONLY },
   { key: 'deal.title', label: 'Deal title', group: 'Deal', example: 'your project', scopes: DEAL_ONLY },
   { key: 'deal.value', label: 'Deal value', group: 'Deal', example: '$5,000.00', scopes: DEAL_ONLY },
   { key: 'sender.name', label: 'Your name', group: 'Sender', example: 'Jane Doe', scopes: DEAL_ONLY },
@@ -59,7 +65,6 @@ export const TEMPLATE_VARIABLES: TemplateVariable[] = [
   { key: 'receiver.first_name', label: 'Receiver first name', group: 'Receiver', example: 'John', scopes: SIGNATURE },
   { key: 'receiver.last_name', label: 'Receiver last name', group: 'Receiver', example: 'Doe', scopes: SIGNATURE },
   { key: 'receiver.email', label: 'Receiver email', group: 'Receiver', example: 'john.doe@example.com', scopes: SIGNATURE },
-  { key: 'receiver.title', label: 'Receiver title', group: 'Receiver', example: 'Procurement Manager', scopes: SIGNATURE },
   { key: 'workspace.name', label: 'Workspace name', group: 'Workspace', example: 'Your Company', scopes: BOTH },
   { key: 'date.today', label: "Today's date", group: 'Date', example: '08/03/2026', scopes: BOTH },
   { key: 'proposal.url', label: 'Proposal link', group: 'Proposal', example: 'View your proposal', scopes: PROPOSAL },
@@ -275,11 +280,19 @@ export interface TemplateContextSources {
     firstName?: string | null;
     lastName?: string | null;
     name?: string | null;
-    title?: string | null;
     emails?: unknown; // Json [{ value, label }]
     phones?: unknown; // Json [{ value, label }]
   } | null;
   company?: { name?: string | null } | null;
+  /** The deal company's contact person (+ their role at the company) for `company.contact.*`. */
+  companyContact?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    name?: string | null;
+    emails?: unknown;
+    phones?: unknown;
+    title?: string | null;
+  } | null;
   deal?: { title?: string | null; value?: number | null; currency?: string | null } | null;
   sender?: { name?: string | null; firstName?: string | null; lastName?: string | null; email?: string | null; phone?: string | null } | null;
   workspace?: { name?: string | null; timezone?: string | null } | null;
@@ -289,7 +302,6 @@ export interface TemplateContextSources {
     lastName?: string | null;
     name?: string | null;
     emails?: unknown;
-    title?: string | null;
   } | null;
 }
 
@@ -331,6 +343,7 @@ function formatMoney(minor: number | null | undefined, currency: string | null |
 /** Build the flat `{{key}} → value` map used by `renderTemplate` from resolved deal data. */
 export function buildTemplateContext(src: TemplateContextSources): Record<string, string> {
   const p = src.person ?? {};
+  const cc = src.companyContact ?? {};
   const s = src.sender ?? {};
   const senderName = s.name ?? [s.firstName, s.lastName].filter(Boolean).join(' ').trim();
   const senderParts = senderName.split(/\s+/).filter(Boolean);
@@ -341,8 +354,13 @@ export function buildTemplateContext(src: TemplateContextSources): Record<string
     'contact.name': p.name ?? [p.firstName, p.lastName].filter(Boolean).join(' ').trim(),
     'contact.email': firstJsonValue(p.emails),
     'contact.phone': firstJsonValue(p.phones),
-    'contact.title': p.title ?? '',
     'company.name': src.company?.name ?? '',
+    'company.contact.first_name': cc.firstName ?? '',
+    'company.contact.last_name': cc.lastName ?? '',
+    'company.contact.name': cc.name ?? [cc.firstName, cc.lastName].filter(Boolean).join(' ').trim(),
+    'company.contact.email': firstJsonValue(cc.emails),
+    'company.contact.phone': firstJsonValue(cc.phones),
+    'company.contact.title': cc.title ?? '',
     'deal.title': src.deal?.title ?? '',
     'deal.value': formatMoney(src.deal?.value, src.deal?.currency),
     'sender.name': senderName,
@@ -355,7 +373,6 @@ export function buildTemplateContext(src: TemplateContextSources): Record<string
     'receiver.last_name': r.lastName ?? '',
     'receiver.name': r.name ?? [r.firstName, r.lastName].filter(Boolean).join(' ').trim(),
     'receiver.email': firstJsonValue(r.emails),
-    'receiver.title': r.title ?? '',
     'workspace.name': src.workspace?.name ?? '',
     'date.today': formatToday(src.workspace?.timezone),
   };

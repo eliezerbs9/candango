@@ -22,7 +22,7 @@ function resolveInitialsPages(rule: string, pages: number[], pageCount: number):
 }
 
 /** A signer person for the `receiver.*` variables. */
-type ReceiverLike = { firstName?: string | null; lastName?: string | null; name?: string | null; emails?: unknown; title?: string | null };
+type ReceiverLike = { firstName?: string | null; lastName?: string | null; name?: string | null; emails?: unknown };
 /** A counter-signing user for the `sender.*` variables. */
 type SenderLike = { name?: string | null; firstName?: string | null; lastName?: string | null; email?: string | null; phone?: string | null };
 
@@ -520,23 +520,29 @@ export class SignaturesService {
     dealId: string,
     extra?: { receiver?: ReceiverLike | null; sender?: SenderLike | null },
   ): Promise<Record<string, string>> {
+    const personSelect = { id: true, firstName: true, lastName: true, name: true, emails: true, phones: true } as const;
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, orgId },
       select: {
         title: true,
         value: true,
         currency: true,
-        primaryPerson: { select: { firstName: true, lastName: true, name: true, title: true, emails: true, phones: true } },
-        company: { select: { name: true } },
+        primaryPerson: { select: personSelect },
+        company: { select: { name: true, contacts: { select: { title: true, person: { select: personSelect } } } } },
       },
     });
     const [user, org] = await Promise.all([
       this.prisma.user.findFirst({ where: { id: userId, orgId }, select: { name: true, firstName: true, lastName: true, email: true, phone: true } }),
       this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true, timezone: true } }),
     ]);
+    // The company's contact: the deal's primary person if they're linked to the company, else its first contact.
+    const contacts = deal?.company?.contacts ?? [];
+    const link = contacts.find((c) => c.person.id === deal?.primaryPerson?.id) ?? contacts[0];
+    const companyContact = link ? { ...link.person, title: link.title } : null;
     return buildTemplateContext({
       person: deal?.primaryPerson ?? null,
-      company: deal?.company ?? null,
+      company: deal?.company ? { name: deal.company.name } : null,
+      companyContact,
       deal: deal ? { title: deal.title, value: deal.value, currency: deal.currency } : null,
       sender: extra?.sender ?? user,
       workspace: org,
@@ -546,7 +552,7 @@ export class SignaturesService {
 
   /** The signature "receiver": the explicitly-chosen signer person, else the deal's primary contact. */
   private async resolveReceiver(orgId: string, dealId: string, personId?: string | null): Promise<ReceiverLike | null> {
-    const select = { firstName: true, lastName: true, name: true, emails: true, title: true } as const;
+    const select = { firstName: true, lastName: true, name: true, emails: true } as const;
     if (personId) return this.prisma.person.findFirst({ where: { id: personId, orgId }, select });
     const deal = await this.prisma.deal.findFirst({ where: { id: dealId, orgId }, select: { primaryPerson: { select } } });
     return deal?.primaryPerson ?? null;

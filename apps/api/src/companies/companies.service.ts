@@ -16,7 +16,7 @@ type CompanyRow = {
   phone: string | null;
   tags: string[];
   customFields: Prisma.JsonValue;
-  contacts: { person: { id: string; name: string } }[];
+  contacts: { title: string; person: { id: string; name: string } }[];
 };
 
 function shape(c: CompanyRow) {
@@ -28,7 +28,7 @@ function shape(c: CompanyRow) {
     phone: c.phone,
     tags: c.tags ?? [],
     customFields: (c.customFields as Record<string, unknown>) ?? {},
-    contacts: c.contacts.map((l) => l.person),
+    contacts: c.contacts.map((l) => ({ id: l.person.id, name: l.person.name, title: l.title ?? '' })),
   };
 }
 
@@ -69,7 +69,7 @@ export class CompaniesService {
         phone: dto.phone ?? null,
         tags: cleanTags(dto.tags) ?? [],
         customFields: (dto.customFields ?? {}) as Prisma.InputJsonValue,
-        contacts: { create: contactIds.map((personId) => ({ personId })) },
+        contacts: { create: contactIds.map((personId) => ({ personId, title: dto.contactTitles?.[personId]?.trim() ?? '' })) },
       },
       include: withContacts,
     });
@@ -208,7 +208,7 @@ export class CompaniesService {
       await this.prisma.companyContact.deleteMany({ where: { companyId: id } });
       if (personIds.length) {
         await this.prisma.companyContact.createMany({
-          data: personIds.map((personId) => ({ companyId: id, personId })),
+          data: personIds.map((personId) => ({ companyId: id, personId, title: dto.contactTitles?.[personId]?.trim() ?? '' })),
         });
       }
     }

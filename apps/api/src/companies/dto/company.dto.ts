@@ -22,6 +22,11 @@ export class CreateCompanyDto {
   @IsString({ each: true })
   contactIds?: string[];
 
+  /** Per-contact title at this company, keyed by personId (e.g. { personId: "Procurement Manager" }). */
+  @IsOptional()
+  @IsObject()
+  contactTitles?: Record<string, string>;
+
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
@@ -55,6 +60,11 @@ export class UpdateCompanyDto {
   @IsArray()
   @IsString({ each: true })
   contactIds?: string[];
+
+  /** Per-contact title at this company, keyed by personId (e.g. { personId: "Procurement Manager" }). */
+  @IsOptional()
+  @IsObject()
+  contactTitles?: Record<string, string>;
 
   @IsOptional()
   @IsArray()

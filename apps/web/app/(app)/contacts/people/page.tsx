@@ -47,7 +47,6 @@ export default function PeoplePage() {
   const [editing, setEditing] = useState<ApiPerson | null>(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [title, setTitle] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState<Address>({});
@@ -61,7 +60,6 @@ export default function PeoplePage() {
     setEditing(null);
     setFirstName('');
     setLastName('');
-    setTitle('');
     setEmail('');
     setPhone('');
     setAddress({});
@@ -75,7 +73,6 @@ export default function PeoplePage() {
     setEditing(p);
     setFirstName(p.firstName);
     setLastName(p.lastName ?? '');
-    setTitle(p.title ?? '');
     setEmail(p.email ?? '');
     setPhone(p.phone ?? '');
     setAddress(p.address ?? {});
@@ -137,7 +134,6 @@ export default function PeoplePage() {
     const body = {
       firstName: firstName.trim(),
       lastName: lastName.trim() || undefined,
-      title: title.trim() || undefined,
       email: email || undefined,
       phone: phone || undefined,
       address: Object.values(address).some(Boolean) ? address : undefined,
@@ -201,7 +197,6 @@ export default function PeoplePage() {
             onChange={(e) => setFirstName(e.currentTarget.value)}
           />
           <TextInput label="Last name" value={lastName} onChange={(e) => setLastName(e.currentTarget.value)} />
-          <TextInput label="Title" description="Job title / position — e.g. Procurement Manager" placeholder="Procurement Manager" value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
           <TextInput label="Email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
           <TextInput label="Phone" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} />
           <AddressFields label="Address" value={address} onChange={setAddress} withName={false} />

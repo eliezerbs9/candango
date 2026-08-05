@@ -4,6 +4,8 @@ import type { Address } from './types';
 export interface ContactRef {
   id: string;
   name: string;
+  /** For a company's contacts: the person's role at that company. */
+  title?: string;
 }
 
 export interface ApiPerson {
@@ -11,7 +13,6 @@ export interface ApiPerson {
   name: string;
   firstName: string;
   lastName: string | null;
-  title: string;
   email: string | null;
   phone: string | null;
   address: Address | null;
@@ -87,7 +88,6 @@ export interface PersonBody {
   name?: string;
   firstName?: string;
   lastName?: string;
-  title?: string;
   email?: string;
   phone?: string;
   address?: Address;
@@ -103,6 +103,7 @@ export interface CompanyBody {
   address?: Address;
   phone?: string;
   contactIds?: string[];
+  contactTitles?: Record<string, string>;
   tags?: string[];
   customFields?: Record<string, unknown>;
 }

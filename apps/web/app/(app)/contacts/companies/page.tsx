@@ -50,6 +50,7 @@ export default function CompaniesPage() {
   const [address, setAddress] = useState<Address>({});
   const [phone, setPhone] = useState('');
   const [contactIds, setContactIds] = useState<string[]>([]);
+  const [contactTitles, setContactTitles] = useState<Record<string, string>>({});
   const [tags, setTags] = useState<string[]>([]);
   const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
 
@@ -62,6 +63,7 @@ export default function CompaniesPage() {
     setAddress({});
     setPhone('');
     setContactIds([]);
+    setContactTitles({});
     setTags([]);
     setCustomFields({});
     ctl.open();
@@ -74,6 +76,7 @@ export default function CompaniesPage() {
     setAddress(c.address ?? {});
     setPhone(c.phone ?? '');
     setContactIds(c.contacts.map((p) => p.id));
+    setContactTitles(Object.fromEntries(c.contacts.map((p) => [p.id, p.title ?? ''])));
     setTags(c.tags ?? []);
     setCustomFields(c.customFields ?? {});
     ctl.open();
@@ -135,6 +138,7 @@ export default function CompaniesPage() {
       address: Object.values(address).some(Boolean) ? address : undefined,
       phone: phone || undefined,
       contactIds,
+      contactTitles,
       tags,
       customFields,
     };
@@ -207,6 +211,32 @@ export default function CompaniesPage() {
               return { value: p.id, label: p.name };
             }}
           />
+          {contactIds.length > 0 && (
+            <div>
+              <Text size="sm" fw={500} mb={4}>
+                Titles at this company
+              </Text>
+              <Stack gap={6}>
+                {contactIds.map((id) => {
+                  const p = persons.find((x) => x.id === id);
+                  return (
+                    <Group key={id} gap="xs" wrap="nowrap">
+                      <Text size="sm" style={{ minWidth: 150 }} truncate>
+                        {p?.name ?? id}
+                      </Text>
+                      <TextInput
+                        size="xs"
+                        placeholder="e.g. Procurement Manager"
+                        value={contactTitles[id] ?? ''}
+                        onChange={(e) => setContactTitles((t) => ({ ...t, [id]: e.currentTarget.value }))}
+                        style={{ flex: 1 }}
+                      />
+                    </Group>
+                  );
+                })}
+              </Stack>
+            </div>
+          )}
           <CreatableMultiSelect
             label="Labels"
             placeholder="e.g. Partner, Enterprise"

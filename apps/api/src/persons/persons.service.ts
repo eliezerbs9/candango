@@ -14,7 +14,6 @@ type PersonRow = {
   firstName: string;
   lastName: string;
   name: string;
-  title: string;
   emails: Prisma.JsonValue;
   phones: Prisma.JsonValue;
   address: Prisma.JsonValue;
@@ -33,7 +32,6 @@ function shape(p: PersonRow) {
     firstName: p.firstName,
     lastName: p.lastName,
     name: p.name,
-    title: p.title ?? '',
     email: emails[0] ?? null,
     phone: phones[0] ?? null,
     address: p.address ?? null,
@@ -122,7 +120,6 @@ export class PersonsService {
         firstName: parts.firstName,
         lastName: parts.lastName,
         name,
-        title: dto.title?.trim() ?? '',
         emails: dto.email ? [dto.email] : [],
         phones: dto.phone ? [dto.phone] : [],
         address: (dto.address ?? undefined) as Prisma.InputJsonValue | undefined,
@@ -261,7 +258,6 @@ export class PersonsService {
       data.lastName = parts.lastName;
       data.name = formatPersonName(parts.firstName, parts.lastName, await this.nameFormat(orgId));
     }
-    if (dto.title !== undefined) data.title = dto.title.trim();
     if (dto.email !== undefined) data.emails = dto.email ? [dto.email] : [];
     if (dto.phone !== undefined) data.phones = dto.phone ? [dto.phone] : [];
     if (dto.address !== undefined) data.address = dto.address as Prisma.InputJsonValue;
