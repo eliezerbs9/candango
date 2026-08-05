@@ -270,7 +270,8 @@ export class SignaturesService {
     if (acceptance) {
       const body = acceptanceText ? renderTemplate(acceptanceText, await this.dealContext(orgId, userId, dto.dealId)) : undefined;
       const labels = await this.partyBlockLabels(orgId, dto.dealId);
-      const parties = recipients.map((r, i) => ({ label: i === 0 ? labels.client : labels.workspace, recipient: i }));
+      const clientLabel = dto.clientPartyLabel?.trim() || labels.client;
+      const parties = recipients.map((r, i) => ({ label: i === 0 ? clientLabel : labels.workspace, recipient: i }));
       fields.push(...(await addAcceptancePage(doc, { title: dto.title, body, parties })));
     }
     if (initialsPages.length > 0) {
@@ -356,7 +357,8 @@ export class SignaturesService {
     const fields: DocusealField[] = drawnToDocusealFields(tpl.mode === 'upload' ? ((tpl.fields as DrawnFieldDto[] | null) ?? []) : []);
     if (fields.length === 0) {
       const labels = await this.partyBlockLabels(orgId, dto.dealId);
-      const parties = recipients.map((r, i) => ({ label: i === 0 ? labels.client : labels.workspace, recipient: i }));
+      const clientLabel = dto.clientPartyLabel?.trim() || labels.client;
+      const parties = recipients.map((r, i) => ({ label: i === 0 ? clientLabel : labels.workspace, recipient: i }));
       fields.push(...(await addAcceptancePage(doc, { title: tpl.name, parties })));
     }
     const pdf = Buffer.from(await doc.save());

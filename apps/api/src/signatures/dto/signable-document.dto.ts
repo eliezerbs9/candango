@@ -69,6 +69,12 @@ export class GenerateSignatureDto {
   @IsEmail()
   signerEmail?: string;
 
+  /** The client party's heading on the signature page — a company name, or the individual client. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  clientPartyLabel?: string;
+
   @IsOptional()
   sendEmail?: boolean;
 
