@@ -29,6 +29,7 @@ export interface ApiCompany {
   domain: string | null;
   address: Address | null;
   phone: string | null;
+  primaryContactId: string | null;
   tags: string[];
   contacts: ContactRef[];
   customFields: Record<string, unknown>;

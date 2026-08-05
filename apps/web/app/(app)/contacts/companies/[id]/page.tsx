@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Anchor, Card, Center, Group, Loader, Stack, Text, ThemeIcon } from '@mantine/core';
+import { ActionIcon, Anchor, Card, Center, Group, Loader, Stack, Text, TextInput, ThemeIcon, Tooltip } from '@mantine/core';
+import { useState } from 'react';
 import { notifications } from '@mantine/notifications';
-import { IconArrowLeft, IconPhone, IconReceipt, IconUsers, IconWorld } from '@tabler/icons-react';
+import { IconArrowLeft, IconPhone, IconReceipt, IconStar, IconWorld } from '@tabler/icons-react';
+import type { ApiCompany } from '@/lib/api/contacts';
 import { ApiError } from '@/lib/api/client';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
 import { useCompanies, useCompanyDetail, useQuickbooksStatus, useUpdateCompany } from '@/lib/api/hooks';
@@ -88,22 +90,6 @@ export default function CompanyDetailPage() {
               <DetailRow icon={<IconPhone size={16} />} label="Phone">
                 {company.phone ?? <Dim />}
               </DetailRow>
-              <DetailRow icon={<IconUsers size={16} />} label="Contacts">
-                {company.contacts.length ? (
-                  <Group gap={4}>
-                    {company.contacts.map((p, i) => (
-                      <span key={p.id}>
-                        {i > 0 ? ', ' : ''}
-                        <Anchor component={Link} href={`/contacts/people/${p.id}`}>
-                          {p.name}
-                        </Anchor>
-                      </span>
-                    ))}
-                  </Group>
-                ) : (
-                  <Dim />
-                )}
-              </DetailRow>
               {company.qbCustomerId && (
                 <DetailRow icon={<IconReceipt size={16} />} label="QuickBooks customer ID">
                   {company.qbCustomerId}
@@ -111,6 +97,8 @@ export default function CompanyDetailPage() {
               )}
             </Stack>
           </Card>
+
+          <CompanyContactsCard company={company} onSave={(body) => update.mutate({ id: company.id, ...body }, { onError: fail })} />
         </Stack>
 
         <Stack gap="md" style={{ flex: '2 1 420px', minWidth: 320 }}>
@@ -139,6 +127,60 @@ export default function CompanyDetailPage() {
         </Stack>
       </Group>
     </Stack>
+  );
+}
+
+/** Editable list of a company's contacts: set each one's role and mark the primary contact. */
+function CompanyContactsCard({
+  company,
+  onSave,
+}: {
+  company: ApiCompany;
+  onSave: (body: { contactTitles?: Record<string, string>; primaryContactId?: string | null }) => void;
+}) {
+  const [titles, setTitles] = useState<Record<string, string>>(() => Object.fromEntries(company.contacts.map((p) => [p.id, p.title ?? ''])));
+  return (
+    <Card withBorder radius="md" padding="md">
+      <Group justify="space-between" mb="sm">
+        <Text fw={600}>Contacts &amp; roles</Text>
+        {company.contacts.length > 0 && (
+          <Text size="xs" c="dimmed">
+            <IconStar size={11} style={{ verticalAlign: '-1px' }} /> = primary
+          </Text>
+        )}
+      </Group>
+      {company.contacts.length === 0 ? (
+        <Text size="sm" c="dimmed">
+          No contacts yet — link people to this company from the Companies list (Edit).
+        </Text>
+      ) : (
+        <Stack gap="sm">
+          {company.contacts.map((p) => {
+            const isPrimary = company.primaryContactId === p.id;
+            return (
+              <Group key={p.id} gap="sm" wrap="nowrap" align="center">
+                <Tooltip label={isPrimary ? 'Primary contact — click to unset' : 'Set as primary contact'} withArrow>
+                  <ActionIcon variant={isPrimary ? 'filled' : 'subtle'} color="candango" radius="xl" size="md" onClick={() => onSave({ primaryContactId: isPrimary ? null : p.id })} aria-label="Set primary contact">
+                    <IconStar size={15} />
+                  </ActionIcon>
+                </Tooltip>
+                <Anchor component={Link} href={`/contacts/people/${p.id}`} size="sm" style={{ minWidth: 130 }} truncate>
+                  {p.name}
+                </Anchor>
+                <TextInput
+                  size="xs"
+                  placeholder="Role (e.g. Procurement Manager)"
+                  value={titles[p.id] ?? ''}
+                  onChange={(e) => setTitles((t) => ({ ...t, [p.id]: e.currentTarget.value }))}
+                  onBlur={() => onSave({ contactTitles: titles })}
+                  style={{ flex: 1 }}
+                />
+              </Group>
+            );
+          })}
+        </Stack>
+      )}
+    </Card>
   );
 }
 

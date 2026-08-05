@@ -528,16 +528,19 @@ export class SignaturesService {
         value: true,
         currency: true,
         primaryPerson: { select: personSelect },
-        company: { select: { name: true, contacts: { select: { title: true, person: { select: personSelect } } } } },
+        company: { select: { name: true, primaryContactId: true, contacts: { select: { title: true, person: { select: personSelect } } } } },
       },
     });
     const [user, org] = await Promise.all([
       this.prisma.user.findFirst({ where: { id: userId, orgId }, select: { name: true, firstName: true, lastName: true, email: true, phone: true } }),
       this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true, timezone: true } }),
     ]);
-    // The company's contact: the deal's primary person if they're linked to the company, else its first contact.
+    // The company's contact: its designated primary contact, else the deal's primary person if linked, else its first.
     const contacts = deal?.company?.contacts ?? [];
-    const link = contacts.find((c) => c.person.id === deal?.primaryPerson?.id) ?? contacts[0];
+    const link =
+      contacts.find((c) => c.person.id === deal?.company?.primaryContactId) ??
+      contacts.find((c) => c.person.id === deal?.primaryPerson?.id) ??
+      contacts[0];
     const companyContact = link ? { ...link.person, title: link.title } : null;
     return buildTemplateContext({
       person: deal?.primaryPerson ?? null,

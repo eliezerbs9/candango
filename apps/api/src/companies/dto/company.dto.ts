@@ -27,6 +27,11 @@ export class CreateCompanyDto {
   @IsObject()
   contactTitles?: Record<string, string>;
 
+  /** The company's main contact person (a linked contact's personId). */
+  @IsOptional()
+  @IsString()
+  primaryContactId?: string | null;
+
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
@@ -65,6 +70,11 @@ export class UpdateCompanyDto {
   @IsOptional()
   @IsObject()
   contactTitles?: Record<string, string>;
+
+  /** The company's main contact person (a linked contact's personId). */
+  @IsOptional()
+  @IsString()
+  primaryContactId?: string | null;
 
   @IsOptional()
   @IsArray()

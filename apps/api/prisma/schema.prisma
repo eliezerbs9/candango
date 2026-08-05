@@ -291,6 +291,7 @@ model Company {
   address      Json?    // structured { line1, line2, city, state, postalCode, country }
   phone        String?
   ownerUserId  String?
+  primaryContactId String? // the company's main contact person (a linked CompanyContact)
   tags         String[] @default([]) // company labels — used for filtering
   customFields Json     @default("{}")
   createdAt    DateTime @default(now())

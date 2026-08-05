@@ -14,6 +14,7 @@ type CompanyRow = {
   domain: string | null;
   address: Prisma.JsonValue;
   phone: string | null;
+  primaryContactId: string | null;
   tags: string[];
   customFields: Prisma.JsonValue;
   contacts: { title: string; person: { id: string; name: string } }[];
@@ -26,6 +27,7 @@ function shape(c: CompanyRow) {
     domain: c.domain,
     address: c.address,
     phone: c.phone,
+    primaryContactId: c.primaryContactId,
     tags: c.tags ?? [],
     customFields: (c.customFields as Record<string, unknown>) ?? {},
     contacts: c.contacts.map((l) => ({ id: l.person.id, name: l.person.name, title: l.title ?? '' })),
@@ -201,6 +203,7 @@ export class CompaniesService {
     if (dto.phone !== undefined) data.phone = dto.phone;
     if (dto.tags !== undefined) data.tags = cleanTags(dto.tags);
     if (dto.customFields !== undefined) data.customFields = dto.customFields as Prisma.InputJsonValue;
+    if (dto.primaryContactId !== undefined) data.primaryContactId = dto.primaryContactId || null;
     await this.prisma.company.update({ where: { id }, data });
 
     if (dto.contactIds !== undefined) {
@@ -210,6 +213,11 @@ export class CompaniesService {
         await this.prisma.companyContact.createMany({
           data: personIds.map((personId) => ({ companyId: id, personId, title: dto.contactTitles?.[personId]?.trim() ?? '' })),
         });
+      }
+    } else if (dto.contactTitles !== undefined) {
+      // Update roles on the existing links without rebuilding them.
+      for (const [personId, title] of Object.entries(dto.contactTitles)) {
+        await this.prisma.companyContact.updateMany({ where: { companyId: id, personId }, data: { title: (title ?? '').trim() } });
       }
     }
 
