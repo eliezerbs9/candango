@@ -379,7 +379,7 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
   const [acceptance, setAcceptance] = useState(true);
   const [initials, setInitials] = useState(false);
   const [drawnFields, setDrawnFields] = useState<DrawnField[]>([]);
-  const [placing, setPlacing] = useState(false);
+  const [method, setMethod] = useState<'options' | 'fields'>('options');
   const [link, setLink] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const useTemplate = templateId !== '';
@@ -404,7 +404,7 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
     setAcceptance(true);
     setInitials(false);
     setDrawnFields([]);
-    setPlacing(false);
+    setMethod('options');
     setLink(null);
   };
   const close = () => {
@@ -417,12 +417,10 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
     setFieldKey(key);
     setFileKey(null);
     setDrawnFields([]);
-    setPlacing(false);
   };
   const pickFile = (key: string | null) => {
     setFileKey(key);
     setDrawnFields([]);
-    setPlacing(false);
     const doc = files.find((d) => d.key === key);
     if (doc && !title.trim()) setTitle(doc.name.replace(/\.[^.]+$/, ''));
   };
@@ -464,8 +462,13 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
       notifications.show({ message: 'Fill "Signing on behalf of"', color: 'red' });
       return;
     }
-    if (!useTemplate && !acceptance && !initials && drawnFields.length === 0) {
-      notifications.show({ message: 'Select a signing option or place at least one field', color: 'red' });
+    if (method === 'fields') {
+      if (drawnFields.length === 0) {
+        notifications.show({ message: 'Place at least one field on the document', color: 'red' });
+        return;
+      }
+    } else if (!useTemplate && !acceptance && !initials) {
+      notifications.show({ message: 'Pick a template or a signing option', color: 'red' });
       return;
     }
     setBusy(true);
@@ -479,8 +482,12 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
         clientPartyLabel: clientLabel.trim(),
         sendEmail,
         bothParties,
-        ...(useTemplate ? { signatureTemplateId: templateId } : { acceptance, initialsEveryPage: initials }),
-        ...(drawnFields.length ? { drawnFields } : {}),
+        // Manual field placement is exclusive with the template / acceptance-page options.
+        ...(method === 'fields'
+          ? { drawnFields, acceptance: false }
+          : useTemplate
+            ? { signatureTemplateId: templateId }
+            : { acceptance, initialsEveryPage: initials }),
       });
       setLink(res.signingUrl ?? null);
       notifications.show({ message: sendEmail ? 'Sent to the signer' : 'Signature request created', color: 'green' });
@@ -561,67 +568,6 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
 
           <TextInput label="Title" placeholder="e.g. Service Agreement" required value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
 
-          <div>
-            <Text size="sm" fw={500} mb={4}>
-              Signing options
-            </Text>
-            <Select
-              placeholder="Custom (choose below)"
-              data={[
-                { value: '', label: 'Custom (choose below)' },
-                ...templates.map((t) => ({ value: t.id, label: t.name })),
-              ]}
-              value={templateId}
-              onChange={(v) => setTemplateId(v ?? '')}
-              comboboxProps={{ withinPortal: true }}
-              allowDeselect={false}
-              description={templates.length === 0 ? 'Tip: save reusable recipes in Settings → Signatures.' : 'Reuse a saved signature template, or configure options for this request.'}
-            />
-            {!useTemplate && (
-              <Stack gap={6} mt={8}>
-                <Checkbox
-                  label="Acceptance & Signature page"
-                  description="Appends a page with signature, date and printed name at the end."
-                  checked={acceptance}
-                  onChange={(e) => setAcceptance(e.currentTarget.checked)}
-                />
-                <Checkbox
-                  label="Initials on every page"
-                  description="Adds an initials field to the footer of every page."
-                  checked={initials}
-                  onChange={(e) => setInitials(e.currentTarget.checked)}
-                />
-              </Stack>
-            )}
-          </div>
-
-          {fileKey && (
-            <div>
-              <Group justify="space-between" align="center">
-                <Text size="sm" fw={500}>
-                  Place fields on the document {drawnFields.length > 0 && <Text span c="candango" fw={600}>· {drawnFields.length}</Text>}
-                </Text>
-                <Button size="compact-xs" variant={placing ? 'light' : 'subtle'} onClick={() => setPlacing((p) => !p)}>
-                  {placing ? 'Hide' : 'Place fields'}
-                </Button>
-              </Group>
-              <Text size="xs" c="dimmed">
-                Optional — drop signature/initials/date/text fields onto exact spots. Combines with the options above.
-              </Text>
-              <Collapse in={placing}>
-                <Paper withBorder radius="md" p="sm" mt="xs">
-                  {filePreview?.url ? (
-                    <SignatureFieldEditor fileUrl={filePreview.url} value={drawnFields} onChange={setDrawnFields} />
-                  ) : (
-                    <Group justify="center" py="md">
-                      <Loader size="sm" />
-                    </Group>
-                  )}
-                </Paper>
-              </Collapse>
-            </div>
-          )}
-
           <SignerFields
             dealId={dealId}
             companyId={deal.companyId ?? null}
@@ -630,10 +576,87 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
             clientLabel={clientLabel}
             onClientLabel={setClientLabel}
             bothParties={bothParties}
-            onBothParties={setBothParties}
+            onBothParties={(b) => {
+              setBothParties(b);
+              if (!b) setDrawnFields((fs) => fs.filter((f) => f.party !== 'sender'));
+            }}
             sendEmail={sendEmail}
             onSendEmail={setSendEmail}
+            hideParties={method === 'options' && useTemplate}
           />
+
+          <div>
+            <Text size="sm" fw={500} mb={4}>
+              How to set up signing
+            </Text>
+            <SegmentedControl
+              fullWidth
+              value={method}
+              onChange={(v) => setMethod(v as 'options' | 'fields')}
+              data={[
+                { value: 'options', label: 'Signing options' },
+                { value: 'fields', label: 'Place fields manually' },
+              ]}
+            />
+            <Text size="xs" c="dimmed" mt={4}>
+              {method === 'fields'
+                ? 'Drop the exact signature/date fields onto the page — replaces the options below.'
+                : 'Reuse a saved template, or add an acceptance page / initials.'}
+            </Text>
+          </div>
+
+          {method === 'options' ? (
+            <div>
+              <Select
+                label="Signature template"
+                placeholder="Custom (choose below)"
+                data={[{ value: '', label: 'Custom (choose below)' }, ...templates.map((t) => ({ value: t.id, label: t.name }))]}
+                value={templateId}
+                onChange={(v) => setTemplateId(v ?? '')}
+                comboboxProps={{ withinPortal: true }}
+                allowDeselect={false}
+                description={templates.length === 0 ? 'Tip: save reusable recipes in Settings → Signatures.' : 'Reuse a saved signature template, or configure options below.'}
+              />
+              {!useTemplate && (
+                <Stack gap={6} mt={8}>
+                  <Checkbox
+                    label="Acceptance & Signature page"
+                    description="Appends a page with signature, date and printed name at the end."
+                    checked={acceptance}
+                    onChange={(e) => setAcceptance(e.currentTarget.checked)}
+                  />
+                  <Checkbox
+                    label="Initials on every page"
+                    description="Adds an initials field to the footer of every page."
+                    checked={initials}
+                    onChange={(e) => setInitials(e.currentTarget.checked)}
+                  />
+                </Stack>
+              )}
+            </div>
+          ) : !fileKey ? (
+            <Text size="xs" c="dimmed">
+              Pick a document above to place fields on it.
+            </Text>
+          ) : (
+            <div>
+              <Text size="sm" fw={500} mb={2}>
+                Place fields on the document {drawnFields.length > 0 && <Text span c="candango" fw={600}>· {drawnFields.length}</Text>}
+              </Text>
+              <Text size="xs" c="dimmed" mb="xs">
+                Drop <b>Client</b> fields{bothParties ? <> and <b>Sender</b> fields</> : ''} onto exact spots — one signature per party.
+              </Text>
+              <Paper withBorder radius="md" p="sm">
+                {filePreview?.url ? (
+                  <SignatureFieldEditor fileUrl={filePreview.url} value={drawnFields} onChange={setDrawnFields} senderFields={bothParties} />
+                ) : (
+                  <Group justify="center" py="md">
+                    <Loader size="sm" />
+                  </Group>
+                )}
+              </Paper>
+            </div>
+          )}
           <Button onClick={submit} loading={busy && create.isPending} disabled={!fileKey || !signer || !clientLabel.trim()}>
             Send for signature
           </Button>

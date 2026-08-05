@@ -169,16 +169,19 @@ export default function DocumentTemplateEditor() {
         <Group align="flex-end" gap="sm" wrap="wrap">
           <Select
             label="Signed by"
-            description="Who signs — the client alone, or the client plus a second party."
+            description="Who signs — the client alone, or the client plus a second signer."
             data={[
               { value: 'none', label: 'Client only' },
-              { value: 'owner', label: 'Both — deal owner (sales rep)' },
-              { value: 'user', label: 'Both — a specific user' },
+              { value: 'owner', label: 'Client + Deal Owner' },
+              { value: 'user', label: 'Client + Specific Team Member' },
             ]}
             value={parties === 'one' ? 'none' : party2Source}
             onChange={(v) => {
-              if (v === 'none') setParties('one');
-              else {
+              if (v === 'none') {
+                setParties('one');
+                // Dropping the second signer removes its fields — they'd have no one to sign them.
+                setPages(pages.map((pg) => ({ ...pg, elements: pg.elements.filter((el) => !(el.type === 'field' && (el.props as { party?: string })?.party === 'sender')) })));
+              } else {
                 setParties('both');
                 setParty2Source(v as 'owner' | 'user');
               }
@@ -194,9 +197,9 @@ export default function DocumentTemplateEditor() {
 
       {mode === 'builder' && (
         <Text size="xs" c="dimmed">
-          Drag <strong>Client fields</strong> onto the page{parties === 'both' ? ' — and, since both parties sign, place ' : ''}
+          Drag <strong>Client fields</strong> onto the page{parties === 'both' ? ' — and, since a second signer is set, place ' : ''}
           {parties === 'both' ? <strong>Sender fields</strong> : ''}
-          {parties === 'both' ? ' for your side too.' : '. Choose “Both” above to also place Sender fields.'}
+          {parties === 'both' ? ' for your side too.' : '. Add a second signer above to also place Sender fields.'}
         </Text>
       )}
 

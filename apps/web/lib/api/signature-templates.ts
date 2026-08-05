@@ -14,6 +14,8 @@ export interface DrawnField {
   w: number;
   h: number;
   label?: string;
+  /** Which party signs this field. Defaults to 'client'. */
+  party?: 'client' | 'sender';
 }
 
 export interface SignatureTemplate {

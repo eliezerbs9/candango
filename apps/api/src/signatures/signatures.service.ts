@@ -29,12 +29,13 @@ function initialsRecipientIndexes(initialsParty: string, recipientCount: number)
   return [0]; // client (default)
 }
 
-/** Turn visually-placed fields into DocuSeal fields with unique names. */
+/** Turn visually-placed fields into DocuSeal fields with unique names (routing to each field's party). */
 function drawnToDocusealFields(drawn: DrawnFieldDto[]): DocusealField[] {
   return drawn.map((f, i) => ({
     name: f.label?.trim() || `${f.type[0].toUpperCase()}${f.type.slice(1)} ${i + 1}`,
     type: f.type,
     role: 'Client',
+    recipient: f.party === 'sender' ? 1 : 0,
     areas: [{ page: f.page, x: f.x, y: f.y, w: f.w, h: f.h }],
   }));
 }
@@ -281,6 +282,15 @@ export class SignaturesService {
       targets.forEach((rIdx, k) => {
         fields.push({ name: `Initials ${rIdx + 1}`, type: 'initials', role: 'Client', recipient: rIdx, areas: initialsPages.map((page) => ({ page, ...zones[k] })) });
       });
+    }
+    // Documenso rejects any signer with no SIGNATURE field — append an acceptance block for any missing
+    // (covers manually-placed fields that only signed one party).
+    const missingSig = recipients.map((_, i) => i).filter((i) => !fields.some((f) => (f.recipient ?? 0) === i && f.type === 'signature'));
+    if (missingSig.length) {
+      const labels = await this.partyBlockLabels(orgId, dto.dealId);
+      const clientLabel = dto.clientPartyLabel?.trim() || labels.client;
+      const parties = missingSig.map((i) => ({ label: i === 0 ? clientLabel : labels.workspace, recipient: i }));
+      fields.push(...(await addAcceptancePage(doc, { title: dto.title, parties })));
     }
 
     const pdf = Buffer.from(await doc.save());

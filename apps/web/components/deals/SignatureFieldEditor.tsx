@@ -15,13 +15,12 @@ const PALETTE: { type: FieldType; label: string; icon: typeof IconSignature; w: 
   { type: 'text', label: 'Text', icon: IconLetterCase, w: 0.24, h: 0.045 },
 ];
 
-const COLORS: Record<FieldType, string> = {
-  signature: 'var(--mantine-color-candango-6)',
-  initials: 'var(--mantine-color-violet-6)',
-  date: 'var(--mantine-color-teal-6)',
-  text: 'var(--mantine-color-blue-6)',
-  checkbox: 'var(--mantine-color-gray-6)',
+// Color by party (client vs sender) so the two are easy to tell apart on the page.
+const PARTY_COLOR: Record<'client' | 'sender', string> = {
+  client: 'var(--mantine-color-candango-6)',
+  sender: 'var(--mantine-color-blue-7)',
 };
+const colorOf = (f: { party?: 'client' | 'sender' }) => PARTY_COLOR[f.party === 'sender' ? 'sender' : 'client'];
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
@@ -37,7 +36,7 @@ type Drag = { id: string; mode: 'move' | 'resize'; startX: number; startY: numbe
  * Render a PDF's pages (pdf.js) and let the user drop/drag/resize signature fields onto them.
  * Emits DrawnField[] with normalized top-left coords (page 1-indexed) — the shape DocuSeal expects.
  */
-export function SignatureFieldEditor({ fileUrl, value, onChange }: { fileUrl: string; value: DrawnField[]; onChange: (f: DrawnField[]) => void }) {
+export function SignatureFieldEditor({ fileUrl, value, onChange, senderFields = false }: { fileUrl: string; value: DrawnField[]; onChange: (f: DrawnField[]) => void; senderFields?: boolean }) {
   const [pages, setPages] = useState<PageDim[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -104,11 +103,17 @@ export function SignatureFieldEditor({ fileUrl, value, onChange }: { fileUrl: st
     };
   }, [fileUrl]);
 
-  const addField = (type: FieldType) => {
+  const addField = (type: FieldType, party: 'client' | 'sender') => {
     const def = PALETTE.find((p) => p.type === type)!;
-    emit([...fields, { _id: uid(), type, page: activePage, x: 0.5 - def.w / 2, y: 0.45, w: def.w, h: def.h }]);
+    emit([...fields, { _id: uid(), type, party, page: activePage, x: 0.5 - def.w / 2, y: 0.45, w: def.w, h: def.h }]);
   };
   const removeField = (id: string) => emit(fields.filter((f) => f._id !== id));
+
+  // At most one signature per party — disable that party's Signature button once placed.
+  const hasSig = {
+    client: fields.some((f) => f.type === 'signature' && (f.party ?? 'client') !== 'sender'),
+    sender: fields.some((f) => f.type === 'signature' && f.party === 'sender'),
+  };
 
   const onPointerDown = (e: React.PointerEvent, f: IdField, mode: 'move' | 'resize') => {
     e.preventDefault();
@@ -142,16 +147,34 @@ export function SignatureFieldEditor({ fileUrl, value, onChange }: { fileUrl: st
 
   return (
     <Stack gap="sm">
-      <Group gap="xs">
-        <Text size="sm" fw={500}>
-          Add field:
+      <Group gap="xs" align="center">
+        <Text size="sm" fw={500} w={senderFields ? 92 : undefined}>
+          {senderFields ? 'Client fields:' : 'Add field:'}
         </Text>
-        {PALETTE.map((p) => (
-          <Button key={p.type} size="compact-xs" variant="light" leftSection={<p.icon size={13} />} onClick={() => addField(p.type)} disabled={loading || !!error}>
-            {p.label}
-          </Button>
-        ))}
+        {PALETTE.map((p) => {
+          const disabled = loading || !!error || (p.type === 'signature' && hasSig.client);
+          return (
+            <Button key={`client-${p.type}`} size="compact-xs" variant="light" color="candango" leftSection={<p.icon size={13} />} onClick={() => addField(p.type, 'client')} disabled={disabled} title={p.type === 'signature' && hasSig.client ? 'Only one signature per party' : undefined}>
+              {p.label}
+            </Button>
+          );
+        })}
       </Group>
+      {senderFields && (
+        <Group gap="xs" align="center">
+          <Text size="sm" fw={500} w={92}>
+            Sender fields:
+          </Text>
+          {PALETTE.map((p) => {
+            const disabled = loading || !!error || (p.type === 'signature' && hasSig.sender);
+            return (
+              <Button key={`sender-${p.type}`} size="compact-xs" variant="light" color="blue" leftSection={<p.icon size={13} />} onClick={() => addField(p.type, 'sender')} disabled={disabled} title={p.type === 'signature' && hasSig.sender ? 'Only one signature per party' : undefined}>
+                {p.label}
+              </Button>
+            );
+          })}
+        </Group>
+      )}
       <Text size="xs" c="dimmed">
         New fields land on <b>page {activePage}</b> — click a page to target it, then drag to move and use the corner to resize.
       </Text>
@@ -201,7 +224,7 @@ export function SignatureFieldEditor({ fileUrl, value, onChange }: { fileUrl: st
                           top: `${f.y * 100}%`,
                           width: `${f.w * 100}%`,
                           height: `${f.h * 100}%`,
-                          border: `1.5px solid ${COLORS[f.type]}`,
+                          border: `1.5px solid ${colorOf(f)}`,
                           background: 'color-mix(in srgb, var(--mantine-color-body) 55%, transparent)',
                           borderRadius: 3,
                           cursor: 'move',
@@ -210,12 +233,13 @@ export function SignatureFieldEditor({ fileUrl, value, onChange }: { fileUrl: st
                           justifyContent: 'center',
                           fontSize: 10,
                           fontWeight: 600,
-                          color: COLORS[f.type],
+                          color: colorOf(f),
                           textTransform: 'capitalize',
                           userSelect: 'none',
                         }}
                       >
                         {f.type}
+                        {f.party === 'sender' ? ' · Sender' : ''}
                         <ActionIcon
                           size={14}
                           color="red"
@@ -231,7 +255,7 @@ export function SignatureFieldEditor({ fileUrl, value, onChange }: { fileUrl: st
                         </ActionIcon>
                         <div
                           onPointerDown={(e) => onPointerDown(e, f, 'resize')}
-                          style={{ position: 'absolute', bottom: -5, right: -5, width: 11, height: 11, background: COLORS[f.type], borderRadius: 2, cursor: 'nwse-resize' }}
+                          style={{ position: 'absolute', bottom: -5, right: -5, width: 11, height: 11, background: colorOf(f), borderRadius: 2, cursor: 'nwse-resize' }}
                         />
                       </div>
                     ))}

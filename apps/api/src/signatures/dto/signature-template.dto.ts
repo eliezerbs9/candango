@@ -29,6 +29,10 @@ export class DrawnFieldDto {
   @IsString()
   @MaxLength(60)
   label?: string;
+
+  @IsOptional()
+  @IsIn(['client', 'sender'])
+  party?: 'client' | 'sender';
 }
 
 export class CreateSignatureTemplateDto {
