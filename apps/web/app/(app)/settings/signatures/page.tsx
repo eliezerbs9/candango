@@ -253,22 +253,20 @@ function CreateDocumentModal({ opened, onClose }: { opened: boolean; onClose: ()
   const router = useRouter();
   const create = useCreateSignableDocument();
   const [name, setName] = useState('');
-  const [mode, setMode] = useState<'builder' | 'upload'>('builder');
   const [paperSize, setPaperSize] = useState<'letter' | 'a4'>('letter');
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
 
   const submit = () => {
-    const body =
-      mode === 'builder'
-        ? { name: name.trim() || 'Untitled document', mode, theme: { ...BUILDER_THEME_DEFAULTS, orientation, paperSize } }
-        : { name: name.trim() || 'Untitled document', mode };
-    create.mutate(body, {
-      onSuccess: (d) => {
-        onClose();
-        router.push(`/settings/signatures/documents/${d.id}`);
+    create.mutate(
+      { name: name.trim() || 'Untitled document', mode: 'builder', theme: { ...BUILDER_THEME_DEFAULTS, orientation, paperSize } },
+      {
+        onSuccess: (d) => {
+          onClose();
+          router.push(`/settings/signatures/documents/${d.id}`);
+        },
+        onError: fail,
       },
-      onError: fail,
-    });
+    );
   };
 
   return (
@@ -276,52 +274,35 @@ function CreateDocumentModal({ opened, onClose }: { opened: boolean; onClose: ()
       <Stack>
         <TextInput label="Name" placeholder="e.g. Service Agreement" value={name} onChange={(e) => setName(e.currentTarget.value)} data-autofocus />
 
-        <div>
-          <Text size="sm" fw={500} mb={4}>
-            How do you want to build it?
-          </Text>
-          <SegmentedControl
-            fullWidth
-            value={mode}
-            onChange={(v) => setMode(v as 'builder' | 'upload')}
+        <Group grow>
+          <Select
+            label="Paper size"
             data={[
-              { value: 'builder', label: 'Visual builder' },
-              { value: 'upload', label: 'Upload a PDF' },
+              { value: 'letter', label: 'US Letter (8.5 × 11)' },
+              { value: 'a4', label: 'A4 (210 × 297 mm)' },
             ]}
+            value={paperSize}
+            onChange={(v) => setPaperSize((v as 'letter' | 'a4') ?? 'letter')}
+            allowDeselect={false}
           />
-          <Text size="xs" c="dimmed" mt={4}>
-            {mode === 'builder' ? 'Design the document with drag & drop, variables and signature fields.' : 'Upload a finished PDF and place signature fields on it.'}
-          </Text>
-        </div>
-
-        {mode === 'builder' && (
-          <Group grow>
-            <Select
-              label="Paper size"
+          <div>
+            <Text size="sm" fw={500} mb={4}>
+              Orientation
+            </Text>
+            <SegmentedControl
+              fullWidth
+              value={orientation}
+              onChange={(v) => setOrientation(v as 'portrait' | 'landscape')}
               data={[
-                { value: 'letter', label: 'US Letter (8.5 × 11)' },
-                { value: 'a4', label: 'A4 (210 × 297 mm)' },
+                { value: 'portrait', label: 'Portrait' },
+                { value: 'landscape', label: 'Landscape' },
               ]}
-              value={paperSize}
-              onChange={(v) => setPaperSize((v as 'letter' | 'a4') ?? 'letter')}
-              allowDeselect={false}
             />
-            <div>
-              <Text size="sm" fw={500} mb={4}>
-                Orientation
-              </Text>
-              <SegmentedControl
-                fullWidth
-                value={orientation}
-                onChange={(v) => setOrientation(v as 'portrait' | 'landscape')}
-                data={[
-                  { value: 'portrait', label: 'Portrait' },
-                  { value: 'landscape', label: 'Landscape' },
-                ]}
-              />
-            </div>
-          </Group>
-        )}
+          </div>
+        </Group>
+        <Text size="xs" c="dimmed">
+          Design it with drag &amp; drop — variables and signature fields. You can also Import a PDF inside the editor to build on top of it.
+        </Text>
 
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>

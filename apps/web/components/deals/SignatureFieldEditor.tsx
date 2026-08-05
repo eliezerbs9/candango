@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ActionIcon, Button, Group, Loader, Paper, Stack, Text } from '@mantine/core';
-import { IconCalendar, IconLetterCase, IconSignature, IconTrash, IconWriting } from '@tabler/icons-react';
+import { IconCalendar, IconSignature, IconTrash, IconWriting } from '@tabler/icons-react';
 import type { DrawnField } from '@/lib/api/signature-templates';
 
 type FieldType = DrawnField['type'];
@@ -12,7 +12,6 @@ const PALETTE: { type: FieldType; label: string; icon: typeof IconSignature; w: 
   { type: 'signature', label: 'Signature', icon: IconSignature, w: 0.28, h: 0.06 },
   { type: 'initials', label: 'Initials', icon: IconWriting, w: 0.12, h: 0.05 },
   { type: 'date', label: 'Date', icon: IconCalendar, w: 0.18, h: 0.045 },
-  { type: 'text', label: 'Text', icon: IconLetterCase, w: 0.24, h: 0.045 },
 ];
 
 // Color by party (client vs sender) so the two are easy to tell apart on the page.

@@ -180,7 +180,6 @@ const FIELD_PALETTE: { fieldType: string; label: string }[] = [
   { fieldType: 'signature', label: 'Signature' },
   { fieldType: 'initials', label: 'Initials' },
   { fieldType: 'date', label: 'Date' },
-  { fieldType: 'text', label: 'Text field' },
 ];
 
 export function ProposalCanvasEditor({
