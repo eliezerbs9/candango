@@ -207,7 +207,8 @@ export default function PeoplePage() {
             value={companyIds}
             onChange={setCompanyIds}
             onCreate={async (n) => {
-              const c = await createCompany.mutateAsync({ name: n });
+              // Link this person as the new company's primary contact, so it never lands without one.
+              const c = await createCompany.mutateAsync(editing?.id ? { name: n, contactIds: [editing.id], primaryContactId: editing.id } : { name: n });
               return { value: c.id, label: c.name };
             }}
           />

@@ -62,6 +62,8 @@ export class CompaniesService {
 
   async create(orgId: string, dto: CreateCompanyDto) {
     const contactIds = await this.validPersonIds(orgId, dto.contactIds);
+    // Every company with contacts gets a primary contact — the one given, else the first linked.
+    const primaryContactId = contactIds.includes(dto.primaryContactId ?? '') ? dto.primaryContactId : contactIds[0] ?? null;
     const row = await this.prisma.company.create({
       data: {
         orgId,
@@ -69,6 +71,7 @@ export class CompaniesService {
         domain: dto.domain ?? null,
         address: (dto.address ?? undefined) as Prisma.InputJsonValue | undefined,
         phone: dto.phone ?? null,
+        primaryContactId,
         tags: cleanTags(dto.tags) ?? [],
         customFields: (dto.customFields ?? {}) as Prisma.InputJsonValue,
         contacts: { create: contactIds.map((personId) => ({ personId, title: dto.contactTitles?.[personId]?.trim() ?? '' })) },

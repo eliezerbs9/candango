@@ -21,9 +21,9 @@ function resolveInitialsPages(rule: string, pages: number[], pageCount: number):
   return [];
 }
 
-/** A signer person for the `receiver.*` variables. */
-type ReceiverLike = { firstName?: string | null; lastName?: string | null; name?: string | null; emails?: unknown };
-/** A counter-signing user for the `sender.*` variables. */
+/** The customer signer for the `customer.*` variables (+ their role/title at the deal's company). */
+type CustomerLike = { firstName?: string | null; lastName?: string | null; name?: string | null; emails?: unknown; phones?: unknown; title?: string | null };
+/** The second signer (a workspace user) for the `signer2.*` variables. */
 type SenderLike = { name?: string | null; firstName?: string | null; lastName?: string | null; email?: string | null; phone?: string | null };
 
 /** First email from a Person.emails JSON value (string[] or [{value}]). */
@@ -287,8 +287,8 @@ export class SignaturesService {
         ? renderTemplate(
             acceptanceText,
             await this.dealContext(orgId, userId, dto.dealId, {
-              receiver: await this.resolveReceiver(orgId, dto.dealId, dto.receiverPersonId),
-              sender: await this.resolveSenderUser(orgId, dto.dealId, party2),
+              customer: await this.resolveCustomer(orgId, dto.dealId, dto.receiverPersonId),
+              signer2: await this.resolveSenderUser(orgId, dto.dealId, party2),
             }),
           )
         : undefined;
@@ -363,12 +363,12 @@ export class SignaturesService {
     const partiesBoth = dto.bothParties ?? tpl.parties === 'both';
     const party2 = { enabled: partiesBoth, source: (tpl.party2Source as 'owner' | 'user') ?? 'owner', userId: tpl.party2UserId ?? null };
     // Resolve the real signers, then build the {{variable}} context so receiver.*/sender.* are accurate.
-    const receiver = await this.resolveReceiver(orgId, dto.dealId, dto.receiverPersonId);
-    const senderUser = await this.resolveSenderUser(orgId, dto.dealId, party2);
-    const ctx = await this.dealContext(orgId, userId, dto.dealId, { receiver, sender: senderUser });
-    const signerEmail = (dto.signerEmail || firstEmailOf(receiver?.emails) || ctx['contact.email'] || '').trim();
+    const customer = await this.resolveCustomer(orgId, dto.dealId, dto.receiverPersonId);
+    const signer2 = await this.resolveSenderUser(orgId, dto.dealId, party2);
+    const ctx = await this.dealContext(orgId, userId, dto.dealId, { customer, signer2 });
+    const signerEmail = (dto.signerEmail || firstEmailOf(customer?.emails) || ctx['contact.email'] || '').trim();
     if (!signerEmail) throw new BadRequestException('No signer email — set a primary contact with an email on the deal.');
-    const signerName = (dto.signerName || receiver?.name || [receiver?.firstName, receiver?.lastName].filter(Boolean).join(' ').trim() || ctx['contact.name'] || '').trim() || undefined;
+    const signerName = (dto.signerName || customer?.name || [customer?.firstName, customer?.lastName].filter(Boolean).join(' ').trim() || ctx['contact.name'] || '').trim() || undefined;
 
     // Build the source PDF for the template's mode (upload = stored PDF; builder/html = HTML→PDF per deal).
     let doc: Awaited<ReturnType<typeof PDFDocument.load>>;
@@ -529,50 +529,48 @@ export class SignaturesService {
     orgId: string,
     userId: string,
     dealId: string,
-    extra?: { receiver?: ReceiverLike | null; sender?: SenderLike | null },
+    extra?: { customer?: CustomerLike | null; signer2?: SenderLike | null },
   ): Promise<Record<string, string>> {
-    const personSelect = { id: true, firstName: true, lastName: true, name: true, emails: true, phones: true } as const;
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, orgId },
       select: {
         title: true,
         value: true,
         currency: true,
-        primaryPerson: { select: personSelect },
-        company: { select: { name: true, primaryContactId: true, contacts: { select: { title: true, person: { select: personSelect } } } } },
+        primaryPerson: { select: { firstName: true, lastName: true, name: true, emails: true, phones: true } },
+        company: { select: { name: true } },
       },
     });
     const [user, org] = await Promise.all([
       this.prisma.user.findFirst({ where: { id: userId, orgId }, select: { name: true, firstName: true, lastName: true, email: true, phone: true } }),
       this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true, timezone: true } }),
     ]);
-    // The company's contact: its designated primary contact, else the deal's primary person if linked, else its first.
-    const contacts = deal?.company?.contacts ?? [];
-    const link =
-      contacts.find((c) => c.person.id === deal?.company?.primaryContactId) ??
-      contacts.find((c) => c.person.id === deal?.primaryPerson?.id) ??
-      contacts[0];
-    const companyContact = link ? { ...link.person, title: link.title } : null;
     return buildTemplateContext({
       person: deal?.primaryPerson ?? null,
       company: deal?.company ? { name: deal.company.name } : null,
-      companyContact,
       deal: deal ? { title: deal.title, value: deal.value, currency: deal.currency } : null,
-      sender: extra?.sender ?? user,
+      sender: user, // sender.* = the workspace user sending (email), not a signer
       workspace: org,
-      receiver: extra?.receiver ?? null,
+      customer: extra?.customer ?? null,
+      signer2: extra?.signer2 ?? null,
     });
   }
 
-  /** The signature "receiver": the explicitly-chosen signer person, else the deal's primary contact. */
-  private async resolveReceiver(orgId: string, dealId: string, personId?: string | null): Promise<ReceiverLike | null> {
-    const select = { firstName: true, lastName: true, name: true, emails: true } as const;
-    if (personId) return this.prisma.person.findFirst({ where: { id: personId, orgId }, select });
-    const deal = await this.prisma.deal.findFirst({ where: { id: dealId, orgId }, select: { primaryPerson: { select } } });
-    return deal?.primaryPerson ?? null;
+  /** The customer signer: the explicitly-chosen person, else the deal's primary contact — with their role at the deal's company. */
+  private async resolveCustomer(orgId: string, dealId: string, personId?: string | null): Promise<CustomerLike | null> {
+    const select = { id: true, firstName: true, lastName: true, name: true, emails: true, phones: true } as const;
+    const deal = await this.prisma.deal.findFirst({ where: { id: dealId, orgId }, select: { companyId: true, primaryPerson: { select } } });
+    const person = personId ? await this.prisma.person.findFirst({ where: { id: personId, orgId }, select }) : deal?.primaryPerson ?? null;
+    if (!person) return null;
+    let title = '';
+    if (deal?.companyId) {
+      const link = await this.prisma.companyContact.findFirst({ where: { companyId: deal.companyId, personId: person.id }, select: { title: true } });
+      title = link?.title ?? '';
+    }
+    return { ...person, title };
   }
 
-  /** The signature "sender": the counter-signing party (a fixed user, else the deal owner). */
+  /** The second signer: the counter-signing party (a fixed user, else the deal owner). */
   private async resolveSenderUser(orgId: string, dealId: string, party2: { enabled: boolean; source: 'owner' | 'user'; userId?: string | null }): Promise<SenderLike | null> {
     const select = { name: true, firstName: true, lastName: true, email: true, phone: true } as const;
     if (party2.enabled && party2.source === 'user' && party2.userId) {

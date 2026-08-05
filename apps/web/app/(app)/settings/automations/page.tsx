@@ -650,7 +650,7 @@ function AutomationModal({
                 <Select
                   label="Generate & send this document"
                   required
-                  description="Sent to the deal's primary contact for signature via DocuSeal"
+                  description="Sent to the deal's primary contact for signature"
                   placeholder={signableDocs.length === 0 ? 'Create a document template in Settings → Signatures' : 'Pick a document template'}
                   data={signableDocs.map((d) => ({ value: d.id, label: d.name }))}
                   value={(config.signableDocumentTemplateId as string) ?? null}

@@ -112,17 +112,6 @@ export function layoutToHtml(
   );
 }
 
-/** DocuSeal page-size string for a theme's paper size. */
-export function docusealSize(theme: { paperSize?: string } | null | undefined): string {
-  return theme?.paperSize === 'a4' ? 'A4' : 'Letter';
-}
-
-/** True when the layout declares at least one signature field (else the caller appends a default block). */
-export function layoutHasField(layout: unknown): boolean {
-  const pages = (Array.isArray(layout) ? layout : []) as Page[];
-  return pages.some((pg) => (pg.elements ?? []).some((el) => el.type === 'field'));
-}
-
 /** A signature field placed on the builder canvas: type + which party signs it + its page/geometry (percent). */
 export interface LayoutField {
   fieldType: string; // signature | initials | date | text

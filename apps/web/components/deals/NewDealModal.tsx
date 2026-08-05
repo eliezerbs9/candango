@@ -113,7 +113,8 @@ export function NewDealModal({
           value={companyId}
           onChange={setCompanyId}
           onCreate={async (name) => {
-            const c = await createCompany.mutateAsync({ name });
+            // Link the deal's contact as the new company's primary contact, so it never lands without one.
+            const c = await createCompany.mutateAsync(primaryPersonId ? { name, contactIds: [primaryPersonId], primaryContactId: primaryPersonId } : { name });
             return { value: c.id, label: c.name };
           }}
         />

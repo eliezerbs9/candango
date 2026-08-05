@@ -63,7 +63,8 @@ export default function DealOverviewPage() {
                 value={form.companyId}
                 onChange={(v) => setForm({ ...form, companyId: v })}
                 onCreate={async (name) => {
-                  const c = await createCompany.mutateAsync({ name });
+                  // Link the deal's contact as the new company's primary contact, so it never lands without one.
+                  const c = await createCompany.mutateAsync(form.primaryPersonId ? { name, contactIds: [form.primaryPersonId], primaryContactId: form.primaryPersonId } : { name });
                   return { value: c.id, label: c.name };
                 }}
               />

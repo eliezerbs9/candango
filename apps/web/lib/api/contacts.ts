@@ -105,6 +105,7 @@ export interface CompanyBody {
   phone?: string;
   contactIds?: string[];
   contactTitles?: Record<string, string>;
+  primaryContactId?: string | null;
   tags?: string[];
   customFields?: Record<string, unknown>;
 }

@@ -33,7 +33,7 @@ type Drag = { id: string; mode: 'move' | 'resize'; startX: number; startY: numbe
 
 /**
  * Render a PDF's pages (pdf.js) and let the user drop/drag/resize signature fields onto them.
- * Emits DrawnField[] with normalized top-left coords (page 1-indexed) — the shape DocuSeal expects.
+ * Emits DrawnField[] with normalized top-left coords (page 1-indexed) — the shape the signing engine expects.
  */
 export function SignatureFieldEditor({ fileUrl, value, onChange, senderFields = false }: { fileUrl: string; value: DrawnField[]; onChange: (f: DrawnField[]) => void; senderFields?: boolean }) {
   const [pages, setPages] = useState<PageDim[]>([]);
