@@ -257,6 +257,7 @@ model Person {
   firstName    String   @default("")
   lastName     String   @default("")
   name         String   // derived display name = "firstName lastName" (kept for display + QBO)
+  title        String   @default("") // job title / position (e.g. "Procurement Manager")
   emails       Json     @default("[]") // [{ value, label }]
   phones       Json     @default("[]")
   address      Json?    // structured { line1, line2, city, state, postalCode, country }; used for QBO Bill To

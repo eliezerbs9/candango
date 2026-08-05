@@ -289,6 +289,12 @@ function BuilderMode({
   };
   const imageFields: FieldOption[] = useMemo(() => dealFields.filter((f) => f.type === 'image').map((f) => ({ value: f.key, label: f.label })), [dealFields]);
   const documentFields: FieldOption[] = useMemo(() => dealFields.filter((f) => f.type === 'document').map((f) => ({ value: f.key, label: f.label })), [dealFields]);
+  // Signature docs render against the signature context — offer Receiver / Sender / Company / Deal / Workspace
+  // variables (and drop the signing-link vars, which belong in the invite email, not the document body).
+  const sigVars = useMemo(
+    () => variables.filter((v) => !v.hidden && (!v.scopes || v.scopes.includes('signature')) && !v.key.startsWith('signature.')),
+    [variables],
+  );
 
   return (
     <ProposalCanvasEditor
@@ -296,7 +302,7 @@ function BuilderMode({
       onPagesChange={onPages}
       theme={theme}
       onThemeChange={onTheme}
-      variables={variables}
+      variables={sigVars}
       fonts={meta?.fonts ?? []}
       ctx={ctx}
       imageFields={imageFields}

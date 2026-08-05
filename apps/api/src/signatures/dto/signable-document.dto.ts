@@ -82,6 +82,11 @@ export class GenerateSignatureDto {
   @IsEmail()
   signerEmail?: string;
 
+  /** The chosen receiver person's id — resolves the receiver.* variables (name/title/email). */
+  @IsOptional()
+  @IsString()
+  receiverPersonId?: string;
+
   /** The client party's heading on the signature page — a company name, or the individual client. */
   @IsOptional()
   @IsString()

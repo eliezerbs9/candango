@@ -292,6 +292,7 @@ function GenerateModal({
         signableDocumentTemplateId: templateId,
         signerName: signer.name || undefined,
         signerEmail: signer.email,
+        receiverPersonId: signer.personId,
         clientPartyLabel: clientLabel.trim(),
         sendEmail,
         // parties are defined by the document template
@@ -479,6 +480,7 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
         fileKey,
         signerName: signer.name || undefined,
         signerEmail: signer.email,
+        receiverPersonId: signer.personId,
         clientPartyLabel: clientLabel.trim(),
         sendEmail,
         bothParties,
@@ -669,6 +671,7 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
 export interface SignerValue {
   name: string;
   email: string;
+  personId?: string;
 }
 
 /**
@@ -734,7 +737,7 @@ function SignerFields({
   useEffect(() => {
     const r = recipients.find((x) => x.id === personId);
     const name = r ? `${r.firstName} ${r.lastName}`.trim() || r.name : '';
-    onSigner(r && r.email ? { name, email: r.email } : null);
+    onSigner(r && r.email ? { name, email: r.email, personId: r.id } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [personId, recipients]);
 

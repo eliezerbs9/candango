@@ -45,12 +45,21 @@ export const TEMPLATE_VARIABLES: TemplateVariable[] = [
   { key: 'contact.name', label: 'Contact full name', group: 'Contact', example: 'John Doe', scopes: BOTH },
   { key: 'contact.email', label: 'Contact email', group: 'Contact', example: 'john.doe@example.com', scopes: BOTH },
   { key: 'contact.phone', label: 'Contact phone', group: 'Contact', example: '(555) 010-1234', scopes: BOTH },
+  { key: 'contact.title', label: 'Contact title', group: 'Contact', example: 'Procurement Manager', scopes: BOTH },
   { key: 'company.name', label: 'Company name', group: 'Company', example: 'Example Co.', scopes: BOTH },
   { key: 'deal.title', label: 'Deal title', group: 'Deal', example: 'your project', scopes: DEAL_ONLY },
   { key: 'deal.value', label: 'Deal value', group: 'Deal', example: '$5,000.00', scopes: DEAL_ONLY },
   { key: 'sender.name', label: 'Your name', group: 'Sender', example: 'Jane Doe', scopes: DEAL_ONLY },
+  { key: 'sender.first_name', label: 'Your first name', group: 'Sender', example: 'Jane', scopes: DEAL_ONLY },
+  { key: 'sender.last_name', label: 'Your last name', group: 'Sender', example: 'Doe', scopes: DEAL_ONLY },
   { key: 'sender.email', label: 'Your email', group: 'Sender', example: 'jane.doe@example.com', scopes: DEAL_ONLY },
   { key: 'sender.phone', label: 'Your phone', group: 'Sender', example: '(555) 987-6543', scopes: DEAL_ONLY },
+  // Signature parties — resolved from who actually signs (the chosen receiver + the sender party).
+  { key: 'receiver.name', label: 'Receiver full name', group: 'Receiver', example: 'John Doe', scopes: SIGNATURE },
+  { key: 'receiver.first_name', label: 'Receiver first name', group: 'Receiver', example: 'John', scopes: SIGNATURE },
+  { key: 'receiver.last_name', label: 'Receiver last name', group: 'Receiver', example: 'Doe', scopes: SIGNATURE },
+  { key: 'receiver.email', label: 'Receiver email', group: 'Receiver', example: 'john.doe@example.com', scopes: SIGNATURE },
+  { key: 'receiver.title', label: 'Receiver title', group: 'Receiver', example: 'Procurement Manager', scopes: SIGNATURE },
   { key: 'workspace.name', label: 'Workspace name', group: 'Workspace', example: 'Your Company', scopes: BOTH },
   { key: 'date.today', label: "Today's date", group: 'Date', example: '08/03/2026', scopes: BOTH },
   { key: 'proposal.url', label: 'Proposal link', group: 'Proposal', example: 'View your proposal', scopes: PROPOSAL },
@@ -266,13 +275,22 @@ export interface TemplateContextSources {
     firstName?: string | null;
     lastName?: string | null;
     name?: string | null;
+    title?: string | null;
     emails?: unknown; // Json [{ value, label }]
     phones?: unknown; // Json [{ value, label }]
   } | null;
   company?: { name?: string | null } | null;
   deal?: { title?: string | null; value?: number | null; currency?: string | null } | null;
-  sender?: { name?: string | null; email?: string | null; phone?: string | null } | null;
+  sender?: { name?: string | null; firstName?: string | null; lastName?: string | null; email?: string | null; phone?: string | null } | null;
   workspace?: { name?: string | null; timezone?: string | null } | null;
+  /** The signature "receiver" — the person actually chosen to sign the client side. */
+  receiver?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    name?: string | null;
+    emails?: unknown;
+    title?: string | null;
+  } | null;
 }
 
 /** Today's date as MM/DD/YYYY in the given IANA timezone (falls back to the server's zone). */
@@ -313,18 +331,31 @@ function formatMoney(minor: number | null | undefined, currency: string | null |
 /** Build the flat `{{key}} → value` map used by `renderTemplate` from resolved deal data. */
 export function buildTemplateContext(src: TemplateContextSources): Record<string, string> {
   const p = src.person ?? {};
+  const s = src.sender ?? {};
+  const senderName = s.name ?? [s.firstName, s.lastName].filter(Boolean).join(' ').trim();
+  const senderParts = senderName.split(/\s+/).filter(Boolean);
+  const r = src.receiver ?? {};
   return {
     'contact.first_name': p.firstName ?? '',
     'contact.last_name': p.lastName ?? '',
     'contact.name': p.name ?? [p.firstName, p.lastName].filter(Boolean).join(' ').trim(),
     'contact.email': firstJsonValue(p.emails),
     'contact.phone': firstJsonValue(p.phones),
+    'contact.title': p.title ?? '',
     'company.name': src.company?.name ?? '',
     'deal.title': src.deal?.title ?? '',
     'deal.value': formatMoney(src.deal?.value, src.deal?.currency),
-    'sender.name': src.sender?.name ?? '',
-    'sender.email': src.sender?.email ?? '',
-    'sender.phone': src.sender?.phone ?? '',
+    'sender.name': senderName,
+    'sender.first_name': s.firstName ?? senderParts[0] ?? '',
+    'sender.last_name': s.lastName ?? senderParts.slice(1).join(' '),
+    'sender.email': s.email ?? '',
+    'sender.phone': s.phone ?? '',
+    // Signature receiver — the person actually chosen to sign the client side.
+    'receiver.first_name': r.firstName ?? '',
+    'receiver.last_name': r.lastName ?? '',
+    'receiver.name': r.name ?? [r.firstName, r.lastName].filter(Boolean).join(' ').trim(),
+    'receiver.email': firstJsonValue(r.emails),
+    'receiver.title': r.title ?? '',
     'workspace.name': src.workspace?.name ?? '',
     'date.today': formatToday(src.workspace?.timezone),
   };

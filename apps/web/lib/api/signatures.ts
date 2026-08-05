@@ -38,6 +38,7 @@ export interface SignatureBody {
   fileKey: string;
   signerName?: string;
   signerEmail: string;
+  receiverPersonId?: string;
   clientPartyLabel?: string;
   sendEmail?: boolean;
   bothParties?: boolean;
@@ -60,6 +61,7 @@ export interface GenerateSignatureBody {
   signableDocumentTemplateId: string;
   signerName?: string;
   signerEmail?: string;
+  receiverPersonId?: string;
   clientPartyLabel?: string;
   sendEmail?: boolean;
   bothParties?: boolean;

@@ -30,6 +30,11 @@ export class CreatePersonDto {
   name?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  title?: string;
+
+  @IsOptional()
   @IsEmail()
   email?: string;
 
@@ -72,6 +77,11 @@ export class UpdatePersonDto {
   @IsString()
   @MinLength(1)
   name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  title?: string;
 
   @IsOptional()
   @IsEmail()

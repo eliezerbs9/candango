@@ -21,6 +21,20 @@ function resolveInitialsPages(rule: string, pages: number[], pageCount: number):
   return [];
 }
 
+/** A signer person for the `receiver.*` variables. */
+type ReceiverLike = { firstName?: string | null; lastName?: string | null; name?: string | null; emails?: unknown; title?: string | null };
+/** A counter-signing user for the `sender.*` variables. */
+type SenderLike = { name?: string | null; firstName?: string | null; lastName?: string | null; email?: string | null; phone?: string | null };
+
+/** First email from a Person.emails JSON value (string[] or [{value}]). */
+function firstEmailOf(emails: unknown): string {
+  if (!Array.isArray(emails) || emails.length === 0) return '';
+  const e = emails[0];
+  if (typeof e === 'string') return e;
+  if (e && typeof e === 'object' && typeof (e as { value?: unknown }).value === 'string') return (e as { value: string }).value;
+  return '';
+}
+
 /** Which recipient indexes get the page-initials field, given the rule and the party count. */
 function initialsRecipientIndexes(initialsParty: string, recipientCount: number): number[] {
   if (recipientCount <= 1) return [0]; // only the client exists
@@ -269,7 +283,15 @@ export class SignaturesService {
 
     const fields: DocusealField[] = [...drawnToDocusealFields(drawn)];
     if (acceptance) {
-      const body = acceptanceText ? renderTemplate(acceptanceText, await this.dealContext(orgId, userId, dto.dealId)) : undefined;
+      const body = acceptanceText
+        ? renderTemplate(
+            acceptanceText,
+            await this.dealContext(orgId, userId, dto.dealId, {
+              receiver: await this.resolveReceiver(orgId, dto.dealId, dto.receiverPersonId),
+              sender: await this.resolveSenderUser(orgId, dto.dealId, party2),
+            }),
+          )
+        : undefined;
       const labels = await this.partyBlockLabels(orgId, dto.dealId);
       const clientLabel = dto.clientPartyLabel?.trim() || labels.client;
       const parties = recipients.map((r, i) => ({ label: i === 0 ? clientLabel : labels.workspace, recipient: i }));
@@ -336,14 +358,17 @@ export class SignaturesService {
     const tpl = await this.prisma.signableDocumentTemplate.findFirst({ where: { id: dto.signableDocumentTemplateId, orgId, archivedAt: null } });
     if (!tpl) throw new BadRequestException('Document template not found');
 
-    const ctx = await this.dealContext(orgId, userId, dto.dealId);
-    const signerEmail = (dto.signerEmail || ctx['contact.email'] || '').trim();
-    if (!signerEmail) throw new BadRequestException('No signer email — set a primary contact with an email on the deal.');
-    const signerName = (dto.signerName || ctx['contact.name'] || '').trim() || undefined;
-    // The template decides who signs (one party or both); builder "sender" fields only bind when both.
+    // Who signs: the template decides one/both; builder "sender" fields only bind when both.
     const layoutFields = tpl.mode === 'builder' ? extractLayoutFields(tpl.layout) : [];
     const partiesBoth = dto.bothParties ?? tpl.parties === 'both';
     const party2 = { enabled: partiesBoth, source: (tpl.party2Source as 'owner' | 'user') ?? 'owner', userId: tpl.party2UserId ?? null };
+    // Resolve the real signers, then build the {{variable}} context so receiver.*/sender.* are accurate.
+    const receiver = await this.resolveReceiver(orgId, dto.dealId, dto.receiverPersonId);
+    const senderUser = await this.resolveSenderUser(orgId, dto.dealId, party2);
+    const ctx = await this.dealContext(orgId, userId, dto.dealId, { receiver, sender: senderUser });
+    const signerEmail = (dto.signerEmail || firstEmailOf(receiver?.emails) || ctx['contact.email'] || '').trim();
+    if (!signerEmail) throw new BadRequestException('No signer email — set a primary contact with an email on the deal.');
+    const signerName = (dto.signerName || receiver?.name || [receiver?.firstName, receiver?.lastName].filter(Boolean).join(' ').trim() || ctx['contact.name'] || '').trim() || undefined;
 
     // Build the source PDF for the template's mode (upload = stored PDF; builder/html = HTML→PDF per deal).
     let doc: Awaited<ReturnType<typeof PDFDocument.load>>;
@@ -484,29 +509,57 @@ export class SignaturesService {
     return recipients.map((r, i) => ({ email: r.email, name: r.name ?? subRecipients[i]?.name ?? '', owner: r.owner, signingUrl: subRecipients[i]?.signingUrl ?? null }));
   }
 
-  /** Build the {{variable}} context for a deal (contact/company/deal + sender + workspace). */
-  private async dealContext(orgId: string, userId: string, dealId: string): Promise<Record<string, string>> {
+  /**
+   * Build the {{variable}} context for a deal. `contact.*`/`company.*` describe the deal; the signature
+   * `receiver.*`/`sender.*` describe who actually signs (passed in) — falling back to the deal's primary
+   * contact + the current user when not resolved.
+   */
+  private async dealContext(
+    orgId: string,
+    userId: string,
+    dealId: string,
+    extra?: { receiver?: ReceiverLike | null; sender?: SenderLike | null },
+  ): Promise<Record<string, string>> {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, orgId },
       select: {
         title: true,
         value: true,
         currency: true,
-        primaryPerson: { select: { firstName: true, lastName: true, name: true, emails: true, phones: true } },
+        primaryPerson: { select: { firstName: true, lastName: true, name: true, title: true, emails: true, phones: true } },
         company: { select: { name: true } },
       },
     });
     const [user, org] = await Promise.all([
-      this.prisma.user.findFirst({ where: { id: userId, orgId }, select: { name: true, email: true, phone: true } }),
+      this.prisma.user.findFirst({ where: { id: userId, orgId }, select: { name: true, firstName: true, lastName: true, email: true, phone: true } }),
       this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true, timezone: true } }),
     ]);
     return buildTemplateContext({
       person: deal?.primaryPerson ?? null,
       company: deal?.company ?? null,
       deal: deal ? { title: deal.title, value: deal.value, currency: deal.currency } : null,
-      sender: user,
+      sender: extra?.sender ?? user,
       workspace: org,
+      receiver: extra?.receiver ?? null,
     });
+  }
+
+  /** The signature "receiver": the explicitly-chosen signer person, else the deal's primary contact. */
+  private async resolveReceiver(orgId: string, dealId: string, personId?: string | null): Promise<ReceiverLike | null> {
+    const select = { firstName: true, lastName: true, name: true, emails: true, title: true } as const;
+    if (personId) return this.prisma.person.findFirst({ where: { id: personId, orgId }, select });
+    const deal = await this.prisma.deal.findFirst({ where: { id: dealId, orgId }, select: { primaryPerson: { select } } });
+    return deal?.primaryPerson ?? null;
+  }
+
+  /** The signature "sender": the counter-signing party (a fixed user, else the deal owner). */
+  private async resolveSenderUser(orgId: string, dealId: string, party2: { enabled: boolean; source: 'owner' | 'user'; userId?: string | null }): Promise<SenderLike | null> {
+    const select = { name: true, firstName: true, lastName: true, email: true, phone: true } as const;
+    if (party2.enabled && party2.source === 'user' && party2.userId) {
+      return this.prisma.user.findFirst({ where: { id: party2.userId, orgId }, select });
+    }
+    const deal = await this.prisma.deal.findFirst({ where: { id: dealId, orgId }, select: { owner: { select } } });
+    return deal?.owner ?? null;
   }
 
   async signedUrl(orgId: string, id: string) {

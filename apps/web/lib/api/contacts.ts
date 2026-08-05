@@ -11,6 +11,7 @@ export interface ApiPerson {
   name: string;
   firstName: string;
   lastName: string | null;
+  title: string;
   email: string | null;
   phone: string | null;
   address: Address | null;
@@ -86,6 +87,7 @@ export interface PersonBody {
   name?: string;
   firstName?: string;
   lastName?: string;
+  title?: string;
   email?: string;
   phone?: string;
   address?: Address;
