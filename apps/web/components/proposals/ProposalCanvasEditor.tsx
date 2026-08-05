@@ -171,6 +171,8 @@ export interface ProposalCanvasEditorProps {
   signatureFields?: boolean;
   /** When true (both parties sign), the palette also offers a "Sender fields" group (party = sender). */
   senderFields?: boolean;
+  /** Resolve a page-background file key (e.g. an imported PDF page) to a displayable URL. */
+  resolveFileUrl?: (key: string) => string | undefined;
 }
 
 /** Placeable signature fields (signable-document builder only). */
@@ -201,6 +203,7 @@ export function ProposalCanvasEditor({
   enforceLocks = false,
   signatureFields = false,
   senderFields = false,
+  resolveFileUrl,
 }: ProposalCanvasEditorProps) {
   // At most ONE signature field per party per document — once placed, disable that party's Signature button.
   const sigByParty = useMemo(() => {
@@ -529,6 +532,11 @@ export function ProposalCanvasEditor({
               onDrop={onCanvasDrop}
               surfaceStyle={{ borderRadius: 8, boxShadow: '0 10px 34px rgba(0,0,0,0.38)' }}
             >
+              {/* Imported PDF page as the background — elements sit on top. */}
+              {page?.background && resolveFileUrl?.(page.background) && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={resolveFileUrl(page.background)} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+              )}
               {/* 12-column reference grid */}
               {showGrid && (
                 <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>

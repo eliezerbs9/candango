@@ -5,7 +5,7 @@ import { SpacesService } from '../uploads/spaces.service';
 import { type DocusealField } from './docuseal.service';
 import { DocumensoService } from './documenso.service';
 import { GotenbergService } from './gotenberg.service';
-import { extractLayoutFields, layoutToHtml } from './layout-to-html';
+import { extractLayoutFields, extractPageBackgrounds, layoutToHtml } from './layout-to-html';
 import { initialsZones, PDFDocument, addAcceptancePage } from './acceptance-page';
 import { CreateSignatureDto } from './dto/signature.dto';
 import type { DrawnFieldDto } from './dto/signature-template.dto';
@@ -383,9 +383,20 @@ export class SignaturesService {
       if (!this.gotenberg.configured) throw new ServiceUnavailableException('Document generation is not configured (set GOTENBERG_URL).');
       const org = await this.prisma.organization.findFirst({ where: { id: orgId }, select: { logoUrl: true } });
       const theme = tpl.theme as { accentColor?: string; fontHeading?: string; fontBody?: string; orientation?: string; paperSize?: string } | null;
+      // Presign any imported PDF page-backgrounds so Gotenberg can fetch them.
+      const bgUrls: Record<string, string> = {};
+      if (tpl.mode === 'builder' && this.spaces.configured) {
+        for (const key of extractPageBackgrounds(tpl.layout)) {
+          try {
+            bgUrls[key] = await this.spaces.presignGet(key);
+          } catch {
+            /* skip a background we can't presign */
+          }
+        }
+      }
       const html =
         tpl.mode === 'builder'
-          ? layoutToHtml(tpl.layout, theme, ctx, org?.logoUrl ?? null)
+          ? layoutToHtml(tpl.layout, theme, ctx, org?.logoUrl ?? null, bgUrls)
           : `<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#1a1a1a;line-height:1.6;padding:48px">${renderTemplate(tpl.bodyHtml || '', ctx)}</body></html>`;
       doc = await PDFDocument.load(await this.gotenberg.htmlToPdf(html, { paperSize: theme?.paperSize, orientation: theme?.orientation }));
     }

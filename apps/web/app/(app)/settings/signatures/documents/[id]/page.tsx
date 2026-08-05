@@ -47,6 +47,7 @@ const FIELD_TAGS: { label: string; tag: string }[] = [
 function collectFixedKeys(pages: CanvasPage[]): string[] {
   const keys: string[] = [];
   for (const p of pages) {
+    if (p.background) keys.push(p.background); // imported PDF page images
     for (const el of p.elements) {
       if (el.props.source !== 'fixed' || !Array.isArray(el.props.files)) continue;
       for (const f of el.props.files as { key?: unknown }[]) if (f && typeof f.key === 'string') keys.push(f.key);
@@ -55,12 +56,35 @@ function collectFixedKeys(pages: CanvasPage[]): string[] {
   return keys;
 }
 
+/** Rasterize each PDF page to a PNG blob (via pdf.js) so it can back a builder page. */
+async function pdfToPageImages(file: File): Promise<Blob[]> {
+  const pdfjs = await import('pdfjs-dist');
+  pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  const blobs: Blob[] = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const viewport = page.getViewport({ scale: 2 }); // 2x for a crisp background
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) continue;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (blob) blobs.push(blob);
+  }
+  return blobs;
+}
+
 export default function DocumentTemplateEditor() {
   const { id } = useParams<{ id: string }>();
   const { data: doc, isLoading } = useSignableDocument(id);
   const update = useUpdateSignableDocument();
   const { data: users = [] } = useUsers();
   const userOptions = useMemo(() => users.filter((u) => u.status === 'active').map((u) => ({ value: u.id, label: u.name || u.email })), [users]);
+  const upload = useUploadFile();
+  const [importing, setImporting] = useState(false);
 
   const [name, setName] = useState('');
   const [mode, setMode] = useState<SignableDocMode>('builder');
@@ -80,7 +104,8 @@ export default function DocumentTemplateEditor() {
   useEffect(() => {
     if (!doc || hydrated) return;
     setName(doc.name);
-    setMode(doc.mode);
+    // The document editor is always the visual builder now — a PDF is imported as page backgrounds.
+    setMode('builder');
     setParties(doc.parties ?? 'one');
     setParty2Source(doc.party2Source ?? 'owner');
     setParty2UserId(doc.party2UserId ?? null);
@@ -96,10 +121,27 @@ export default function DocumentTemplateEditor() {
     setHydrated(true);
   }, [doc, hydrated]);
 
+  // Import a PDF: rasterize each page and set it as a builder page's background (elements go on top).
+  const importPdf = async (file: File | null) => {
+    if (!file) return;
+    setImporting(true);
+    try {
+      const blobs = await pdfToPageImages(file);
+      if (!blobs.length) throw new Error('That PDF had no pages.');
+      const keys = await Promise.all(blobs.map((b, i) => upload.mutateAsync({ entity: 'signature', file: new File([b], `page-${i + 1}.png`, { type: 'image/png' }) })));
+      setPages(keys.map((key) => ({ id: uid(), elements: [], background: key })));
+      notifications.show({ message: `Imported ${keys.length} page${keys.length === 1 ? '' : 's'} from the PDF`, color: 'green' });
+    } catch (e) {
+      fail(e);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const status = useAutosave(
     {
       name: name.trim(),
-      mode,
+      mode: 'builder',
       parties,
       party2Source: parties === 'both' ? party2Source : 'owner',
       party2UserId: parties === 'both' && party2Source === 'user' ? party2UserId : null,
@@ -154,18 +196,15 @@ export default function DocumentTemplateEditor() {
         <Group align="flex-end" gap="lg" wrap="wrap">
           <div>
             <Text size="xs" fw={500} mb={4}>
-              Build mode
+              Start from a PDF
             </Text>
-            <SegmentedControl
-              value={mode}
-              onChange={(v) => setMode(v as SignableDocMode)}
-              data={[
-                { value: 'builder', label: 'Visual builder' },
-                { value: 'upload', label: 'Upload PDF' },
-                // Raw HTML is disabled for new docs; still editable if a template already uses it.
-                ...(mode === 'html' ? [{ value: 'html', label: 'Raw HTML' }] : []),
-              ]}
-            />
+            <FileButton onChange={importPdf} accept="application/pdf">
+              {(props) => (
+                <Button {...props} variant="default" leftSection={<IconUpload size={14} />} loading={importing}>
+                  Import PDF
+                </Button>
+              )}
+            </FileButton>
           </div>
           <div>
             <Text size="xs" fw={500} mb={4}>
@@ -342,6 +381,7 @@ function BuilderMode({
       previewCtx={previewCtx}
       signatureFields
       senderFields={senderFields}
+      resolveFileUrl={(k) => fileUrlByKey[k]}
     />
   );
 }

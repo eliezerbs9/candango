@@ -56,6 +56,8 @@ export interface CanvasElement {
 export interface CanvasPage {
   id: string;
   elements: CanvasElement[];
+  /** Full-page background image (file key) — e.g. a page imported from a PDF. Elements sit on top. */
+  background?: string;
 }
 
 // ── Page geometry ────────────────────────────────────────────────────────────

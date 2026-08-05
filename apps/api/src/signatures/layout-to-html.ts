@@ -44,6 +44,7 @@ interface El {
 interface Page {
   id: string;
   elements: El[];
+  background?: string; // file key of a full-page image (imported PDF page); resolved to a URL via bgUrls
 }
 interface Theme {
   accentColor?: string;
@@ -88,6 +89,7 @@ export function layoutToHtml(
   theme: Theme | null | undefined,
   vars: Record<string, string>,
   logoUrl?: string | null,
+  bgUrls?: Record<string, string>,
 ): string {
   const pages = (Array.isArray(layout) ? layout : []) as Page[];
   const t = theme ?? {};
@@ -96,9 +98,11 @@ export function layoutToHtml(
   const pageRule = `@page{size:${pageName} ${t.orientation === 'landscape' ? 'landscape' : 'portrait'};margin:0}`;
   const body = pages
     .map((pg, i) => {
+      const bgUrl = pg.background ? bgUrls?.[pg.background] : undefined;
+      const bg = bgUrl ? `<img src="${esc(bgUrl)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain"/>` : '';
       const els = (pg.elements ?? []).map((el) => renderEl(el, t, vars, logoUrl)).join('');
       const brk = i < pages.length - 1 ? 'page-break-after:always;' : '';
-      return `<div style="position:relative;width:${dims.w}px;height:${dims.h}px;background:#fff;overflow:hidden;${brk}">${els}</div>`;
+      return `<div style="position:relative;width:${dims.w}px;height:${dims.h}px;background:#fff;overflow:hidden;${brk}">${bg}${els}</div>`;
     })
     .join('');
   return (
@@ -128,6 +132,12 @@ export interface LayoutField {
   y: number;
   w: number;
   h: number; // percent of the page (0–100)
+}
+
+/** File keys of the layout's page backgrounds (imported PDF pages) — presign these before rendering. */
+export function extractPageBackgrounds(layout: unknown): string[] {
+  const pages = (Array.isArray(layout) ? layout : []) as Page[];
+  return pages.map((p) => p.background).filter((k): k is string => typeof k === 'string' && !!k);
 }
 
 /** Extract the builder's placed signature fields (in reading order) so they can become signing fields. */
