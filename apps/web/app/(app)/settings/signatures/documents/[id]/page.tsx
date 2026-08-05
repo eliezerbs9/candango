@@ -150,93 +150,121 @@ export default function DocumentTemplateEditor() {
         <SaveStatus status={status} />
       </Group>
 
-      <Group align="flex-end" wrap="wrap" gap="lg">
-        <div>
-          <Text size="xs" fw={500} mb={4}>
-            Build mode
-          </Text>
-          <SegmentedControl
-            value={mode}
-            onChange={(v) => setMode(v as SignableDocMode)}
-            data={[
-              { value: 'builder', label: 'Visual builder' },
-              { value: 'upload', label: 'Upload PDF' },
-              // Raw HTML is disabled for new docs; still editable if a template already uses it.
-              ...(mode === 'html' ? [{ value: 'html', label: 'Raw HTML' }] : []),
-            ]}
-          />
-        </div>
-        <Group align="flex-end" gap="sm" wrap="wrap">
-          <Select
-            label="Signed by"
-            description="Who signs — the client alone, or the client plus a second signer."
-            data={[
-              { value: 'none', label: 'Client only' },
-              { value: 'owner', label: 'Client + Deal Owner' },
-              { value: 'user', label: 'Client + Specific Team Member' },
-            ]}
-            value={parties === 'one' ? 'none' : party2Source}
-            onChange={(v) => {
-              if (v === 'none') {
-                setParties('one');
-                // Dropping the second signer removes its fields — they'd have no one to sign them.
-                setPages(pages.map((pg) => ({ ...pg, elements: pg.elements.filter((el) => !(el.type === 'field' && (el.props as { party?: string })?.party === 'sender')) })));
-              } else {
-                setParties('both');
-                setParty2Source(v as 'owner' | 'user');
-              }
-            }}
-            allowDeselect={false}
-            w={260}
-          />
-          {parties === 'both' && party2Source === 'user' && (
-            <Select label="Workspace user" placeholder="Pick a user" data={userOptions} value={party2UserId} onChange={setParty2UserId} searchable nothingFoundMessage="No users" w={220} />
-          )}
-        </Group>
-      </Group>
-
-      {mode === 'builder' && (
-        <Text size="xs" c="dimmed">
-          Drag <strong>Client fields</strong> onto the page{parties === 'both' ? ' — and, since a second signer is set, place ' : ''}
-          {parties === 'both' ? <strong>Sender fields</strong> : ''}
-          {parties === 'both' ? ' for your side too.' : '. Add a second signer above to also place Sender fields.'}
-        </Text>
-      )}
-
-      {mode === 'html' && (
-        <Group align="flex-end" gap="sm" wrap="wrap">
-          <Select
-            label="Initials"
-            data={[
-              { value: 'none', label: 'No initials' },
-              { value: 'every_page', label: 'Every page' },
-              { value: 'last_page', label: 'Last page' },
-              { value: 'specified_pages', label: 'Specific pages' },
-            ]}
-            value={initialsRule}
-            onChange={(v) => setInitialsRule((v as typeof initialsRule) ?? 'none')}
-            allowDeselect={false}
-            w={200}
-          />
-          {initialsRule === 'specified_pages' && (
-            <TextInput label="Pages" placeholder="1, 2, 3" description="Comma-separated" value={initialsPagesText} onChange={(e) => setInitialsPagesText(e.currentTarget.value)} w={180} />
-          )}
-          {parties === 'both' && initialsRule !== 'none' && (
-            <Select
-              label="Who initials"
+      <Paper withBorder radius="md" p="md">
+        <Group align="flex-end" gap="lg" wrap="wrap">
+          <div>
+            <Text size="xs" fw={500} mb={4}>
+              Build mode
+            </Text>
+            <SegmentedControl
+              value={mode}
+              onChange={(v) => setMode(v as SignableDocMode)}
               data={[
-                { value: 'client', label: 'Client only' },
-                { value: 'sender', label: 'Second party only' },
-                { value: 'both', label: 'Both parties' },
+                { value: 'builder', label: 'Visual builder' },
+                { value: 'upload', label: 'Upload PDF' },
+                // Raw HTML is disabled for new docs; still editable if a template already uses it.
+                ...(mode === 'html' ? [{ value: 'html', label: 'Raw HTML' }] : []),
               ]}
-              value={initialsParty}
-              onChange={(v) => setInitialsParty((v as typeof initialsParty) ?? 'client')}
-              allowDeselect={false}
-              w={200}
             />
+          </div>
+          <div>
+            <Text size="xs" fw={500} mb={4}>
+              Signed by
+            </Text>
+            <Select
+              data={[
+                { value: 'none', label: 'Client only' },
+                { value: 'owner', label: 'Client + Deal Owner' },
+                { value: 'user', label: 'Client + Specific Team Member' },
+              ]}
+              value={parties === 'one' ? 'none' : party2Source}
+              onChange={(v) => {
+                if (v === 'none') {
+                  setParties('one');
+                  // Dropping the second signer removes its fields — they'd have no one to sign them.
+                  setPages(pages.map((pg) => ({ ...pg, elements: pg.elements.filter((el) => !(el.type === 'field' && (el.props as { party?: string })?.party === 'sender')) })));
+                } else {
+                  setParties('both');
+                  setParty2Source(v as 'owner' | 'user');
+                }
+              }}
+              allowDeselect={false}
+              w={250}
+              comboboxProps={{ withinPortal: true }}
+            />
+          </div>
+          {parties === 'both' && party2Source === 'user' && (
+            <div>
+              <Text size="xs" fw={500} mb={4}>
+                Team member
+              </Text>
+              <Select placeholder="Pick a user" data={userOptions} value={party2UserId} onChange={setParty2UserId} searchable nothingFoundMessage="No users" w={220} comboboxProps={{ withinPortal: true }} />
+            </div>
+          )}
+          {mode === 'html' && (
+            <>
+              <div>
+                <Text size="xs" fw={500} mb={4}>
+                  Initials
+                </Text>
+                <Select
+                  data={[
+                    { value: 'none', label: 'No initials' },
+                    { value: 'every_page', label: 'Every page' },
+                    { value: 'last_page', label: 'Last page' },
+                    { value: 'specified_pages', label: 'Specific pages' },
+                  ]}
+                  value={initialsRule}
+                  onChange={(v) => setInitialsRule((v as typeof initialsRule) ?? 'none')}
+                  allowDeselect={false}
+                  w={180}
+                  comboboxProps={{ withinPortal: true }}
+                />
+              </div>
+              {initialsRule === 'specified_pages' && (
+                <div>
+                  <Text size="xs" fw={500} mb={4}>
+                    Pages
+                  </Text>
+                  <TextInput placeholder="1, 2, 3" value={initialsPagesText} onChange={(e) => setInitialsPagesText(e.currentTarget.value)} w={140} />
+                </div>
+              )}
+              {parties === 'both' && initialsRule !== 'none' && (
+                <div>
+                  <Text size="xs" fw={500} mb={4}>
+                    Who initials
+                  </Text>
+                  <Select
+                    data={[
+                      { value: 'client', label: 'Client only' },
+                      { value: 'sender', label: 'Second party only' },
+                      { value: 'both', label: 'Both parties' },
+                    ]}
+                    value={initialsParty}
+                    onChange={(v) => setInitialsParty((v as typeof initialsParty) ?? 'client')}
+                    allowDeselect={false}
+                    w={180}
+                    comboboxProps={{ withinPortal: true }}
+                  />
+                </div>
+              )}
+            </>
           )}
         </Group>
-      )}
+        {mode === 'builder' && (
+          <Text size="xs" c="dimmed" mt="sm">
+            Drag <strong>Client fields</strong> onto the page
+            {parties === 'both' ? (
+              <>
+                {' '}
+                — a second signer is set, so place <strong>Sender fields</strong> for your side too.
+              </>
+            ) : (
+              '. Choose a second signer to also place Sender fields.'
+            )}
+          </Text>
+        )}
+      </Paper>
 
       {mode === 'builder' ? (
         <BuilderMode pages={pages} onPages={setPages} theme={theme} onTheme={setTheme} senderFields={parties === 'both'} />
