@@ -4,6 +4,7 @@ import { CreateSignableDocumentDto, UpdateSignableDocumentDto } from './dto/sign
 
 const shape = (r: {
   id: string;
+  dealId: string | null;
   name: string;
   mode: string;
   parties: string;
@@ -21,6 +22,7 @@ const shape = (r: {
   updatedAt: Date;
 }) => ({
   id: r.id,
+  dealId: r.dealId,
   name: r.name,
   mode: r.mode,
   parties: r.parties,
@@ -42,8 +44,9 @@ const shape = (r: {
 export class SignableDocumentsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Reusable templates only — one-off deal documents (dealId set) are excluded. */
   async list(orgId: string) {
-    const rows = await this.prisma.signableDocumentTemplate.findMany({ where: { orgId, archivedAt: null }, orderBy: { createdAt: 'asc' } });
+    const rows = await this.prisma.signableDocumentTemplate.findMany({ where: { orgId, dealId: null, archivedAt: null }, orderBy: { createdAt: 'asc' } });
     return rows.map(shape);
   }
 
@@ -62,6 +65,7 @@ export class SignableDocumentsService {
       data: {
         orgId,
         createdByUserId: userId,
+        dealId: dto.dealId ?? null,
         name: dto.name.trim(),
         mode: dto.mode ?? 'html',
         parties: dto.parties ?? 'one',

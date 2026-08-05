@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Anchor, Badge, Button, Center, FileButton, Group, Loader, Paper, SegmentedControl, Select, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconArrowLeft, IconUpload } from '@tabler/icons-react';
+import { IconArrowLeft, IconSend, IconUpload } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import { useAutosave } from '@/lib/useAutosave';
 import { compressImage } from '@/lib/imageCompress';
@@ -25,6 +25,7 @@ import {
   useProposalPreviewData,
   useSignableDocument,
   useTemplateVariables,
+  useGenerateSignature,
   useUpdateSignableDocument,
   useUploadFile,
   useUsers,
@@ -79,6 +80,8 @@ async function pdfToPageImages(file: File): Promise<Blob[]> {
 
 export default function DocumentTemplateEditor() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const generate = useGenerateSignature();
   const { data: doc, isLoading } = useSignableDocument(id);
   const update = useUpdateSignableDocument();
   const { data: users = [] } = useUsers();
@@ -181,15 +184,37 @@ export default function DocumentTemplateEditor() {
 
   return (
     <Stack gap="md">
-      <Anchor component={Link} href="/settings/signatures" c="dimmed" size="sm">
+      <Anchor component={Link} href={doc?.dealId ? `/deals/${doc.dealId}/signatures` : '/settings/signatures'} c="dimmed" size="sm">
         <Group gap={4} wrap="nowrap">
-          <IconArrowLeft size={14} /> Signatures
+          <IconArrowLeft size={14} /> {doc?.dealId ? 'Back to deal' : 'Signatures'}
         </Group>
       </Anchor>
 
       <Group justify="space-between" align="flex-end" wrap="wrap">
-        <TextInput label="Document name" value={name} onChange={(e) => setName(e.currentTarget.value)} style={{ flex: '1 1 240px' }} />
-        <SaveStatus status={status} />
+        <TextInput label={doc?.dealId ? 'Document name (for this deal)' : 'Document name'} value={name} onChange={(e) => setName(e.currentTarget.value)} style={{ flex: '1 1 240px' }} />
+        <Group gap="sm">
+          <SaveStatus status={status} />
+          {doc?.dealId && (
+            <Button
+              leftSection={<IconSend size={14} />}
+              loading={generate.isPending}
+              onClick={() =>
+                generate.mutate(
+                  { dealId: doc.dealId!, signableDocumentTemplateId: id, sendEmail: true },
+                  {
+                    onSuccess: () => {
+                      notifications.show({ message: 'Sent to the deal’s customer for signature', color: 'green' });
+                      router.push(`/deals/${doc.dealId}/signatures`);
+                    },
+                    onError: fail,
+                  },
+                )
+              }
+            >
+              Generate &amp; send
+            </Button>
+          )}
+        </Group>
       </Group>
 
       <Paper withBorder radius="md" p="md">

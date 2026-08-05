@@ -7,6 +7,11 @@ export class CreateSignableDocumentDto {
   @MaxLength(120)
   name!: string;
 
+  /** When set: a one-off document built for this deal (hidden from the reusable templates list). */
+  @IsOptional()
+  @IsString()
+  dealId?: string;
+
   @IsOptional()
   @IsIn(MODES)
   mode?: string;

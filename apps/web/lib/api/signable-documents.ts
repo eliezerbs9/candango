@@ -6,6 +6,7 @@ export type SignableDocMode = 'html' | 'builder' | 'upload';
 
 export interface SignableDocumentTemplate {
   id: string;
+  dealId: string | null;
   name: string;
   mode: SignableDocMode;
   parties: 'one' | 'both';
@@ -25,6 +26,7 @@ export interface SignableDocumentTemplate {
 
 export interface SignableDocumentBody {
   name?: string;
+  dealId?: string;
   mode?: SignableDocMode;
   parties?: 'one' | 'both';
   party2Source?: 'owner' | 'user';

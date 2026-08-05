@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ActionIcon,
   Alert,
@@ -25,13 +26,14 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconCheck, IconClock, IconDots, IconDownload, IconExternalLink, IconFileText, IconInfoCircle, IconLink, IconPlus, IconRefresh, IconSignature, IconTrash, IconUpload } from '@tabler/icons-react';
+import { IconCheck, IconClock, IconDots, IconDownload, IconExternalLink, IconFileText, IconInfoCircle, IconLink, IconPencil, IconPlus, IconRefresh, IconSignature, IconTrash, IconUpload } from '@tabler/icons-react';
 import Link from 'next/link';
 import { ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/auth/store';
 import {
   useAddDealParticipant,
   useCreatePerson,
+  useCreateSignableDocument,
   useCreateSignature,
   useCustomFields,
   useDeal,
@@ -74,25 +76,45 @@ interface StoredDoc {
 const fail = (e: unknown) => notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
 
 export function DealSignatures({ dealId }: { dealId: string }) {
+  const router = useRouter();
   const { data: rows = [], isLoading } = useDealSignatures(dealId);
   const { data: docTemplates = [] } = useSignableDocuments();
+  const createDoc = useCreateSignableDocument();
   const [opened, ctl] = useDisclosure(false);
   const [genOpened, genCtl] = useDisclosure(false);
+
+  // "Build a new document" → a one-off document scoped to THIS deal, opened in the same builder.
+  const buildNew = () =>
+    createDoc.mutate(
+      { name: 'Untitled document', mode: 'builder', dealId, theme: { orientation: 'portrait', paperSize: 'letter' } },
+      { onSuccess: (d) => router.push(`/settings/signatures/documents/${d.id}`), onError: fail },
+    );
 
   return (
     <Card withBorder radius="md" padding="md">
       <Group justify="space-between" mb="sm">
         <Text fw={600}>Signatures</Text>
-        <Group gap="xs">
-          {docTemplates.length > 0 && (
-            <Button size="xs" variant="light" leftSection={<IconFileText size={14} />} onClick={genCtl.open}>
-              Generate document
+        <Menu withinPortal position="bottom-end" shadow="md">
+          <Menu.Target>
+            <Button size="xs" leftSection={<IconPlus size={14} />} loading={createDoc.isPending}>
+              Create new
             </Button>
-          )}
-          <Button size="xs" leftSection={<IconPlus size={14} />} onClick={ctl.open}>
-            Request signature
-          </Button>
-        </Group>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Label>Create a document to sign</Menu.Label>
+            {docTemplates.length > 0 && (
+              <Menu.Item leftSection={<IconFileText size={14} />} onClick={genCtl.open}>
+                Use a saved template
+              </Menu.Item>
+            )}
+            <Menu.Item leftSection={<IconUpload size={14} />} onClick={ctl.open}>
+              From a deal document (PDF)
+            </Menu.Item>
+            <Menu.Item leftSection={<IconPencil size={14} />} onClick={buildNew}>
+              Build a new document
+            </Menu.Item>
+          </Menu.Dropdown>
+        </Menu>
       </Group>
 
       {isLoading ? (

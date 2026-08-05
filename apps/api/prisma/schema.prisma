@@ -1005,6 +1005,7 @@ model SignatureTemplate {
 model SignableDocumentTemplate {
   id              String    @id @default(cuid())
   orgId           String
+  dealId          String? // when set: a one-off document built for THIS deal (hidden from the reusable templates list)
   name            String
   mode            String    @default("html") // html (raw) | builder (free-canvas) | upload (PDF + placed fields)
   parties         String    @default("one") // who signs: one (client) | both (client + a second party)
