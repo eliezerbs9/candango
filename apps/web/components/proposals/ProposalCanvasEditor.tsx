@@ -107,7 +107,7 @@ function newElement(type: ElementType, extra?: Record<string, unknown>): CanvasE
     const fieldType = (extra?.fieldType as string) ?? 'signature';
     const party = (extra?.party as string) === 'sender' ? 'sender' : 'client';
     const sz = FIELD_SIZES[fieldType] ?? FIELD_SIZES.signature;
-    const who = party === 'sender' ? 'Sender' : 'Client';
+    const who = party === 'sender' ? 'Sender' : 'Customer';
     return { ...base, w: sz.w, h: sz.h, props: { fieldType, party, label: `${fieldType.charAt(0).toUpperCase() + fieldType.slice(1)} · ${who}` } };
   }
   switch (type) {
@@ -639,7 +639,7 @@ export function ProposalCanvasEditor({
             {signatureFields && (
               <>
                 <Text size="xs" fw={600} mt="sm" mb={4}>
-                  {senderFields ? 'Client fields (receiver)' : 'Signature fields'}
+                  {senderFields ? 'Customer fields' : 'Signature fields'}
                 </Text>
                 <Group gap={6}>
                   {FIELD_PALETTE.map((f) => {
@@ -675,6 +675,7 @@ export function ProposalCanvasEditor({
                     <Text size="xs" fw={600} mt="sm" mb={4}>
                       Sender fields (your side)
                     </Text>
+                    {/* second signer = the "Sender" role, resolved to {{sender.*}} at send */}
                     <Group gap={6}>
                       {FIELD_PALETTE.map((f) => {
                         const disabled = f.fieldType === 'signature' && sigByParty.sender;
@@ -1061,9 +1062,9 @@ function ElementSettings({
         <Select
           size="xs"
           label="Who signs this field"
-          description="If no field is assigned to the sender, only the client signs."
+          description="If no field is assigned to the sender, only the customer signs."
           data={[
-            { value: 'client', label: 'Client (receiver)' },
+            { value: 'client', label: 'Customer' },
             { value: 'sender', label: 'Sender (your side)' },
           ]}
           value={(el.props.party as string) ?? 'client'}

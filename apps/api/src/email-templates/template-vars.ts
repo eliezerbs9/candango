@@ -60,10 +60,6 @@ export const TEMPLATE_VARIABLES: TemplateVariable[] = [
   { key: 'customer.email', label: 'Customer email', group: 'Customer', example: 'john.doe@example.com', scopes: SIGNATURE },
   { key: 'customer.phone', label: 'Customer phone', group: 'Customer', example: '(555) 010-1234', scopes: SIGNATURE },
   { key: 'customer.title', label: 'Customer title', group: 'Customer', example: 'Procurement Manager', scopes: SIGNATURE },
-  { key: 'signer2.name', label: 'Second signer full name', group: 'Customer', example: 'Jane Doe', scopes: SIGNATURE },
-  { key: 'signer2.first_name', label: 'Second signer first name', group: 'Customer', example: 'Jane', scopes: SIGNATURE },
-  { key: 'signer2.last_name', label: 'Second signer last name', group: 'Customer', example: 'Doe', scopes: SIGNATURE },
-  { key: 'signer2.email', label: 'Second signer email', group: 'Customer', example: 'jane.doe@example.com', scopes: SIGNATURE },
   { key: 'workspace.name', label: 'Workspace name', group: 'Workspace', example: 'Your Company', scopes: BOTH },
   { key: 'date.today', label: "Today's date", group: 'Date', example: '08/03/2026', scopes: BOTH },
   { key: 'proposal.url', label: 'Proposal link', group: 'Proposal', example: 'View your proposal', scopes: PROPOSAL },
@@ -295,8 +291,6 @@ export interface TemplateContextSources {
     phones?: unknown;
     title?: string | null;
   } | null;
-  /** The second signer — the counter-signing user (deal owner or a fixed team member). */
-  signer2?: { name?: string | null; firstName?: string | null; lastName?: string | null; email?: string | null; phone?: string | null } | null;
 }
 
 /** Today's date as MM/DD/YYYY in the given IANA timezone (falls back to the server's zone). */
@@ -341,9 +335,6 @@ export function buildTemplateContext(src: TemplateContextSources): Record<string
   const senderName = s.name ?? [s.firstName, s.lastName].filter(Boolean).join(' ').trim();
   const senderParts = senderName.split(/\s+/).filter(Boolean);
   const c = src.customer ?? {};
-  const g = src.signer2 ?? {};
-  const g2Name = g.name ?? [g.firstName, g.lastName].filter(Boolean).join(' ').trim();
-  const g2Parts = g2Name.split(/\s+/).filter(Boolean);
   return {
     'contact.first_name': p.firstName ?? '',
     'contact.last_name': p.lastName ?? '',
@@ -365,10 +356,6 @@ export function buildTemplateContext(src: TemplateContextSources): Record<string
     'customer.email': firstJsonValue(c.emails),
     'customer.phone': firstJsonValue(c.phones),
     'customer.title': c.title ?? '',
-    'signer2.name': g2Name,
-    'signer2.first_name': g.firstName ?? g2Parts[0] ?? '',
-    'signer2.last_name': g.lastName ?? g2Parts.slice(1).join(' '),
-    'signer2.email': g.email ?? '',
     'workspace.name': src.workspace?.name ?? '',
     'date.today': formatToday(src.workspace?.timezone),
   };

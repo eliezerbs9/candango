@@ -170,7 +170,7 @@ function SignatureCard({ r, dealId }: { r: SignatureRequest; dealId: string }) {
               {s.signed ? <IconCheck size={13} color="var(--mantine-color-teal-6)" /> : <IconClock size={13} color="var(--mantine-color-gray-5)" />}
               <Text size="xs" c={s.signed ? undefined : 'dimmed'} lineClamp={1}>
                 {s.owner ? 'You' : s.name || 'Client'}
-                {s.owner ? '' : ' (client)'}
+                {s.owner ? '' : ' (customer)'}
                 {s.signed ? '' : ' · pending'}
               </Text>
             </Group>
@@ -776,7 +776,7 @@ function SignerFields({
       <div>
         <Group justify="space-between" align="flex-end" mb={4}>
           <Text size="sm" fw={500}>
-            Signer (client) <Text span c="red">*</Text>
+            Customer (signer) <Text span c="red">*</Text>
           </Text>
           <Button size="compact-xs" variant="subtle" leftSection={<IconPlus size={13} />} onClick={() => setAdding((a) => !a)}>
             New person
@@ -830,7 +830,7 @@ function SignerFields({
           <SegmentedControl
             fullWidth
             data={[
-              { value: 'one', label: 'Client only' },
+              { value: 'one', label: 'Customer only' },
               { value: 'both', label: 'Both parties' },
             ]}
             value={bothParties ? 'both' : 'one'}

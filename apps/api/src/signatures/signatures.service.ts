@@ -288,7 +288,7 @@ export class SignaturesService {
             acceptanceText,
             await this.dealContext(orgId, userId, dto.dealId, {
               customer: await this.resolveCustomer(orgId, dto.dealId, dto.receiverPersonId),
-              signer2: await this.resolveSenderUser(orgId, dto.dealId, party2),
+              sender: await this.resolveSenderUser(orgId, dto.dealId, party2),
             }),
           )
         : undefined;
@@ -364,8 +364,8 @@ export class SignaturesService {
     const party2 = { enabled: partiesBoth, source: (tpl.party2Source as 'owner' | 'user') ?? 'owner', userId: tpl.party2UserId ?? null };
     // Resolve the real signers, then build the {{variable}} context so receiver.*/sender.* are accurate.
     const customer = await this.resolveCustomer(orgId, dto.dealId, dto.receiverPersonId);
-    const signer2 = await this.resolveSenderUser(orgId, dto.dealId, party2);
-    const ctx = await this.dealContext(orgId, userId, dto.dealId, { customer, signer2 });
+    const sender = await this.resolveSenderUser(orgId, dto.dealId, party2);
+    const ctx = await this.dealContext(orgId, userId, dto.dealId, { customer, sender });
     const signerEmail = (dto.signerEmail || firstEmailOf(customer?.emails) || ctx['contact.email'] || '').trim();
     if (!signerEmail) throw new BadRequestException('No signer email — set a primary contact with an email on the deal.');
     const signerName = (dto.signerName || customer?.name || [customer?.firstName, customer?.lastName].filter(Boolean).join(' ').trim() || ctx['contact.name'] || '').trim() || undefined;
@@ -529,7 +529,7 @@ export class SignaturesService {
     orgId: string,
     userId: string,
     dealId: string,
-    extra?: { customer?: CustomerLike | null; signer2?: SenderLike | null },
+    extra?: { customer?: CustomerLike | null; sender?: SenderLike | null },
   ): Promise<Record<string, string>> {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, orgId },
@@ -549,10 +549,9 @@ export class SignaturesService {
       person: deal?.primaryPerson ?? null,
       company: deal?.company ? { name: deal.company.name } : null,
       deal: deal ? { title: deal.title, value: deal.value, currency: deal.currency } : null,
-      sender: user, // sender.* = the workspace user sending (email), not a signer
+      sender: extra?.sender ?? user, // signature docs: the your-side signer; else the current user
       workspace: org,
       customer: extra?.customer ?? null,
-      signer2: extra?.signer2 ?? null,
     });
   }
 

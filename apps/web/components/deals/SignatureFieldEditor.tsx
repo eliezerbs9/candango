@@ -147,8 +147,8 @@ export function SignatureFieldEditor({ fileUrl, value, onChange, senderFields = 
   return (
     <Stack gap="sm">
       <Group gap="xs" align="center">
-        <Text size="sm" fw={500} w={senderFields ? 92 : undefined}>
-          {senderFields ? 'Client fields:' : 'Add field:'}
+        <Text size="sm" fw={500} w={senderFields ? 110 : undefined}>
+          {senderFields ? 'Customer fields:' : 'Add field:'}
         </Text>
         {PALETTE.map((p) => {
           const disabled = loading || !!error || (p.type === 'signature' && hasSig.client);

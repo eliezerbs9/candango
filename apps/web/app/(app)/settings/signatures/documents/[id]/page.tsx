@@ -212,9 +212,9 @@ export default function DocumentTemplateEditor() {
             </Text>
             <Select
               data={[
-                { value: 'none', label: 'Client only' },
-                { value: 'owner', label: 'Client + Deal Owner' },
-                { value: 'user', label: 'Client + Specific Team Member' },
+                { value: 'none', label: 'Customer only' },
+                { value: 'owner', label: 'Customer + Deal Owner' },
+                { value: 'user', label: 'Customer + Specific Team Member' },
               ]}
               value={parties === 'one' ? 'none' : party2Source}
               onChange={(v) => {
@@ -292,7 +292,7 @@ export default function DocumentTemplateEditor() {
         </Group>
         {mode === 'builder' && (
           <Text size="xs" c="dimmed" mt="sm">
-            Drag <strong>Client fields</strong> onto the page
+            Drag <strong>Customer fields</strong> onto the page
             {parties === 'both' ? (
               <>
                 {' '}

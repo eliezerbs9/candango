@@ -398,9 +398,9 @@ function TemplateModal({ opened, onClose, template }: { opened: boolean; onClose
 
         <Select
           label="Second signer"
-          description="Who counter-signs. The client — the deal's primary contact — always signs first."
+          description="Who counter-signs. The customer — the deal's primary contact — always signs first."
           data={[
-            { value: 'none', label: 'Client signs alone' },
+            { value: 'none', label: 'Customer signs alone' },
             { value: 'owner', label: 'Deal owner (sales rep)' },
             { value: 'user', label: 'A specific workspace user' },
           ]}
@@ -423,7 +423,7 @@ function TemplateModal({ opened, onClose, template }: { opened: boolean; onClose
           <Select
             label="Who initials"
             data={[
-              { value: 'client', label: 'Client only' },
+              { value: 'client', label: 'Customer only' },
               { value: 'sender', label: 'Second party only' },
               { value: 'both', label: 'Both parties' },
             ]}
