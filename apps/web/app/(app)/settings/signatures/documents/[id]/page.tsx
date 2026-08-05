@@ -67,6 +67,9 @@ export default function DocumentTemplateEditor() {
   const [parties, setParties] = useState<'one' | 'both'>('one');
   const [party2Source, setParty2Source] = useState<'owner' | 'user'>('owner');
   const [party2UserId, setParty2UserId] = useState<string | null>(null);
+  const [initialsRule, setInitialsRule] = useState<'none' | 'every_page' | 'specified_pages' | 'last_page'>('none');
+  const [initialsPagesText, setInitialsPagesText] = useState('');
+  const [initialsParty, setInitialsParty] = useState<'client' | 'sender' | 'both'>('client');
   const [bodyHtml, setBodyHtml] = useState('');
   const [pages, setPages] = useState<CanvasPage[]>([]);
   const [theme, setTheme] = useState<ProposalTheme | null>(null);
@@ -81,6 +84,9 @@ export default function DocumentTemplateEditor() {
     setParties(doc.parties ?? 'one');
     setParty2Source(doc.party2Source ?? 'owner');
     setParty2UserId(doc.party2UserId ?? null);
+    setInitialsRule(doc.initialsRule ?? 'none');
+    setInitialsPagesText((doc.initialsPages ?? []).join(', '));
+    setInitialsParty(doc.initialsParty ?? 'client');
     setBodyHtml(doc.bodyHtml ?? '');
     const p = toCanvasPages(doc.layout);
     setPages(p.length ? p : [{ id: uid(), elements: [] }]);
@@ -97,6 +103,15 @@ export default function DocumentTemplateEditor() {
       parties,
       party2Source: parties === 'both' ? party2Source : 'owner',
       party2UserId: parties === 'both' && party2Source === 'user' ? party2UserId : null,
+      initialsRule,
+      initialsPages:
+        initialsRule === 'specified_pages'
+          ? initialsPagesText
+              .split(/[,\s]+/)
+              .map((s) => parseInt(s, 10))
+              .filter((n) => Number.isInteger(n) && n >= 1)
+          : [],
+      initialsParty: parties === 'both' ? initialsParty : 'client',
       bodyHtml,
       layout: pages,
       theme,
@@ -176,6 +191,41 @@ export default function DocumentTemplateEditor() {
           )}
         </Group>
       </Group>
+
+      {mode !== 'upload' && (
+        <Group align="flex-end" gap="sm" wrap="wrap">
+          <Select
+            label="Initials"
+            data={[
+              { value: 'none', label: 'No initials' },
+              { value: 'every_page', label: 'Every page' },
+              { value: 'last_page', label: 'Last page' },
+              { value: 'specified_pages', label: 'Specific pages' },
+            ]}
+            value={initialsRule}
+            onChange={(v) => setInitialsRule((v as typeof initialsRule) ?? 'none')}
+            allowDeselect={false}
+            w={200}
+          />
+          {initialsRule === 'specified_pages' && (
+            <TextInput label="Pages" placeholder="1, 2, 3" description="Comma-separated" value={initialsPagesText} onChange={(e) => setInitialsPagesText(e.currentTarget.value)} w={180} />
+          )}
+          {parties === 'both' && initialsRule !== 'none' && (
+            <Select
+              label="Who initials"
+              data={[
+                { value: 'client', label: 'Client only' },
+                { value: 'sender', label: 'Second party only' },
+                { value: 'both', label: 'Both parties' },
+              ]}
+              value={initialsParty}
+              onChange={(v) => setInitialsParty((v as typeof initialsParty) ?? 'client')}
+              allowDeselect={false}
+              w={200}
+            />
+          )}
+        </Group>
+      )}
 
       {mode === 'builder' ? (
         <BuilderMode pages={pages} onPages={setPages} theme={theme} onTheme={setTheme} />

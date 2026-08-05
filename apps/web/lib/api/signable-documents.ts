@@ -11,6 +11,9 @@ export interface SignableDocumentTemplate {
   parties: 'one' | 'both';
   party2Source: 'owner' | 'user';
   party2UserId: string | null;
+  initialsRule: 'none' | 'every_page' | 'specified_pages' | 'last_page';
+  initialsPages: number[];
+  initialsParty: 'client' | 'sender' | 'both';
   bodyHtml: string;
   layout: CanvasPage[];
   theme: Partial<ProposalTheme>;
@@ -26,6 +29,9 @@ export interface SignableDocumentBody {
   parties?: 'one' | 'both';
   party2Source?: 'owner' | 'user';
   party2UserId?: string | null;
+  initialsRule?: 'none' | 'every_page' | 'specified_pages' | 'last_page';
+  initialsPages?: number[];
+  initialsParty?: 'client' | 'sender' | 'both';
   bodyHtml?: string;
   layout?: CanvasPage[];
   theme?: Partial<ProposalTheme>;

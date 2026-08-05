@@ -1,4 +1,4 @@
-import { IsArray, IsEmail, IsIn, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsArray, IsEmail, IsIn, IsInt, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 
 const MODES = ['html', 'builder', 'upload'];
 
@@ -22,6 +22,19 @@ export class CreateSignableDocumentDto {
   @IsOptional()
   @IsString()
   party2UserId?: string | null;
+
+  @IsOptional()
+  @IsIn(['none', 'every_page', 'specified_pages', 'last_page'])
+  initialsRule?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  initialsPages?: number[];
+
+  @IsOptional()
+  @IsIn(['client', 'sender', 'both'])
+  initialsParty?: string;
 
   @IsOptional()
   @IsString()

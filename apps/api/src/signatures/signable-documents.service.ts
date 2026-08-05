@@ -9,6 +9,9 @@ const shape = (r: {
   parties: string;
   party2Source: string;
   party2UserId: string | null;
+  initialsRule: string;
+  initialsPages: unknown;
+  initialsParty: string;
   bodyHtml: string;
   layout: unknown;
   theme: unknown;
@@ -23,6 +26,9 @@ const shape = (r: {
   parties: r.parties,
   party2Source: r.party2Source,
   party2UserId: r.party2UserId,
+  initialsRule: r.initialsRule,
+  initialsPages: (r.initialsPages as number[] | null) ?? [],
+  initialsParty: r.initialsParty,
   bodyHtml: r.bodyHtml,
   layout: (r.layout as unknown[] | null) ?? [],
   theme: (r.theme as Record<string, unknown> | null) ?? {},
@@ -61,6 +67,9 @@ export class SignableDocumentsService {
         parties: dto.parties ?? 'one',
         party2Source: dto.party2Source ?? 'owner',
         party2UserId: dto.party2Source === 'user' ? dto.party2UserId ?? null : null,
+        initialsRule: dto.initialsRule ?? 'none',
+        initialsPages: dto.initialsPages ?? [],
+        initialsParty: dto.initialsParty ?? 'client',
         bodyHtml: dto.bodyHtml ?? '',
         layout: (dto.layout ?? []) as object,
         theme: (dto.theme ?? {}) as object,
@@ -80,6 +89,9 @@ export class SignableDocumentsService {
         ...(dto.mode !== undefined ? { mode: dto.mode } : {}),
         ...(dto.parties !== undefined ? { parties: dto.parties } : {}),
         ...(dto.party2Source !== undefined ? { party2Source: dto.party2Source, party2UserId: dto.party2Source === 'user' ? dto.party2UserId ?? null : null } : dto.party2UserId !== undefined ? { party2UserId: dto.party2UserId } : {}),
+        ...(dto.initialsRule !== undefined ? { initialsRule: dto.initialsRule } : {}),
+        ...(dto.initialsPages !== undefined ? { initialsPages: dto.initialsPages } : {}),
+        ...(dto.initialsParty !== undefined ? { initialsParty: dto.initialsParty } : {}),
         ...(dto.bodyHtml !== undefined ? { bodyHtml: dto.bodyHtml } : {}),
         ...(dto.layout !== undefined ? { layout: dto.layout as object } : {}),
         ...(dto.theme !== undefined ? { theme: dto.theme as object } : {}),

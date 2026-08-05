@@ -353,6 +353,7 @@ export class SignaturesService {
       doc = await PDFDocument.load(await this.gotenberg.htmlToPdf(html, { paperSize: theme?.paperSize, orientation: theme?.orientation }));
     }
 
+    const contentPages = doc.getPageCount(); // before any appended acceptance page
     const recipients = await this.resolveRecipients(orgId, dto.dealId, { email: signerEmail, name: signerName }, party2);
     const fields: DocusealField[] = drawnToDocusealFields(tpl.mode === 'upload' ? ((tpl.fields as DrawnFieldDto[] | null) ?? []) : []);
     if (fields.length === 0) {
@@ -360,6 +361,17 @@ export class SignaturesService {
       const clientLabel = dto.clientPartyLabel?.trim() || labels.client;
       const parties = recipients.map((r, i) => ({ label: i === 0 ? clientLabel : labels.workspace, recipient: i }));
       fields.push(...(await addAcceptancePage(doc, { title: tpl.name, parties })));
+    }
+    // Footer initials per the template's rule (builder/html docs get them here; upload docs place them visually).
+    if ((tpl.initialsRule ?? 'none') !== 'none') {
+      const initialsPages = resolveInitialsPages(tpl.initialsRule, (tpl.initialsPages as number[] | null) ?? [], contentPages);
+      if (initialsPages.length) {
+        const targets = initialsRecipientIndexes(tpl.initialsParty ?? 'client', recipients.length);
+        const zones = initialsZones(targets.length);
+        targets.forEach((rIdx, k) => {
+          fields.push({ name: `Initials ${rIdx + 1}`, type: 'initials', role: 'Client', recipient: rIdx, areas: initialsPages.map((page) => ({ page, ...zones[k] })) });
+        });
+      }
     }
     const pdf = Buffer.from(await doc.save());
     const ownerUserId = (await this.prisma.deal.findFirst({ where: { id: dto.dealId, orgId }, select: { ownerUserId: true } }))?.ownerUserId ?? null;

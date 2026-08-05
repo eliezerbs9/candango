@@ -1008,6 +1008,9 @@ model SignableDocumentTemplate {
   parties         String    @default("one") // who signs: one (client) | both (client + a second party)
   party2Source    String    @default("owner") // second party: owner (deal owner) | user (a fixed workspace user)
   party2UserId    String? // when party2Source=user: the workspace user who counter-signs
+  initialsRule    String    @default("none") // none | every_page | specified_pages | last_page
+  initialsPages   Json      @default("[]") // 1-indexed page numbers for specified_pages
+  initialsParty   String    @default("client") // which party initials: client | sender | both
   bodyHtml        String    @default("") // html mode
   layout          Json      @default("[]") // builder mode: CanvasPage[] (same model as proposals)
   theme           Json      @default("{}") // builder mode: ProposalTheme (paper size/orientation, fonts, colors)
