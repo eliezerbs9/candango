@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Alert,
-  Autocomplete,
   Badge,
   Button,
   Card,
@@ -32,7 +31,6 @@ import { ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/auth/store';
 import {
   useAddDealParticipant,
-  useCompanyDetail,
   useCreatePerson,
   useCreateSignature,
   useCustomFields,
@@ -249,7 +247,6 @@ function GenerateModal({
   const { data: users = [] } = useUsers();
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [signer, setSigner] = useState<SignerValue | null>(null);
-  const [clientLabel, setClientLabel] = useState('');
   const [bothParties, setBothParties] = useState(false);
   const [sendEmail, setSendEmail] = useState(true);
   const [link, setLink] = useState<string | null>(null);
@@ -266,7 +263,6 @@ function GenerateModal({
   const close = () => {
     setTemplateId(null);
     setSigner(null);
-    setClientLabel('');
     setBothParties(false);
     setSendEmail(true);
     setLink(null);
@@ -282,10 +278,6 @@ function GenerateModal({
       notifications.show({ message: 'Pick a signer', color: 'red' });
       return;
     }
-    if (!clientLabel.trim()) {
-      notifications.show({ message: 'Fill "Signing on behalf of"', color: 'red' });
-      return;
-    }
     try {
       const res = await generate.mutateAsync({
         dealId,
@@ -293,7 +285,6 @@ function GenerateModal({
         signerName: signer.name || undefined,
         signerEmail: signer.email,
         receiverPersonId: signer.personId,
-        clientPartyLabel: clientLabel.trim(),
         sendEmail,
         // parties are defined by the document template
       });
@@ -343,15 +334,13 @@ function GenerateModal({
             companyId={deal?.companyId ?? null}
             signer={signer}
             onSigner={setSigner}
-            clientLabel={clientLabel}
-            onClientLabel={setClientLabel}
             bothParties={bothParties}
             onBothParties={setBothParties}
             sendEmail={sendEmail}
             onSendEmail={setSendEmail}
             hideParties
           />
-          <Button onClick={submit} loading={generate.isPending} disabled={!templateId || !signer || !clientLabel.trim()}>
+          <Button onClick={submit} loading={generate.isPending} disabled={!templateId || !signer}>
             Generate &amp; send
           </Button>
         </Stack>
@@ -374,7 +363,6 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
   const [templateId, setTemplateId] = useState<string>(''); // '' = custom (inline options)
   const [title, setTitle] = useState('');
   const [signer, setSigner] = useState<SignerValue | null>(null);
-  const [clientLabel, setClientLabel] = useState('');
   const [bothParties, setBothParties] = useState(false);
   const [sendEmail, setSendEmail] = useState(true);
   const [acceptance, setAcceptance] = useState(true);
@@ -399,7 +387,6 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
     setTemplateId('');
     setTitle('');
     setSigner(null);
-    setClientLabel('');
     setBothParties(false);
     setSendEmail(true);
     setAcceptance(true);
@@ -459,10 +446,6 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
       notifications.show({ message: 'Choose a document, a title and a signer', color: 'red' });
       return;
     }
-    if (!clientLabel.trim()) {
-      notifications.show({ message: 'Fill "Signing on behalf of"', color: 'red' });
-      return;
-    }
     if (method === 'fields') {
       if (drawnFields.length === 0) {
         notifications.show({ message: 'Place at least one field on the document', color: 'red' });
@@ -481,7 +464,6 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
         signerName: signer.name || undefined,
         signerEmail: signer.email,
         receiverPersonId: signer.personId,
-        clientPartyLabel: clientLabel.trim(),
         sendEmail,
         bothParties,
         // Manual field placement is exclusive with the template / acceptance-page options.
@@ -575,8 +557,6 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
             companyId={deal.companyId ?? null}
             signer={signer}
             onSigner={setSigner}
-            clientLabel={clientLabel}
-            onClientLabel={setClientLabel}
             bothParties={bothParties}
             onBothParties={(b) => {
               setBothParties(b);
@@ -646,7 +626,7 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
                 Place fields on the document {drawnFields.length > 0 && <Text span c="candango" fw={600}>· {drawnFields.length}</Text>}
               </Text>
               <Text size="xs" c="dimmed" mb="xs">
-                Drop <b>Client</b> fields{bothParties ? <> and <b>Sender</b> fields</> : ''} onto exact spots — one signature per party.
+                Drop <b>Customer</b> fields{bothParties ? <> and <b>Sender</b> fields</> : ''} onto exact spots — one signature per party.
               </Text>
               <Paper withBorder radius="md" p="sm">
                 {filePreview?.url ? (
@@ -659,7 +639,7 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
               </Paper>
             </div>
           )}
-          <Button onClick={submit} loading={busy && create.isPending} disabled={!fileKey || !signer || !clientLabel.trim()}>
+          <Button onClick={submit} loading={busy && create.isPending} disabled={!fileKey || !signer}>
             Send for signature
           </Button>
         </Stack>
@@ -683,10 +663,9 @@ function SignerFields({
   companyId,
   signer,
   onSigner,
-  clientLabel,
-  onClientLabel,
   bothParties,
   onBothParties,
+  senderName,
   sendEmail,
   onSendEmail,
   hideParties,
@@ -695,16 +674,15 @@ function SignerFields({
   companyId: string | null;
   signer: SignerValue | null;
   onSigner: (s: SignerValue | null) => void;
-  clientLabel: string;
-  onClientLabel: (s: string) => void;
   bothParties: boolean;
   onBothParties: (b: boolean) => void;
+  /** When both parties sign: who signs as the sender (shown read-only). */
+  senderName?: string | null;
   sendEmail: boolean;
   onSendEmail: (b: boolean) => void;
   hideParties?: boolean;
 }) {
   const { data: recipients = [] } = useDealRecipients(dealId);
-  const { data: company } = useCompanyDetail(companyId);
   const createPerson = useCreatePerson();
   const addParticipant = useAddDealParticipant();
   const [personId, setPersonId] = useState<string | null>(null);
@@ -715,15 +693,6 @@ function SignerFields({
   const [busy, setBusy] = useState(false);
 
   const withEmail = recipients.filter((r) => r.email);
-
-  // "Signing on behalf of" suggestions: the deal's company + its people (primary contact, participants).
-  const behalfData = useMemo(() => {
-    const groups: { group: string; items: string[] }[] = [];
-    if (company?.name?.trim()) groups.push({ group: 'Company', items: [company.name.trim()] });
-    const people = Array.from(new Set(recipients.map((r) => r.name).filter(Boolean)));
-    if (people.length) groups.push({ group: 'People on the deal', items: people });
-    return groups;
-  }, [company?.name, recipients]);
 
   // Default the signer to the deal's primary contact (the recipients endpoint returns it first).
   const didInit = useRef(false);
@@ -740,15 +709,6 @@ function SignerFields({
     onSigner(r && r.email ? { name, email: r.email, personId: r.id } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [personId, recipients]);
-
-  // Default "signing on behalf of" to the deal's company (else the signer's name) until the user edits it.
-  const labelTouched = useRef(false);
-  useEffect(() => {
-    if (labelTouched.current) return;
-    const def = company?.name?.trim() || signer?.name?.trim() || '';
-    if (def && def !== clientLabel) onClientLabel(def);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [company?.name, signer?.name]);
 
   const addPerson = async () => {
     if (!first.trim() || !email.trim()) {
@@ -809,19 +769,6 @@ function SignerFields({
         </Collapse>
       </div>
 
-      <Autocomplete
-        label="Signing on behalf of"
-        description="Shown above the client's signature — pick the deal's company or a contact, or type a name."
-        placeholder="e.g. Acme Corp, or the client's name"
-        required
-        data={behalfData}
-        value={clientLabel}
-        onChange={(v) => {
-          labelTouched.current = true;
-          onClientLabel(v);
-        }}
-      />
-
       {!hideParties && (
         <div>
           <Text size="sm" fw={500} mb={4}>
@@ -836,12 +783,19 @@ function SignerFields({
             value={bothParties ? 'both' : 'one'}
             onChange={(v) => onBothParties(v === 'both')}
           />
-          {bothParties && (
-            <Text size="xs" c="dimmed" mt={4}>
-              You (the deal owner) also sign — either party can sign anytime.
-            </Text>
-          )}
         </div>
+      )}
+
+      {bothParties && (
+        <Text size="sm">
+          <Text span fw={500}>
+            Sender:
+          </Text>{' '}
+          {senderName?.trim() || 'You (the deal owner)'}{' '}
+          <Text span c="dimmed" size="xs">
+            — signs your side; either party can sign anytime.
+          </Text>
+        </Text>
       )}
 
       <Switch label="Email the signer(s) now" checked={sendEmail} onChange={(e) => onSendEmail(e.currentTarget.checked)} />

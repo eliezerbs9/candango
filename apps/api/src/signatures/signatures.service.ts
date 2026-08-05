@@ -293,7 +293,7 @@ export class SignaturesService {
           )
         : undefined;
       const labels = await this.partyBlockLabels(orgId, dto.dealId);
-      const clientLabel = dto.clientPartyLabel?.trim() || labels.client;
+      const clientLabel = dto.clientPartyLabel?.trim() || labels.company || dto.signerName?.trim() || 'Customer';
       const parties = recipients.map((r, i) => ({ label: i === 0 ? clientLabel : labels.workspace, recipient: i }));
       fields.push(...(await addAcceptancePage(doc, { title: dto.title, body, parties })));
     }
@@ -310,7 +310,7 @@ export class SignaturesService {
     const missingSig = recipients.map((_, i) => i).filter((i) => !fields.some((f) => (f.recipient ?? 0) === i && f.type === 'signature'));
     if (missingSig.length) {
       const labels = await this.partyBlockLabels(orgId, dto.dealId);
-      const clientLabel = dto.clientPartyLabel?.trim() || labels.client;
+      const clientLabel = dto.clientPartyLabel?.trim() || labels.company || dto.signerName?.trim() || 'Customer';
       const parties = missingSig.map((i) => ({ label: i === 0 ? clientLabel : labels.workspace, recipient: i }));
       fields.push(...(await addAcceptancePage(doc, { title: dto.title, parties })));
     }
@@ -426,7 +426,7 @@ export class SignaturesService {
     const missing = recipients.map((_, i) => i).filter((i) => !fields.some((f) => (f.recipient ?? 0) === i && f.type === 'signature'));
     if (missing.length) {
       const labels = await this.partyBlockLabels(orgId, dto.dealId);
-      const clientLabel = dto.clientPartyLabel?.trim() || labels.client;
+      const clientLabel = dto.clientPartyLabel?.trim() || labels.company || customer?.name?.trim() || signerName || 'Customer';
       const parties = missing.map((i) => ({ label: i === 0 ? clientLabel : labels.workspace, recipient: i }));
       fields.push(...(await addAcceptancePage(doc, { title: tpl.name, parties })));
     }
@@ -503,16 +503,16 @@ export class SignaturesService {
   }
 
   /**
-   * The heading shown above each party's signature block: the client's block is titled with the
-   * deal's company name (else "Client"); the second party's block is titled with the workspace name
-   * (the company sending) — not the individual signer's personal name.
+   * The heading above each signature block, derived (no manual "on behalf of"): the customer block is
+   * titled with the deal's **company** name when B2B (else empty → caller falls back to the signer's
+   * name); the second party's block is the **workspace** name.
    */
-  private async partyBlockLabels(orgId: string, dealId: string): Promise<{ client: string; workspace: string }> {
+  private async partyBlockLabels(orgId: string, dealId: string): Promise<{ company: string; workspace: string }> {
     const [deal, org] = await Promise.all([
       this.prisma.deal.findFirst({ where: { id: dealId, orgId }, select: { company: { select: { name: true } } } }),
       this.prisma.organization.findFirst({ where: { id: orgId }, select: { name: true } }),
     ]);
-    return { client: deal?.company?.name?.trim() || 'Client', workspace: org?.name?.trim() || 'Company' };
+    return { company: deal?.company?.name?.trim() || '', workspace: org?.name?.trim() || 'Company' };
   }
 
   /** Merge our recipients (with owner flags) with Documenso's signing URLs for storage. */
