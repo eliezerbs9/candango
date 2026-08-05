@@ -21,13 +21,15 @@ import {
 import { useRouter } from 'next/navigation';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconFileText, IconInfoCircle, IconPencil, IconPlus, IconSignature, IconTrash } from '@tabler/icons-react';
+import { IconCopy, IconFileText, IconInfoCircle, IconPencil, IconPlus, IconSignature, IconTrash } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import {
   useCreateSignableDocument,
   useCreateSignatureTemplate,
   useDeleteSignableDocument,
   useDeleteSignatureTemplate,
+  useDuplicateSignableDocument,
+  useDuplicateSignatureTemplate,
   useSignableDocuments,
   useSignatureTemplates,
   useTemplateVariables,
@@ -61,6 +63,7 @@ function summarize(t: SignatureTemplate): string {
 export default function SignatureTemplatesPage() {
   const { data: templates = [], isLoading } = useSignatureTemplates();
   const del = useDeleteSignatureTemplate();
+  const dup = useDuplicateSignatureTemplate();
   const [editing, setEditing] = useState<SignatureTemplate | null>(null);
   const [opened, ctl] = useDisclosure(false);
 
@@ -76,6 +79,8 @@ export default function SignatureTemplatesPage() {
     if (!window.confirm(`Delete signature template “${t.name}”?`)) return;
     del.mutate(t.id, { onSuccess: () => notifications.show({ message: 'Deleted', color: 'green' }), onError: fail });
   };
+  const duplicate = (t: SignatureTemplate) =>
+    dup.mutate(t.id, { onSuccess: () => notifications.show({ message: 'Duplicated', color: 'green' }), onError: fail });
 
   return (
     <Stack>
@@ -128,6 +133,9 @@ export default function SignatureTemplatesPage() {
                   <Button size="compact-xs" variant="subtle" leftSection={<IconPencil size={13} />} onClick={() => openEdit(t)}>
                     Edit
                   </Button>
+                  <Button size="compact-xs" variant="subtle" leftSection={<IconCopy size={13} />} onClick={() => duplicate(t)} loading={dup.isPending}>
+                    Duplicate
+                  </Button>
                   <Button size="compact-xs" variant="subtle" color="red" leftSection={<IconTrash size={13} />} onClick={() => remove(t)}>
                     Delete
                   </Button>
@@ -153,6 +161,7 @@ function DocumentTemplatesSection() {
   const router = useRouter();
   const { data: docs = [], isLoading } = useSignableDocuments();
   const del = useDeleteSignableDocument();
+  const dup = useDuplicateSignableDocument();
   const [newOpen, newCtl] = useDisclosure(false);
 
   const openEdit = (d: SignableDocumentTemplate) => router.push(`/settings/signatures/documents/${d.id}`);
@@ -160,6 +169,8 @@ function DocumentTemplatesSection() {
     if (!window.confirm(`Delete document template “${d.name}”?`)) return;
     del.mutate(d.id, { onSuccess: () => notifications.show({ message: 'Deleted', color: 'green' }), onError: fail });
   };
+  const duplicate = (d: SignableDocumentTemplate) =>
+    dup.mutate(d.id, { onSuccess: () => notifications.show({ message: 'Duplicated', color: 'green' }), onError: fail });
 
   return (
     <Stack>
@@ -211,6 +222,9 @@ function DocumentTemplatesSection() {
                 <Group gap={4} wrap="nowrap">
                   <Button size="compact-xs" variant="subtle" leftSection={<IconPencil size={13} />} onClick={() => openEdit(d)}>
                     Edit
+                  </Button>
+                  <Button size="compact-xs" variant="subtle" leftSection={<IconCopy size={13} />} onClick={() => duplicate(d)} loading={dup.isPending}>
+                    Duplicate
                   </Button>
                   <Button size="compact-xs" variant="subtle" color="red" leftSection={<IconTrash size={13} />} onClick={() => remove(d)}>
                     Delete

@@ -102,6 +102,31 @@ export class SignableDocumentsService {
     return shape(row);
   }
 
+  /** Copy a template into a new "(copy)" — same content, parties, fields and options. */
+  async duplicate(orgId: string, userId: string, id: string) {
+    const src = await this.get(orgId, id);
+    const row = await this.prisma.signableDocumentTemplate.create({
+      data: {
+        orgId,
+        createdByUserId: userId,
+        name: `${src.name} (copy)`,
+        mode: src.mode,
+        parties: src.parties,
+        party2Source: src.party2Source,
+        party2UserId: src.party2UserId,
+        initialsRule: src.initialsRule,
+        initialsPages: src.initialsPages as object,
+        initialsParty: src.initialsParty,
+        bodyHtml: src.bodyHtml,
+        layout: src.layout as object,
+        theme: src.theme as object,
+        fileKey: src.fileKey,
+        fields: src.fields as object,
+      },
+    });
+    return shape(row);
+  }
+
   async remove(orgId: string, id: string) {
     await this.get(orgId, id);
     await this.prisma.signableDocumentTemplate.update({ where: { id }, data: { archivedAt: new Date() } });

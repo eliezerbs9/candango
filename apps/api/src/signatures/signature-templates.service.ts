@@ -92,6 +92,29 @@ export class SignatureTemplatesService {
     return shape(row);
   }
 
+  /** Copy a signature template into a new "(copy)" — same rules, fields and party config. */
+  async duplicate(orgId: string, userId: string, id: string) {
+    const src = await this.get(orgId, id);
+    const row = await this.prisma.signatureTemplate.create({
+      data: {
+        orgId,
+        createdByUserId: userId,
+        name: `${src.name} (copy)`,
+        initialsRule: src.initialsRule,
+        initialsPages: src.initialsPages as object,
+        acceptance: src.acceptance,
+        acceptanceText: src.acceptanceText,
+        fields: src.fields as object,
+        requireCounterSigner: src.requireCounterSigner,
+        parties: src.parties,
+        party2Source: src.party2Source,
+        party2UserId: src.party2UserId,
+        initialsParty: src.initialsParty,
+      },
+    });
+    return shape(row);
+  }
+
   async remove(orgId: string, id: string) {
     await this.get(orgId, id);
     await this.prisma.signatureTemplate.update({ where: { id }, data: { archivedAt: new Date() } });

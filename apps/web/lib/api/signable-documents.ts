@@ -58,3 +58,7 @@ export function updateSignableDocument(token: string, id: string, body: Signable
 export function deleteSignableDocument(token: string, id: string) {
   return apiFetch<void>(`/signable-documents/${id}`, { method: 'DELETE', token });
 }
+
+export function duplicateSignableDocument(token: string, id: string) {
+  return apiFetch<SignableDocumentTemplate>(`/signable-documents/${id}/duplicate`, { method: 'POST', token });
+}

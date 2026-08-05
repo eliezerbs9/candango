@@ -24,6 +24,11 @@ export class SignatureTemplatesController {
     return this.svc.update(u.orgId, id, dto);
   }
 
+  @Post(':id/duplicate')
+  duplicate(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.duplicate(u.orgId, u.userId, id);
+  }
+
   @Delete(':id')
   @HttpCode(204)
   remove(@CurrentUser() u: AuthContext, @Param('id') id: string) {

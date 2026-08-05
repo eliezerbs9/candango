@@ -64,3 +64,7 @@ export function updateSignatureTemplate(token: string, id: string, body: Signatu
 export function deleteSignatureTemplate(token: string, id: string) {
   return apiFetch<void>(`/signature-templates/${id}`, { method: 'DELETE', token });
 }
+
+export function duplicateSignatureTemplate(token: string, id: string) {
+  return apiFetch<SignatureTemplate>(`/signature-templates/${id}/duplicate`, { method: 'POST', token });
+}

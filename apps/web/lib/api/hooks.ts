@@ -129,6 +129,7 @@ import { createSignature, deleteSignature, generateSignature, getDealSignatures,
 import {
   createSignatureTemplate,
   deleteSignatureTemplate,
+  duplicateSignatureTemplate,
   getSignatureTemplates,
   updateSignatureTemplate,
   type SignatureTemplateBody,
@@ -136,6 +137,7 @@ import {
 import {
   createSignableDocument,
   deleteSignableDocument,
+  duplicateSignableDocument,
   getSignableDocument,
   getSignableDocuments,
   updateSignableDocument,
@@ -1359,6 +1361,15 @@ export function useDeleteSignatureTemplate() {
   });
 }
 
+export function useDuplicateSignatureTemplate() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => duplicateSignatureTemplate(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['signature-templates'] }),
+  });
+}
+
 export function useSignableDocuments() {
   const token = useToken();
   return useQuery({ queryKey: ['signable-documents'], queryFn: () => getSignableDocuments(token!), enabled: !!token });
@@ -1395,6 +1406,15 @@ export function useDeleteSignableDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteSignableDocument(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['signable-documents'] }),
+  });
+}
+
+export function useDuplicateSignableDocument() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => duplicateSignableDocument(token!, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['signable-documents'] }),
   });
 }
