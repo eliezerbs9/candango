@@ -33,6 +33,7 @@ export type SignFieldType = 'signature' | 'initials' | 'date' | 'text';
 export interface ElementStyle {
   fontSize?: number; // px
   fontWeight?: number;
+  lineHeight?: number; // unitless line-height multiplier
   color?: string;
   align?: 'left' | 'center' | 'right';
   background?: string;

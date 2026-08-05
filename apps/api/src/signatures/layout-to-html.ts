@@ -23,6 +23,7 @@ const FIELD_TYPES = ['signature', 'initials', 'date', 'text'] as const;
 
 interface ElStyle {
   fontSize?: number;
+  lineHeight?: number;
   fontWeight?: number;
   color?: string;
   align?: string;
@@ -65,11 +66,11 @@ function renderEl(el: El, theme: Theme, vars: Record<string, string>, logoUrl?: 
 
   switch (el.type) {
     case 'heading':
-      return `<div style="${common}font-family:${esc(theme.fontHeading ?? 'Helvetica')},sans-serif;font-size:${s.fontSize ?? 28}px;font-weight:${s.fontWeight ?? 800};line-height:1.15">${esc(renderTemplate(String(el.props.text ?? ''), vars))}</div>`;
+      return `<div style="${common}font-family:${esc(theme.fontHeading ?? 'Helvetica')},sans-serif;font-size:${s.fontSize ?? 28}px;font-weight:${s.fontWeight ?? 800};line-height:${s.lineHeight ?? 1.15}">${esc(renderTemplate(String(el.props.text ?? ''), vars))}</div>`;
     case 'text': {
       // Rich-text HTML authored in the builder — variables still resolve; markup is intentional.
       const cols = Number(el.props.columns) === 2 ? `column-count:2;column-gap:${Number(el.props.colGap ?? 24)}px;` : '';
-      return `<div style="${common}font-size:${s.fontSize ?? 15}px;font-weight:${s.fontWeight ?? 400};line-height:1.5;${cols}">${renderTemplate(String(el.props.html ?? ''), vars)}</div>`;
+      return `<div style="${common}font-size:${s.fontSize ?? 15}px;font-weight:${s.fontWeight ?? 400};line-height:${s.lineHeight ?? 1.5};${cols}">${renderTemplate(String(el.props.html ?? ''), vars)}</div>`;
     }
     case 'logo':
       return logoUrl ? `<div style="${box}"><img src="${esc(logoUrl)}" style="width:100%;height:100%;object-fit:${el.props.fit === 'cover' ? 'cover' : 'contain'}"/></div>` : '';

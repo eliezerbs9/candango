@@ -1192,6 +1192,16 @@ function ElementSettings({
           <Group gap="xs" grow>
             <NumberInput size="xs" label="Font size" min={8} max={96} value={s.fontSize ?? (el.type === 'heading' ? 32 : 15)} onChange={(v) => onStyle({ fontSize: Number(v) || undefined })} />
             <Select size="xs" label="Weight" data={['400', '600', '700', '800']} value={String(s.fontWeight ?? (el.type === 'heading' ? 800 : 400))} onChange={(v) => onStyle({ fontWeight: Number(v) })} allowDeselect={false} />
+            <NumberInput
+              size="xs"
+              label="Line height"
+              min={0.8}
+              max={3}
+              step={0.05}
+              decimalScale={2}
+              value={s.lineHeight ?? (el.type === 'heading' ? 1.15 : 1.5)}
+              onChange={(v) => onStyle({ lineHeight: Number(v) || undefined })}
+            />
           </Group>
           <Group gap="xs" grow>
             <ColorInput size="xs" label="Color" value={s.color ?? ''} onChange={(v) => onStyle({ color: v || undefined })} />

@@ -85,7 +85,7 @@ export function ElementView({ element, theme, ctx }: { element: CanvasElement; t
   switch (element.type) {
     case 'heading':
       return (
-        <div style={{ ...base, fontFamily: `${theme.fontHeading}, sans-serif`, fontSize: s.fontSize ?? 28, fontWeight: s.fontWeight ?? 800, lineHeight: 1.15 }}>
+        <div style={{ ...base, fontFamily: `${theme.fontHeading}, sans-serif`, fontSize: s.fontSize ?? 28, fontWeight: s.fontWeight ?? 800, lineHeight: s.lineHeight ?? 1.15 }}>
           {ctx.resolveText(String(element.props.text ?? ''))}
         </div>
       );
@@ -98,7 +98,7 @@ export function ElementView({ element, theme, ctx }: { element: CanvasElement; t
             ...base,
             fontSize: s.fontSize ?? 15,
             fontWeight: s.fontWeight ?? 400,
-            lineHeight: 1.5,
+            lineHeight: s.lineHeight ?? 1.5,
             ...(cols ? { columnCount: 2, columnGap: colGap } : {}),
           }}
           // eslint-disable-next-line react/no-danger
