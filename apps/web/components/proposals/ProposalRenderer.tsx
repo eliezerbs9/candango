@@ -138,21 +138,24 @@ export function ElementView({ element, theme, ctx }: { element: CanvasElement; t
     case 'divider':
       return <div style={{ width: '100%', borderTop: `2px solid ${s.color ?? '#dee2e6'}` }} />;
     case 'field': {
-      // A signature field placeholder (signable documents) — becomes a real DocuSeal field on send.
+      // A signature field placeholder (signable documents) — becomes a real Documenso field on send.
       const ft = (element.props.fieldType as string) || 'signature';
-      const label = ft.charAt(0).toUpperCase() + ft.slice(1);
+      const isSender = (element.props.party as string) === 'sender';
+      // Distinct colors so client vs sender fields are obvious in the editor: client = accent, sender = blue.
+      const color = isSender ? '#1971c2' : theme.primaryColor;
+      const label = `${ft.charAt(0).toUpperCase() + ft.slice(1)}${isSender ? ' · Sender' : ''}`;
       return (
         <div
           style={{
             width: '100%',
             height: '100%',
-            border: `1.5px dashed ${theme.primaryColor}`,
+            border: `1.5px dashed ${color}`,
             borderRadius: 4,
-            background: `color-mix(in srgb, ${theme.primaryColor} 8%, transparent)`,
+            background: `color-mix(in srgb, ${color} 8%, transparent)`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: theme.primaryColor,
+            color,
             fontSize: 12,
             fontWeight: 600,
           }}
