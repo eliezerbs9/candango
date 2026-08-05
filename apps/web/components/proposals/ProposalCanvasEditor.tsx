@@ -105,8 +105,10 @@ function newElement(type: ElementType, extra?: Record<string, unknown>): CanvasE
   const base = { id: uid(), x: 8, y: 8, w: 50, h: 12, props: {}, type } as CanvasElement;
   if (type === 'field') {
     const fieldType = (extra?.fieldType as string) ?? 'signature';
+    const party = (extra?.party as string) === 'sender' ? 'sender' : 'client';
     const sz = FIELD_SIZES[fieldType] ?? FIELD_SIZES.signature;
-    return { ...base, w: sz.w, h: sz.h, props: { fieldType, label: fieldType.charAt(0).toUpperCase() + fieldType.slice(1) } };
+    const who = party === 'sender' ? 'Sender' : 'Client';
+    return { ...base, w: sz.w, h: sz.h, props: { fieldType, party, label: `${fieldType.charAt(0).toUpperCase() + fieldType.slice(1)} · ${who}` } };
   }
   switch (type) {
     case 'heading':
@@ -167,6 +169,8 @@ export interface ProposalCanvasEditorProps {
   enforceLocks?: boolean;
   /** When true (signable-document builder), the palette also offers signature/initials/date/text fields. */
   signatureFields?: boolean;
+  /** When true (both parties sign), the palette also offers a "Sender fields" group (party = sender). */
+  senderFields?: boolean;
 }
 
 /** Placeable signature fields (signable-document builder only). */
@@ -196,6 +200,7 @@ export function ProposalCanvasEditor({
   previewCtx,
   enforceLocks = false,
   signatureFields = false,
+  senderFields = false,
 }: ProposalCanvasEditorProps) {
   const [pageId, setPageId] = useState<string | null>(pages[0]?.id ?? null);
   const [selIds, setSelIds] = useState<string[]>([]);
@@ -239,9 +244,10 @@ export function ProposalCanvasEditor({
     e.preventDefault();
     const type = e.dataTransfer.getData('text/proposal-element') as ElementType;
     const fieldType = e.dataTransfer.getData('text/proposal-field') || undefined;
+    const party = e.dataTransfer.getData('text/proposal-party') || undefined;
     const rect = pageRef.current?.getBoundingClientRect();
     if (!type || !rect) return;
-    addElementAt(type, ((e.clientX - rect.left) / rect.width) * 100, ((e.clientY - rect.top) / rect.height) * 100, fieldType ? { fieldType } : undefined);
+    addElementAt(type, ((e.clientX - rect.left) / rect.width) * 100, ((e.clientY - rect.top) / rect.height) * 100, fieldType ? { fieldType, party } : undefined);
   };
   const updateElement = (elId: string, patch: Partial<CanvasElement>) =>
     setPageElements((els) => els.map((e) => (e.id === elId ? { ...e, ...patch } : e)));
@@ -612,12 +618,12 @@ export function ProposalCanvasEditor({
             {signatureFields && (
               <>
                 <Text size="xs" fw={600} mt="sm" mb={4}>
-                  Signature fields
+                  {senderFields ? 'Client fields (receiver)' : 'Signature fields'}
                 </Text>
                 <Group gap={6}>
                   {FIELD_PALETTE.map((f) => (
                     <Button
-                      key={f.fieldType}
+                      key={`client-${f.fieldType}`}
                       size="xs"
                       variant="light"
                       color="candango"
@@ -625,14 +631,42 @@ export function ProposalCanvasEditor({
                       onDragStart={(e) => {
                         e.dataTransfer.setData('text/proposal-element', 'field');
                         e.dataTransfer.setData('text/proposal-field', f.fieldType);
+                        e.dataTransfer.setData('text/proposal-party', 'client');
                       }}
-                      onClick={() => addElement('field', { fieldType: f.fieldType })}
+                      onClick={() => addElement('field', { fieldType: f.fieldType, party: 'client' })}
                       style={{ cursor: 'grab' }}
                     >
                       {f.label}
                     </Button>
                   ))}
                 </Group>
+                {senderFields && (
+                  <>
+                    <Text size="xs" fw={600} mt="sm" mb={4}>
+                      Sender fields (your side)
+                    </Text>
+                    <Group gap={6}>
+                      {FIELD_PALETTE.map((f) => (
+                        <Button
+                          key={`sender-${f.fieldType}`}
+                          size="xs"
+                          variant="light"
+                          color="gray"
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData('text/proposal-element', 'field');
+                            e.dataTransfer.setData('text/proposal-field', f.fieldType);
+                            e.dataTransfer.setData('text/proposal-party', 'sender');
+                          }}
+                          onClick={() => addElement('field', { fieldType: f.fieldType, party: 'sender' })}
+                          style={{ cursor: 'grab' }}
+                        >
+                          {f.label}
+                        </Button>
+                      ))}
+                    </Group>
+                  </>
+                )}
               </>
             )}
           </Card>

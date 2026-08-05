@@ -330,11 +330,9 @@ export class SignaturesService {
     const signerEmail = (dto.signerEmail || ctx['contact.email'] || '').trim();
     if (!signerEmail) throw new BadRequestException('No signer email — set a primary contact with an email on the deal.');
     const signerName = (dto.signerName || ctx['contact.name'] || '').trim() || undefined;
-    // Builder docs derive their parties from the placed fields: the second party signs only when a
-    // "sender" field is placed. Other modes take it from the template's parties flag.
+    // The template decides who signs (one party or both); builder "sender" fields only bind when both.
     const layoutFields = tpl.mode === 'builder' ? extractLayoutFields(tpl.layout) : [];
-    const hasSenderField = layoutFields.some((f) => f.party === 'sender');
-    const partiesBoth = tpl.mode === 'builder' ? hasSenderField : dto.bothParties ?? tpl.parties === 'both';
+    const partiesBoth = dto.bothParties ?? tpl.parties === 'both';
     const party2 = { enabled: partiesBoth, source: (tpl.party2Source as 'owner' | 'user') ?? 'owner', userId: tpl.party2UserId ?? null };
 
     // Build the source PDF for the template's mode (upload = stored PDF; builder/html = HTML→PDF per deal).

@@ -101,9 +101,8 @@ export default function DocumentTemplateEditor() {
       name: name.trim(),
       mode,
       parties,
-      // Builder docs derive parties from placed fields, but still record who the sender is (owner/user).
-      party2Source: mode === 'builder' || parties === 'both' ? party2Source : 'owner',
-      party2UserId: (mode === 'builder' || parties === 'both') && party2Source === 'user' ? party2UserId : null,
+      party2Source: parties === 'both' ? party2Source : 'owner',
+      party2UserId: parties === 'both' && party2Source === 'user' ? party2UserId : null,
       initialsRule,
       initialsPages:
         initialsRule === 'specified_pages'
@@ -167,55 +166,37 @@ export default function DocumentTemplateEditor() {
             ]}
           />
         </div>
-        {mode === 'builder' ? (
-          <Group align="flex-end" gap="sm" wrap="wrap">
-            <Select
-              label="Sender (your side)"
-              description="Who signs the sender fields you place."
-              data={[
-                { value: 'owner', label: 'Deal owner (sales rep)' },
-                { value: 'user', label: 'A specific user' },
-              ]}
-              value={party2Source}
-              onChange={(v) => setParty2Source((v as 'owner' | 'user') ?? 'owner')}
-              allowDeselect={false}
-              w={220}
-            />
-            {party2Source === 'user' && (
-              <Select label="Workspace user" placeholder="Pick a user" data={userOptions} value={party2UserId} onChange={setParty2UserId} searchable nothingFoundMessage="No users" w={220} />
-            )}
-          </Group>
-        ) : (
-          <Group align="flex-end" gap="sm" wrap="wrap">
-            <Select
-              label="Second signer"
-              description="The client (primary contact) always signs first."
-              data={[
-                { value: 'none', label: 'Client signs alone' },
-                { value: 'owner', label: 'Deal owner (sales rep)' },
-                { value: 'user', label: 'A specific user' },
-              ]}
-              value={parties === 'one' ? 'none' : party2Source}
-              onChange={(v) => {
-                if (v === 'none') setParties('one');
-                else {
-                  setParties('both');
-                  setParty2Source(v as 'owner' | 'user');
-                }
-              }}
-              allowDeselect={false}
-              w={220}
-            />
-            {parties === 'both' && party2Source === 'user' && (
-              <Select label="Workspace user" placeholder="Pick a user" data={userOptions} value={party2UserId} onChange={setParty2UserId} searchable nothingFoundMessage="No users" w={220} />
-            )}
-          </Group>
-        )}
+        <Group align="flex-end" gap="sm" wrap="wrap">
+          <Select
+            label="Signed by"
+            description="Who signs — the client alone, or the client plus a second party."
+            data={[
+              { value: 'none', label: 'Client only' },
+              { value: 'owner', label: 'Both — deal owner (sales rep)' },
+              { value: 'user', label: 'Both — a specific user' },
+            ]}
+            value={parties === 'one' ? 'none' : party2Source}
+            onChange={(v) => {
+              if (v === 'none') setParties('one');
+              else {
+                setParties('both');
+                setParty2Source(v as 'owner' | 'user');
+              }
+            }}
+            allowDeselect={false}
+            w={260}
+          />
+          {parties === 'both' && party2Source === 'user' && (
+            <Select label="Workspace user" placeholder="Pick a user" data={userOptions} value={party2UserId} onChange={setParty2UserId} searchable nothingFoundMessage="No users" w={220} />
+          )}
+        </Group>
       </Group>
 
       {mode === 'builder' && (
         <Text size="xs" c="dimmed">
-          Place <strong>Signature / Initials / Date</strong> fields on the page and assign each to <strong>Client</strong> or <strong>Sender</strong>. If you place no sender field, only the client signs.
+          Drag <strong>Client fields</strong> onto the page{parties === 'both' ? ' — and, since both parties sign, place ' : ''}
+          {parties === 'both' ? <strong>Sender fields</strong> : ''}
+          {parties === 'both' ? ' for your side too.' : '. Choose “Both” above to also place Sender fields.'}
         </Text>
       )}
 
@@ -255,7 +236,7 @@ export default function DocumentTemplateEditor() {
       )}
 
       {mode === 'builder' ? (
-        <BuilderMode pages={pages} onPages={setPages} theme={theme} onTheme={setTheme} />
+        <BuilderMode pages={pages} onPages={setPages} theme={theme} onTheme={setTheme} senderFields={parties === 'both'} />
       ) : mode === 'upload' ? (
         <UploadMode fileKey={fileKey} onFileKey={setFileKey} fields={fields} onFields={setFields} />
       ) : (
@@ -271,11 +252,13 @@ function BuilderMode({
   onPages,
   theme,
   onTheme,
+  senderFields,
 }: {
   pages: CanvasPage[];
   onPages: (p: CanvasPage[]) => void;
   theme: ProposalTheme;
   onTheme: (t: ProposalTheme) => void;
+  senderFields: boolean;
 }) {
   const { data: meta } = useProposalMeta();
   const { data: variables = [] } = useTemplateVariables();
@@ -321,6 +304,7 @@ function BuilderMode({
       onPreviewDealChange={setPreviewDealId}
       previewCtx={previewCtx}
       signatureFields
+      senderFields={senderFields}
     />
   );
 }
