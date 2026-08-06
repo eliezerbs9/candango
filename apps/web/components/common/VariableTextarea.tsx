@@ -3,8 +3,9 @@
 import { useRef, useState, type RefObject } from 'react';
 import { Paper, Portal, Text, Textarea, type TextareaProps } from '@mantine/core';
 import { VariablePalette, type PaletteVariable } from './VariablePalette';
+import { variableTrigger, variableToken } from '@/lib/variableInsert';
 
-type Menu = { items: PaletteVariable[]; index: number; from: number; to: number; left: number; top: number };
+type Menu = { items: PaletteVariable[]; index: number; from: number; to: number; bare: boolean; left: number; top: number };
 
 /**
  * A multi-line Textarea with the same `{`/`{{` variable autocomplete as {@link VariableTextInput},
@@ -36,10 +37,9 @@ export function VariableTextarea({
     if (!el) return;
     const text = el.value;
     const caret = el.selectionStart ?? text.length;
-    const before = text.slice(0, caret);
-    const m = /\{{1,2}([\w.]*)$/.exec(before);
-    if (!m) return setMenu(null);
-    const q = m[1].toLowerCase();
+    const trig = variableTrigger(text.slice(0, caret), text.slice(caret));
+    if (!trig) return setMenu(null);
+    const q = trig.query.toLowerCase();
     const items = variables.filter((v) => v.key.toLowerCase().includes(q) || v.label.toLowerCase().includes(q)).slice(0, 8);
     if (!items.length) return setMenu(null);
     const rect = el.getBoundingClientRect();
@@ -47,13 +47,13 @@ export function VariableTextarea({
     const estH = Math.min(items.length, 8) * 40 + 8;
     const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
     const top = rect.bottom + estH + 8 <= window.innerHeight ? rect.bottom + 4 : Math.max(8, rect.top - estH - 4);
-    setMenu({ items, index: 0, from: caret - m[0].length, to: caret, left, top });
+    setMenu({ items, index: 0, from: trig.from, to: caret, bare: trig.bare, left, top });
   };
 
-  const replaceRange = (from: number, to: number, key: string) => {
+  const replaceRange = (from: number, to: number, key: string, bare: boolean) => {
     const el = ref.current;
     const cur = el?.value ?? value;
-    const token = `{{${key}}}`;
+    const token = variableToken(key, bare);
     onChange(cur.slice(0, from) + token + cur.slice(to));
     requestAnimationFrame(() => {
       el?.focus();
@@ -64,7 +64,7 @@ export function VariableTextarea({
 
   const accept = (v: PaletteVariable) => {
     if (!menu) return;
-    replaceRange(menu.from, menu.to, v.key);
+    replaceRange(menu.from, menu.to, v.key, menu.bare);
     setMenu(null);
   };
 
@@ -73,7 +73,9 @@ export function VariableTextarea({
     const cur = el?.value ?? value;
     const start = el?.selectionStart ?? cur.length;
     const end = el?.selectionEnd ?? cur.length;
-    replaceRange(start, end, key);
+    // A palette click while the caret sits inside a {{ … }} inserts just the key (no extra braces).
+    const bare = variableTrigger(cur.slice(0, start), cur.slice(end))?.bare ?? false;
+    replaceRange(start, end, key, bare);
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {

@@ -39,6 +39,12 @@ export class SignaturesController {
     return this.svc.resend(u.orgId, id);
   }
 
+  /** Void a pending request (cancels it in Documenso) and keep it as a voided record. */
+  @Post(':id/void')
+  void(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.void(u.orgId, id);
+  }
+
   @Delete(':id')
   @HttpCode(204)
   remove(@CurrentUser() u: AuthContext, @Param('id') id: string) {

@@ -338,7 +338,8 @@ export function buildTemplateContext(src: TemplateContextSources): Record<string
   return {
     'contact.first_name': p.firstName ?? '',
     'contact.last_name': p.lastName ?? '',
-    'contact.name': p.name ?? [p.firstName, p.lastName].filter(Boolean).join(' ').trim(),
+    // "First Last" for rendered content (documents/emails), regardless of the workspace display format.
+    'contact.name': [p.firstName, p.lastName].filter(Boolean).join(' ').trim() || p.name || '',
     'contact.email': firstJsonValue(p.emails),
     'contact.phone': firstJsonValue(p.phones),
     'company.name': src.company?.name ?? '',
@@ -352,7 +353,8 @@ export function buildTemplateContext(src: TemplateContextSources): Record<string
     // Signature signers — the people filling each signing role (chosen at send).
     'customer.first_name': c.firstName ?? '',
     'customer.last_name': c.lastName ?? '',
-    'customer.name': c.name ?? [c.firstName, c.lastName].filter(Boolean).join(' ').trim(),
+    // Always "First Last" on a document — never the workspace display format (which may be "Last, First").
+    'customer.name': [c.firstName, c.lastName].filter(Boolean).join(' ').trim() || c.name || '',
     'customer.email': firstJsonValue(c.emails),
     'customer.phone': firstJsonValue(c.phones),
     'customer.title': c.title ?? '',
@@ -366,8 +368,12 @@ export function buildTemplateContext(src: TemplateContextSources): Record<string
  * missing values collapse to an empty string so partial context never leaks `{{...}}`.
  */
 export function renderTemplate(text: string, ctx: Record<string, string>): string {
-  return text.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
-    if (!VALID_KEYS.has(key)) return '';
-    return ctx[key] ?? '';
+  // Supports an `or` fallback chain — `{{company.name or contact.name}}` renders the first VALID key
+  // that has a non-empty value (e.g. the company for a B2B deal, else the contact's name).
+  return text.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, expr: string) => {
+    for (const key of expr.split(/\s+or\s+/i).map((k) => k.trim())) {
+      if (VALID_KEYS.has(key) && ctx[key]) return ctx[key];
+    }
+    return '';
   });
 }

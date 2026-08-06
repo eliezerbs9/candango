@@ -38,11 +38,12 @@ export class DocumensoService {
       headers: { Authorization: this.key, 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     });
+    const text = await res.text().catch(() => '');
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
       throw new BadRequestException(`Documenso ${res.status}: ${text.slice(0, 300)}`);
     }
-    return (await res.json()) as Record<string, unknown>;
+    // DELETE / send return empty (204) bodies — don't treat "no JSON" as an error.
+    return text ? (JSON.parse(text) as Record<string, unknown>) : {};
   }
 
   /**
@@ -124,9 +125,23 @@ export class DocumensoService {
     await this.req('POST', `/api/v1/documents/${documentId}/resend`, { recipients: [] });
   }
 
-  /** Delete/void a document. */
+  /**
+   * VOID a document — cancels it (status → CANCELLED, kept as a record; recipients are notified). Uses
+   * the v2 envelope API: resolve the envelope id from the legacy document id, then cancel the envelope.
+   */
+  async voidDocument(documentId: number, reason = 'Voided'): Promise<void> {
+    const doc = await this.req('GET', `/api/v2/document/${documentId}`);
+    const envelopeId = doc.envelopeId as string | undefined;
+    if (!envelopeId) throw new BadRequestException('Could not resolve the envelope id to cancel.');
+    await this.req('POST', `/api/v2/envelope/cancel`, { envelopeId, reason });
+  }
+
+  /**
+   * DELETE a document — removes it entirely. Uses the **v2** endpoint: the v1 `DELETE /documents/{id}`
+   * is broken on current Documenso (500). A pending doc is hard-deleted and recipients are notified.
+   */
   async deleteDocument(documentId: number): Promise<void> {
-    await this.req('DELETE', `/api/v1/documents/${documentId}`);
+    await this.req('POST', `/api/v2/document/delete`, { documentId });
   }
 
   /** Pull the completed/signed PDF (S3 transport) — a presigned download URL, then the bytes. */

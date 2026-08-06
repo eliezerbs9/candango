@@ -94,6 +94,8 @@ import {
 } from './email-templates';
 import {
   getEmailAutomations,
+  getAutomationSeedStatus,
+  seedAutomationRecipes,
   getAutomationTriggers,
   getAutomationCategories,
   createEmailAutomation,
@@ -125,7 +127,7 @@ import {
   updateCustomField,
 } from './customFields';
 import { getFileUrl, getUploadStatus, uploadFile } from './uploads';
-import { createSignature, deleteSignature, generateSignature, getDealSignatures, resendSignature, type GenerateSignatureBody, type SignatureBody } from './signatures';
+import { createSignature, deleteSignature, generateSignature, getDealSignatures, resendSignature, voidSignature, type GenerateSignatureBody, type SignatureBody } from './signatures';
 import {
   createSignatureTemplate,
   deleteSignatureTemplate,
@@ -135,9 +137,12 @@ import {
   type SignatureTemplateBody,
 } from './signature-templates';
 import {
+  createDealDocFromTemplate,
   createSignableDocument,
   deleteSignableDocument,
+  duplicateDealDoc,
   duplicateSignableDocument,
+  getDealDocuments,
   getSignableDocument,
   getSignableDocuments,
   updateSignableDocument,
@@ -924,6 +929,24 @@ export function useEmailAutomations() {
   return useQuery({ queryKey: ['email-automations'], queryFn: () => getEmailAutomations(token!), enabled: !!token });
 }
 
+export function useAutomationSeedStatus() {
+  const token = useToken();
+  return useQuery({ queryKey: ['automation-seed-status'], queryFn: () => getAutomationSeedStatus(token!), enabled: !!token });
+}
+
+/** Add the starter-kit automations; refreshes the list + the seed-status (button hides when done). */
+export function useSeedAutomations() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => seedAutomationRecipes(token!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['email-automations'] });
+      qc.invalidateQueries({ queryKey: ['automation-seed-status'] });
+    },
+  });
+}
+
 export function useAutomationTriggers() {
   const token = useToken();
   return useQuery({
@@ -1329,6 +1352,15 @@ export function useDeleteSignature(dealId: string) {
   });
 }
 
+export function useVoidSignature(dealId: string) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => voidSignature(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['signatures', dealId] }),
+  });
+}
+
 export function useSignatureTemplates() {
   const token = useToken();
   return useQuery({ queryKey: ['signature-templates'], queryFn: () => getSignatureTemplates(token!), enabled: !!token });
@@ -1380,12 +1412,21 @@ export function useSignableDocument(id: string | null) {
   return useQuery({ queryKey: ['signable-document', id], queryFn: () => getSignableDocument(token!, id!), enabled: !!token && !!id });
 }
 
+/** One-off documents drafted for a deal (shown on its Signatures tab), separate from the reusable templates list. */
+export function useDealDocuments(dealId: string | null) {
+  const token = useToken();
+  return useQuery({ queryKey: ['deal-documents', dealId], queryFn: () => getDealDocuments(token!, dealId!), enabled: !!token && !!dealId });
+}
+
 export function useCreateSignableDocument() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: SignableDocumentBody) => createSignableDocument(token!, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['signable-documents'] }),
+    onSuccess: (_d, body) => {
+      qc.invalidateQueries({ queryKey: ['signable-documents'] });
+      if (body.dealId) qc.invalidateQueries({ queryKey: ['deal-documents', body.dealId] });
+    },
   });
 }
 
@@ -1406,7 +1447,10 @@ export function useDeleteSignableDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteSignableDocument(token!, id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['signable-documents'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['signable-documents'] });
+      qc.invalidateQueries({ queryKey: ['deal-documents'] });
+    },
   });
 }
 
@@ -1419,12 +1463,34 @@ export function useDuplicateSignableDocument() {
   });
 }
 
+export function useCreateDealDocFromTemplate() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dealId }: { id: string; dealId: string }) => createDealDocFromTemplate(token!, id, dealId),
+    onSuccess: (_d, { dealId }) => qc.invalidateQueries({ queryKey: ['deal-documents', dealId] }),
+  });
+}
+
+/** Duplicate a deal document (draft or a sent request's source canvas) into a new deal draft. */
+export function useDuplicateDealDoc() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => duplicateDealDoc(token!, id),
+    onSuccess: (d) => qc.invalidateQueries({ queryKey: ['deal-documents', d.dealId] }),
+  });
+}
+
 export function useGenerateSignature() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: GenerateSignatureBody) => generateSignature(token!, body),
-    onSuccess: (_d, body) => qc.invalidateQueries({ queryKey: ['signatures', body.dealId] }),
+    onSuccess: (_d, body) => {
+      qc.invalidateQueries({ queryKey: ['signatures', body.dealId] });
+      qc.invalidateQueries({ queryKey: ['deal-documents', body.dealId] }); // sent draft is archived → drop it from Drafts
+    },
   });
 }
 

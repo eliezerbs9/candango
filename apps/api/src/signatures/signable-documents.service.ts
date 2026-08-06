@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSignableDocumentDto, UpdateSignableDocumentDto } from './dto/signable-document.dto';
 
@@ -47,6 +47,12 @@ export class SignableDocumentsService {
   /** Reusable templates only — one-off deal documents (dealId set) are excluded. */
   async list(orgId: string) {
     const rows = await this.prisma.signableDocumentTemplate.findMany({ where: { orgId, dealId: null, archivedAt: null }, orderBy: { createdAt: 'asc' } });
+    return rows.map(shape);
+  }
+
+  /** One-off documents drafted for a specific deal (newest first) — shown on the deal's Signatures tab. */
+  async listForDeal(orgId: string, dealId: string) {
+    const rows = await this.prisma.signableDocumentTemplate.findMany({ where: { orgId, dealId, archivedAt: null }, orderBy: { createdAt: 'desc' } });
     return rows.map(shape);
   }
 
@@ -106,6 +112,81 @@ export class SignableDocumentsService {
     return shape(row);
   }
 
+  /** Copy a reusable template into a one-off document for a deal (opened in the builder, sent from there). */
+  async duplicateForDeal(orgId: string, userId: string, id: string, dealId: string) {
+    const src = await this.get(orgId, id);
+    const row = await this.prisma.signableDocumentTemplate.create({
+      data: {
+        orgId,
+        createdByUserId: userId,
+        dealId,
+        name: src.name,
+        mode: src.mode,
+        parties: src.parties,
+        party2Source: src.party2Source,
+        party2UserId: src.party2UserId,
+        initialsRule: src.initialsRule,
+        initialsPages: src.initialsPages as object,
+        initialsParty: src.initialsParty,
+        bodyHtml: src.bodyHtml,
+        layout: src.layout as object,
+        theme: src.theme as object,
+        fileKey: src.fileKey,
+        fields: src.fields as object,
+      },
+    });
+    return shape(row);
+  }
+
+  /** A name unique within the deal: "Doc" → "Doc (2)" → "Doc (3)". Considers drafts + sent request titles. */
+  private async dedupeName(orgId: string, dealId: string, name: string): Promise<string> {
+    const root = name.replace(/\s*\(\d+\)\s*$/, '').trim() || 'Untitled document';
+    const [drafts, reqs] = await Promise.all([
+      this.prisma.signableDocumentTemplate.findMany({ where: { orgId, dealId, archivedAt: null }, select: { name: true } }),
+      this.prisma.signatureRequest.findMany({ where: { orgId, dealId }, select: { title: true } }),
+    ]);
+    const esc = root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`^${esc}(?:\\s*\\((\\d+)\\))?$`);
+    let maxN = 0;
+    for (const nm of [...drafts.map((d) => d.name), ...reqs.map((r) => r.title)]) {
+      const m = re.exec(nm.trim());
+      if (m) maxN = Math.max(maxN, m[1] ? parseInt(m[1], 10) : 1);
+    }
+    return `${root} (${maxN + 1})`;
+  }
+
+  /**
+   * Duplicate a deal document (a draft, or the archived pre-PDF source of a sent request) into a NEW
+   * deal draft with a deduped name — the copy is the canvas builder state, never the flattened/signed PDF.
+   */
+  async duplicateDealDoc(orgId: string, userId: string, id: string) {
+    const src = await this.prisma.signableDocumentTemplate.findFirst({ where: { id, orgId } }); // may be archived (a sent doc's source)
+    if (!src) throw new NotFoundException('Document not found');
+    if (!src.dealId) throw new BadRequestException('Only a deal document can be duplicated here.');
+    const name = await this.dedupeName(orgId, src.dealId, src.name);
+    const row = await this.prisma.signableDocumentTemplate.create({
+      data: {
+        orgId,
+        createdByUserId: userId,
+        dealId: src.dealId,
+        name,
+        mode: src.mode,
+        parties: src.parties,
+        party2Source: src.party2Source,
+        party2UserId: src.party2UserId,
+        initialsRule: src.initialsRule,
+        initialsPages: src.initialsPages as object,
+        initialsParty: src.initialsParty,
+        bodyHtml: src.bodyHtml,
+        layout: src.layout as object,
+        theme: src.theme as object,
+        fileKey: src.fileKey,
+        fields: src.fields as object,
+      },
+    });
+    return shape(row);
+  }
+
   /** Copy a template into a new "(copy)" — same content, parties, fields and options. */
   async duplicate(orgId: string, userId: string, id: string) {
     const src = await this.get(orgId, id);
@@ -131,8 +212,10 @@ export class SignableDocumentsService {
     return shape(row);
   }
 
-  async remove(orgId: string, id: string) {
-    await this.get(orgId, id);
+  async remove(orgId: string, id: string, role?: string) {
+    const row = await this.get(orgId, id);
+    // Deleting a deal's draft document is a privileged action — only an Admin may do it.
+    if (row.dealId && role !== 'Admin') throw new ForbiddenException('Only an admin can delete a draft document.');
     await this.prisma.signableDocumentTemplate.update({ where: { id }, data: { archivedAt: new Date() } });
   }
 }

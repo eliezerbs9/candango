@@ -15,11 +15,12 @@ import {
   SimpleGrid,
   Stack,
   Text,
+  Textarea,
   TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconArrowLeft, IconDots, IconLink, IconPlus, IconSend, IconTrash } from '@tabler/icons-react';
+import { IconArrowLeft, IconChevronDown, IconDots, IconLink, IconPlus, IconPrinter, IconSend, IconTrash } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import {
   useCreateProposal,
@@ -27,8 +28,10 @@ import {
   useDealEstimates,
   useDealProposals,
   useDeleteProposal,
+  useFileUrls,
   useOrganization,
   useProposalMeta,
+  useProposalPreviewData,
   useProposalRender,
   useProposalTemplates,
   useSendProposal,
@@ -92,22 +95,56 @@ const STATUS_COLOR: Record<ProposalStatus, string> = {
   deferred: 'yellow',
 };
 
+const STATUS_LABEL: Record<ProposalStatus, string> = {
+  draft: 'Draft',
+  sent: 'Sent',
+  viewed: 'Viewed',
+  accepted: 'Accepted',
+  denied: 'Declined',
+  deferred: 'Deferred',
+};
+const STATUS_OPTIONS: ProposalStatus[] = ['draft', 'sent', 'viewed', 'accepted', 'denied', 'deferred'];
+
 export function DealProposals({ dealId }: { dealId: string }) {
   const [selected, setSelected] = useState<string | null>(null);
   if (selected) return <ProposalBuilder id={selected} onBack={() => setSelected(null)} />;
   return <ProposalList dealId={dealId} onOpen={setSelected} />;
 }
 
+const isCanvasPage = (p: unknown): p is CanvasPage => !!p && Array.isArray((p as CanvasPage).elements);
+
+/** Fixed file keys on a proposal's FIRST page — imported page background + uploaded image element files. */
+function firstPageFileKeys(content: unknown): string[] {
+  const page = (Array.isArray(content) ? content : []).find(isCanvasPage);
+  if (!page) return [];
+  const keys: string[] = [];
+  if (page.background) keys.push(page.background);
+  for (const el of page.elements) {
+    if ((el.props as { source?: string })?.source !== 'fixed') continue;
+    const files = (el.props as { files?: { key?: string }[] })?.files;
+    if (Array.isArray(files)) for (const f of files) if (f?.key) keys.push(f.key);
+  }
+  return keys;
+}
+
 function ProposalList({ dealId, onOpen }: { dealId: string; onOpen: (id: string) => void }) {
   const { data: proposals = [], isLoading } = useDealProposals(dealId);
   const { data: variables = [] } = useTemplateVariables();
   const { data: org } = useOrganization();
+  const { data: preview } = useProposalPreviewData(dealId); // real deal data (contact, company, images) for the thumbnails
   const del = useDeleteProposal();
   const [opened, ctl] = useDisclosure(false);
-  const thumbCtx = useMemo(
-    () => buildPreviewCtx(Object.fromEntries(variables.map((v) => [v.key, v.example])), {}, org?.logoUrl),
-    [variables, org?.logoUrl],
-  );
+  // Page-backgrounds (imported PDF pages) aren't in preview.fixedFilesByKey — presign them separately.
+  const fixedKeys = useMemo(() => Array.from(new Set(proposals.flatMap((p) => firstPageFileKeys(p.content)))), [proposals]);
+  const fileUrlByKey = useFileUrls(fixedKeys);
+  // Render thumbnails against the REAL deal (actual contact name, images, pricing); fall back to example data while it loads.
+  const thumbCtx = useMemo(() => {
+    if (preview) {
+      const base = buildDealCtx(preview);
+      return { ...base, fileUrl: (k: string) => base.fileUrl(k) ?? fileUrlByKey[k] };
+    }
+    return buildPreviewCtx(Object.fromEntries(variables.map((v) => [v.key, v.example])), fileUrlByKey, org?.logoUrl);
+  }, [preview, variables, fileUrlByKey, org?.logoUrl]);
 
   const remove = (p: Proposal) => {
     if (!window.confirm(`Delete proposal "${p.title}"?`)) return;
@@ -276,6 +313,30 @@ function ProposalBuilder({ id, onBack }: { id: string; onBack: () => void }) {
   const [pages, setPages] = useState<CanvasPage[]>([]);
   const [theme, setTheme] = useState<ProposalTheme | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [reasonFor, setReasonFor] = useState<ProposalStatus | null>(null); // open reason modal for denied/deferred
+  const [reason, setReason] = useState('');
+
+  // Change the proposal status. Declining/deferring asks for a required reason first.
+  const changeStatus = (s: ProposalStatus) => {
+    if (!data || s === data.status) return;
+    if (s === 'denied' || s === 'deferred') {
+      setReason('');
+      setReasonFor(s);
+      return;
+    }
+    update.mutate({ id, body: { status: s } }, { onSuccess: () => notifications.show({ message: `Marked ${STATUS_LABEL[s].toLowerCase()}`, color: 'green' }), onError: fail });
+  };
+  const submitReason = () => {
+    if (!reasonFor) return;
+    if (!reason.trim()) {
+      notifications.show({ message: 'Add a reason', color: 'red' });
+      return;
+    }
+    update.mutate(
+      { id, body: { status: reasonFor, feedback: reason.trim() } },
+      { onSuccess: () => { notifications.show({ message: `Marked ${STATUS_LABEL[reasonFor].toLowerCase()}`, color: 'green' }); setReasonFor(null); }, onError: fail },
+    );
+  };
 
   // Hydrate local editor state once; later render refetches (fresh pricing/images) must not clobber edits.
   useEffect(() => {
@@ -327,11 +388,31 @@ function ProposalBuilder({ id, onBack }: { id: string; onBack: () => void }) {
         </Button>
         <Group gap="xs">
           <SaveStatus status={status} />
-          <Badge variant="light" color={STATUS_COLOR[data.status]} style={{ textTransform: 'none' }}>
-            {data.status}
-          </Badge>
+          <Menu withinPortal position="bottom-end" shadow="md">
+            <Menu.Target>
+              <Badge
+                variant="light"
+                color={STATUS_COLOR[data.status]}
+                rightSection={<IconChevronDown size={12} />}
+                style={{ textTransform: 'none', cursor: 'pointer' }}
+              >
+                {STATUS_LABEL[data.status]}
+              </Badge>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Label>Set status</Menu.Label>
+              {STATUS_OPTIONS.map((s) => (
+                <Menu.Item key={s} disabled={s === data.status} onClick={() => changeStatus(s)}>
+                  {STATUS_LABEL[s]}
+                </Menu.Item>
+              ))}
+            </Menu.Dropdown>
+          </Menu>
           <Button size="xs" variant="default" leftSection={<IconLink size={14} />} onClick={copyLink}>
             Copy link
+          </Button>
+          <Button size="xs" variant="default" leftSection={<IconPrinter size={14} />} component="a" href={`/print/proposal/${data.dealId}/${id}`} target="_blank">
+            Print
           </Button>
           <Button size="xs" variant="default" leftSection={<IconSend size={14} />} onClick={send} loading={sendMut.isPending}>
             Send
@@ -370,6 +451,24 @@ function ProposalBuilder({ id, onBack }: { id: string; onBack: () => void }) {
         documentFilesByField={data.documentsByField}
         enforceLocks
       />
+
+      <Modal opened={!!reasonFor} onClose={() => setReasonFor(null)} title={reasonFor === 'denied' ? 'Decline proposal' : 'Defer proposal'} centered>
+        <Stack>
+          <Textarea
+            label="Reason"
+            description="Recorded on the deal timeline and used by automations."
+            required
+            autosize
+            minRows={3}
+            value={reason}
+            onChange={(e) => setReason(e.currentTarget.value)}
+            placeholder={reasonFor === 'denied' ? 'Why was it declined?' : 'Why is the decision deferred, and until when?'}
+          />
+          <Button onClick={submitReason} loading={update.isPending}>
+            Mark {reasonFor ? STATUS_LABEL[reasonFor].toLowerCase() : ''}
+          </Button>
+        </Stack>
+      </Modal>
     </Stack>
   );
 }

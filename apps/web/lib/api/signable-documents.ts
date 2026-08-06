@@ -41,8 +41,19 @@ export interface SignableDocumentBody {
   fields?: DrawnField[];
 }
 
+/** True when the builder layout has at least one signature or initials field — required before sending. */
+export function hasSigningField(layout: unknown): boolean {
+  const pages = (Array.isArray(layout) ? layout : []) as { elements?: { type?: string; props?: { fieldType?: string } }[] }[];
+  return pages.some((p) => (p.elements ?? []).some((el) => el?.type === 'field' && (el.props?.fieldType === 'signature' || el.props?.fieldType === 'initials')));
+}
+
 export function getSignableDocuments(token: string) {
   return apiFetch<SignableDocumentTemplate[]>('/signable-documents', { token });
+}
+
+/** One-off documents drafted for a deal (not the reusable templates) — shown on the deal's Signatures tab. */
+export function getDealDocuments(token: string, dealId: string) {
+  return apiFetch<SignableDocumentTemplate[]>(`/signable-documents?dealId=${encodeURIComponent(dealId)}`, { token });
 }
 
 export function getSignableDocument(token: string, id: string) {
@@ -63,4 +74,14 @@ export function deleteSignableDocument(token: string, id: string) {
 
 export function duplicateSignableDocument(token: string, id: string) {
   return apiFetch<SignableDocumentTemplate>(`/signable-documents/${id}/duplicate`, { method: 'POST', token });
+}
+
+/** Copy a reusable template into a one-off document for a deal (edited in the builder, then sent). */
+export function createDealDocFromTemplate(token: string, id: string, dealId: string) {
+  return apiFetch<SignableDocumentTemplate>(`/signable-documents/${id}/for-deal`, { method: 'POST', token, body: JSON.stringify({ dealId }) });
+}
+
+/** Duplicate a deal document (a draft, or a sent request's pre-PDF source) into a new deal draft. */
+export function duplicateDealDoc(token: string, id: string) {
+  return apiFetch<SignableDocumentTemplate>(`/signable-documents/${id}/duplicate-in-deal`, { method: 'POST', token });
 }

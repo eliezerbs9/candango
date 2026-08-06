@@ -1090,7 +1090,7 @@ function ElementSettings({
           <Text size="xs" fw={500} mb={4}>
             Text
           </Text>
-          <RichTextBody value={(el.props.html as string) ?? ''} onChange={(html) => onProp('html', html)} minHeight={120} variables={variables} />
+          <RichTextBody value={(el.props.html as string) ?? ''} onChange={(html) => onProp('html', html)} minHeight={120} maxHeight={280} variables={variables} />
           <Group gap="xs" mt="xs" align="flex-end">
             <div style={{ flex: 1 }}>
               <Text size="xs" fw={500} mb={2}>

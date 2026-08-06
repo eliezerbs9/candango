@@ -37,6 +37,7 @@ model Organization {
   emailSignature  Json?     // configurable email signature { photo, name, email, phone, logo, text } — null = default
   taxRateBps      Int      @default(0) // sales-tax rate for LOCAL estimates, in basis points (700 = 7.00%); 0 = no tax
   taxDefaultOn    Boolean  @default(false) // pre-select "apply tax" when creating a new estimate/invoice
+  seededAutomationGroups String[] @default([]) // starter-kit recipe groups already seeded (core|gmail|quickbooks) — each seeds at most once
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   deletedAt       DateTime?
@@ -946,6 +947,7 @@ model SignatureRequest {
   title                String
   status               String    @default("draft") // draft | sent | viewed | signed | declined | expired
   signatureTemplateId  String? // optional SignatureTemplate whose field rules were applied
+  signableDocumentTemplateId String? // the deal builder doc it was generated from — its pre-PDF canvas, kept for duplication
   drawnFields          Json      @default("[]") // per-request visually-placed fields (Phase 3)
   recipients           Json      @default("[]") // [{ email, name, owner, signingUrl, signed }] — signers + links + status
   hasInitials          Boolean   @default(false) // whether the request includes an initials field

@@ -2,9 +2,10 @@
 
 import { useRef, useState, type RefObject } from 'react';
 import { Paper, Portal, Text, TextInput, type TextInputProps } from '@mantine/core';
+import { variableTrigger, variableToken } from '@/lib/variableInsert';
 
 type Var = { key: string; label: string };
-type Menu = { items: Var[]; index: number; from: number; to: number; left: number; top: number };
+type Menu = { items: Var[]; index: number; from: number; to: number; bare: boolean; left: number; top: number };
 
 /**
  * A TextInput with the same `{`/`{{` variable autocomplete as the rich-text body — for single-line
@@ -31,10 +32,9 @@ export function VariableTextInput({
     if (!el) return;
     const text = el.value;
     const caret = el.selectionStart ?? text.length;
-    const before = text.slice(0, caret);
-    const m = /\{{1,2}([\w.]*)$/.exec(before);
-    if (!m) return setMenu(null);
-    const q = m[1].toLowerCase();
+    const trig = variableTrigger(text.slice(0, caret), text.slice(caret));
+    if (!trig) return setMenu(null);
+    const q = trig.query.toLowerCase();
     const items = variables.filter((v) => v.key.toLowerCase().includes(q) || v.label.toLowerCase().includes(q)).slice(0, 8);
     if (!items.length) return setMenu(null);
     const rect = el.getBoundingClientRect();
@@ -42,14 +42,14 @@ export function VariableTextInput({
     const estH = Math.min(items.length, 8) * 40 + 8;
     const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
     const top = rect.bottom + estH + 8 <= window.innerHeight ? rect.bottom + 4 : Math.max(8, rect.top - estH - 4);
-    setMenu({ items, index: 0, from: caret - m[0].length, to: caret, left, top });
+    setMenu({ items, index: 0, from: trig.from, to: caret, bare: trig.bare, left, top });
   };
 
   const accept = (v: Var) => {
     if (!menu) return;
     const el = ref.current;
     const cur = el?.value ?? value;
-    const token = `{{${v.key}}}`;
+    const token = variableToken(v.key, menu.bare);
     const next = cur.slice(0, menu.from) + token + cur.slice(menu.to);
     onChange(next);
     setMenu(null);

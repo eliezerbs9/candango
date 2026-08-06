@@ -44,7 +44,7 @@ export class ProposalsController {
 
   @Patch(':id')
   update(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() dto: UpdateProposalDto) {
-    return this.svc.update(u.orgId, id, dto);
+    return this.svc.update(u.orgId, id, dto, u.userId);
   }
 
   @Delete(':id')

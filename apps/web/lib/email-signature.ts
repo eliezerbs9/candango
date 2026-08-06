@@ -100,9 +100,15 @@ export function renderSignatureHtml(html: string, values: Record<string, string>
   });
 }
 
+/** Split a placeholder expression into its `or`-fallback keys (`a or b` → ['a','b']). */
+const varKeys = (expr: string): string[] => expr.split(/\s+or\s+/i).map((k) => k.trim());
+
 /** Replace `{{key}}` placeholders (for previewing a template body with example/real values). */
 export function renderVars(html: string, values: Record<string, string>): string {
-  return html.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, k: string) => values[k] ?? '');
+  return html.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_m, expr: string) => {
+    for (const k of varKeys(expr)) if (values[k]) return values[k];
+    return '';
+  });
 }
 
 const CHIP_STYLE =
@@ -118,10 +124,11 @@ export function renderPreview(
   realValues: Record<string, string>,
   labelByKey: Record<string, string>,
 ): string {
-  return html.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key: string) => {
-    const real = realValues[key];
-    if (real) return escapeHtml(real);
-    return `<span style="${CHIP_STYLE}">${escapeHtml(labelByKey[key] ?? key)}</span>`;
+  return html.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_m, expr: string) => {
+    const keys = varKeys(expr);
+    for (const key of keys) if (realValues[key]) return escapeHtml(realValues[key]);
+    const labelled = keys.find((k) => labelByKey[k]) ?? keys[0] ?? '';
+    return `<span style="${CHIP_STYLE}">${escapeHtml(labelByKey[labelled] ?? labelled)}</span>`;
   });
 }
 
@@ -131,5 +138,10 @@ export function renderPreviewText(
   realValues: Record<string, string>,
   labelByKey: Record<string, string>,
 ): string {
-  return text.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key: string) => realValues[key] ?? labelByKey[key] ?? key);
+  return text.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_m, expr: string) => {
+    const keys = varKeys(expr);
+    for (const key of keys) if (realValues[key]) return realValues[key];
+    const labelled = keys.find((k) => labelByKey[k]) ?? keys[0] ?? '';
+    return labelByKey[labelled] ?? labelled;
+  });
 }

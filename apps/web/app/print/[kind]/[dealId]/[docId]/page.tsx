@@ -1,12 +1,73 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
-import { useDeal, useDealEstimates, useDealInvoices, useOrganization } from '@/lib/api/hooks';
+import { useDeal, useDealEstimates, useDealInvoices, useOrganization, useProposalRender } from '@/lib/api/hooks';
 import type { DealDoc } from '@/lib/api/types';
+import type { ProposalTheme } from '@/lib/api/proposals';
+import { toCanvasPages } from '@/components/proposals/ProposalCanvasEditor';
+import { ElementView } from '@/components/proposals/ProposalRenderer';
+import { PageSurface } from '@/components/proposals/PageSurface';
+import { buildDealCtx } from '@/components/proposals/dealCtx';
 
 function money(v: number, currency: string) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(v / 100);
+}
+
+/** Print a proposal: each canvas page on its own sheet (same rendering as the presentation link). */
+function ProposalPrint({ id }: { id: string }) {
+  const { data } = useProposalRender(id);
+  const ctx = useMemo(() => (data ? buildDealCtx(data) : null), [data]);
+  const theme: ProposalTheme | null = data ? { orientation: 'portrait', ...data.theme } : null;
+  const pages = useMemo(() => (data ? toCanvasPages(data.content) : []), [data]);
+
+  useEffect(() => {
+    if (data && ctx) {
+      const t = setTimeout(() => window.print(), 500);
+      return () => clearTimeout(t);
+    }
+  }, [data, ctx]);
+
+  if (!data || !ctx || !theme) return <div style={{ padding: 40, fontFamily: 'Inter, sans-serif' }}>Loading…</div>;
+
+  return (
+    <div className="pdoc">
+      <style>{`
+        body { background: #fff; margin: 0; }
+        .pdoc { max-width: 760px; margin: 0 auto; }
+        .toolbar { padding: 12px 0; }
+        .ppage { position: relative; box-shadow: 0 1px 6px rgba(0,0,0,0.12); margin-bottom: 16px; }
+        @media print {
+          .toolbar { display: none; }
+          .pdoc { max-width: none; }
+          .ppage { box-shadow: none; margin: 0; break-after: page; page-break-after: always; }
+          .ppage:last-child { break-after: auto; page-break-after: auto; }
+        }
+      `}</style>
+      <div className="toolbar">
+        <button onClick={() => window.print()}>Print</button>
+      </div>
+      {pages.map((pg) => (
+        <div className="ppage" key={pg.id}>
+          <PageSurface
+            orientation={theme.orientation}
+            fit="width"
+            surfaceStyle={{
+              fontFamily: `${theme.fontBody}, sans-serif`,
+              color: theme.accentColor,
+              ...(pg.background && ctx.fileUrl(pg.background) ? { backgroundImage: `url(${ctx.fileUrl(pg.background)})`, backgroundSize: 'cover', backgroundPosition: 'top center' } : {}),
+            }}
+          >
+            {pg.elements.map((el) => (
+              <div key={el.id} style={{ position: 'absolute', left: `${el.x}%`, top: `${el.y}%`, width: `${el.w}%`, height: `${el.h}%` }}>
+                <ElementView element={el} theme={theme} ctx={ctx} />
+              </div>
+            ))}
+          </PageSurface>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function Address({ label, addr }: { label: string; addr: Record<string, unknown> | null | undefined }) {
@@ -25,10 +86,11 @@ function Address({ label, addr }: { label: string; addr: Record<string, unknown>
 
 export default function PrintDocPage() {
   const params = useParams<{ kind: string; dealId: string; docId: string }>();
-  const kind = params.kind === 'invoice' ? 'invoice' : 'estimate';
-  const dealId = params.dealId;
-  const docId = params.docId;
+  if (params.kind === 'proposal') return <ProposalPrint id={params.docId} />;
+  return <DocPrint kind={params.kind === 'invoice' ? 'invoice' : 'estimate'} dealId={params.dealId} docId={params.docId} />;
+}
 
+function DocPrint({ kind, dealId, docId }: { kind: 'estimate' | 'invoice'; dealId: string; docId: string }) {
   const { data: deal } = useDeal(dealId);
   const { data: org } = useOrganization();
   const estimates = useDealEstimates(dealId);

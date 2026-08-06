@@ -26,10 +26,11 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconBolt, IconBrandGoogle, IconDots, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconBolt, IconBrandGoogle, IconDots, IconPencil, IconPlus, IconSparkles, IconTrash } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/useAuth';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
+import { VariableTextInput } from '@/components/common/VariableTextInput';
 import { ScheduleBuilder } from '@/components/automations/ScheduleBuilder';
 import { AudienceBuilder } from '@/components/automations/AudienceBuilder';
 import {
@@ -39,10 +40,13 @@ import {
   useCreateMarketingAutomation,
   useDeleteEmailAutomation,
   useEmailAutomations,
+  useAutomationSeedStatus,
+  useSeedAutomations,
   useEmailTemplates,
   useGoogleStatus,
   useOrganization,
   useSignableDocuments,
+  useTemplateVariables,
   useUpdateEmailAutomation,
   useUpdateMarketingAutomation,
 } from '@/lib/api/hooks';
@@ -69,6 +73,8 @@ export default function AutomationsSettingsPage() {
   const del = useDeleteEmailAutomation();
   const update = useUpdateEmailAutomation();
   const updateMkt = useUpdateMarketingAutomation();
+  const { data: seedStatus } = useAutomationSeedStatus();
+  const seed = useSeedAutomations();
 
   const triggerLabel = useMemo(() => Object.fromEntries(triggers.map((t) => [t.key, t.label])), [triggers]);
   const allTags = useMemo(
@@ -76,16 +82,19 @@ export default function AutomationsSettingsPage() {
     [automations],
   );
 
-  // Type (deal/marketing) + tag filters for the list.
+  // Type (deal/marketing) + tag + status filters for the list.
   const [filterKind, setFilterKind] = useState<string | null>(null);
   const [filterTag, setFilterTag] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string | null>(null);
   const visible = useMemo(
     () =>
       automations.filter(
         (a) =>
-          (!filterKind || (a.kind ?? 'deal') === filterKind) && (!filterTag || (a.tags ?? []).includes(filterTag)),
+          (!filterKind || (a.kind ?? 'deal') === filterKind) &&
+          (!filterTag || (a.tags ?? []).includes(filterTag)) &&
+          (!filterStatus || (filterStatus === 'on' ? a.enabled : !a.enabled)),
       ),
-    [automations, filterKind, filterTag],
+    [automations, filterKind, filterTag, filterStatus],
   );
   const { data: stages = [] } = useAllStages();
   const stageName = (id: unknown) => (typeof id === 'string' ? stages.find((s) => s.id === id)?.name : null);
@@ -136,6 +145,21 @@ export default function AutomationsSettingsPage() {
       return (
         <>
           request a signature on <b>{docName ?? 'a document'}</b> from the primary contact
+        </>
+      );
+    }
+    if (a.action === 'move_stage') {
+      const stageName = stages.find((s) => s.id === c.stageId)?.name;
+      return (
+        <>
+          move the deal to <b>{stageName ?? 'a stage'}</b>
+        </>
+      );
+    }
+    if (a.action === 'add_tag') {
+      return (
+        <>
+          tag the contact <b>{String(c.tag ?? '').trim() || '—'}</b>
         </>
       );
     }
@@ -208,15 +232,32 @@ export default function AutomationsSettingsPage() {
           </Text>
         </div>
         {isAdmin && (
-          <Button
-            leftSection={<IconPlus size={16} />}
-            onClick={() => {
-              setEditing(null);
-              ctl.open();
-            }}
-          >
-            New automation
-          </Button>
+          <Group gap="xs">
+            {seedStatus?.seedable && (
+              <Button
+                variant="light"
+                leftSection={<IconSparkles size={16} />}
+                loading={seed.isPending}
+                onClick={() =>
+                  seed.mutate(undefined, {
+                    onSuccess: (r) => notifications.show({ message: r.created ? `Added ${r.created} starter automation${r.created === 1 ? '' : 's'}` : 'Nothing new to add', color: 'green' }),
+                    onError: fail,
+                  })
+                }
+              >
+                Add recipes
+              </Button>
+            )}
+            <Button
+              leftSection={<IconPlus size={16} />}
+              onClick={() => {
+                setEditing(null);
+                ctl.open();
+              }}
+            >
+              New automation
+            </Button>
+          </Group>
         )}
       </Group>
 
@@ -255,7 +296,19 @@ export default function AutomationsSettingsPage() {
             value={filterTag}
             onChange={setFilterTag}
           />
-          {(filterKind || filterTag) && (
+          <Select
+            size="xs"
+            placeholder="All statuses"
+            clearable
+            w={140}
+            data={[
+              { value: 'on', label: 'On' },
+              { value: 'off', label: 'Off' },
+            ]}
+            value={filterStatus}
+            onChange={setFilterStatus}
+          />
+          {(filterKind || filterTag || filterStatus) && (
             <Text size="xs" c="dimmed">
               {visible.length} of {automations.length}
             </Text>
@@ -386,10 +439,16 @@ function AutomationModal({
   const { data: stages = [] } = useAllStages();
   const { data: google } = useGoogleStatus();
   const { data: org } = useOrganization();
+  const { data: allVariables = [] } = useTemplateVariables();
+  // Deal-scoped variables for the activity-subject field (contact / company / deal / sender / workspace).
+  const dealVars = useMemo(
+    () => allVariables.filter((v) => !v.hidden && (!v.scopes || v.scopes.includes('deal'))).map((v) => ({ key: v.key, label: v.label })),
+    [allVariables],
+  );
 
   const [name, setName] = useState('');
   const [tags, setTags] = useState<string[]>([]);
-  const [action, setAction] = useState<'send_email' | 'create_activity' | 'request_signature'>('send_email');
+  const [action, setAction] = useState<'send_email' | 'create_activity' | 'request_signature' | 'move_stage' | 'add_tag'>('send_email');
   const { data: signableDocs = [] } = useSignableDocuments();
   // The Deal/Marketing "type" applies only to a Send-email action (an activity is always deal-side).
   const [kind, setKind] = useState<AutomationKind>('deal');
@@ -462,6 +521,14 @@ function AutomationModal({
     }
     if (action === 'request_signature' && !config.signableDocumentTemplateId) {
       notifications.show({ message: 'Pick a document template to send for signature', color: 'red' });
+      return;
+    }
+    if (action === 'move_stage' && !config.stageId) {
+      notifications.show({ message: 'Pick the stage to move the deal to', color: 'red' });
+      return;
+    }
+    if (action === 'add_tag' && !String(config.tag ?? '').trim()) {
+      notifications.show({ message: 'Enter a tag to add to the contact', color: 'red' });
       return;
     }
     const body = {
@@ -555,9 +622,11 @@ function AutomationModal({
                 { value: 'send_email', label: 'Send an email' },
                 { value: 'create_activity', label: 'Create an activity' },
                 { value: 'request_signature', label: 'Request a signature' },
+                { value: 'move_stage', label: 'Move the deal to a stage' },
+                { value: 'add_tag', label: 'Tag the contact' },
               ]}
               value={action}
-              onChange={(v) => setAction((v as 'send_email' | 'create_activity' | 'request_signature') ?? 'send_email')}
+              onChange={(v) => setAction((v as typeof action) ?? 'send_email')}
               allowDeselect={false}
             />
             {/* When (trigger) */}
@@ -662,6 +731,24 @@ function AutomationModal({
                   onChange={(e) => setCfg('sendEmail', e.currentTarget.checked)}
                 />
               </>
+            ) : action === 'move_stage' ? (
+              <Select
+                label="Move the deal to this stage"
+                required
+                placeholder={stages.length === 0 ? 'No stages yet' : 'Pick a stage'}
+                data={stages.map((s) => ({ value: s.id, label: s.name }))}
+                value={(config.stageId as string) ?? null}
+                onChange={(v) => setCfg('stageId', v ?? undefined)}
+              />
+            ) : action === 'add_tag' ? (
+              <TextInput
+                label="Tag to add"
+                required
+                description="Added to the deal's primary contact — feeds marketing audiences."
+                placeholder="e.g. customer"
+                value={(config.tag as string) ?? ''}
+                onChange={(e) => setCfg('tag', e.currentTarget.value)}
+              />
             ) : (
               <>
                 <Select
@@ -675,12 +762,13 @@ function AutomationModal({
                   value={(config.activityType as string) ?? 'task'}
                   onChange={(v) => setCfg('activityType', v ?? 'task')}
                 />
-                <TextInput
+                <VariableTextInput
                   label="Activity subject"
                   required
-                  placeholder="e.g. Follow up with the client"
+                  placeholder="e.g. Follow up with {{contact.first_name}}"
+                  variables={dealVars}
                   value={(config.activitySubject as string) ?? ''}
-                  onChange={(e) => setCfg('activitySubject', e.currentTarget.value)}
+                  onChange={(v) => setCfg('activitySubject', v)}
                 />
                 <NumberInput
                   label="Due in (days)"

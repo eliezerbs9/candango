@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { SpacesService } from '../uploads/spaces.service';
@@ -65,6 +65,7 @@ const shape = (r: {
   signerEmail: string | null;
   sourceFileKey: string | null;
   signedFileKey: string | null;
+  signableDocumentTemplateId: string | null;
   auditUrl: string | null;
   sentAt: Date | null;
   viewedAt: Date | null;
@@ -83,6 +84,8 @@ const shape = (r: {
   signedFileKey: r.signedFileKey,
   hasSigned: !!r.signedFileKey,
   hasInitials: r.hasInitials,
+  // The deal builder doc this was generated from (its editable canvas), so it can be duplicated back to a draft.
+  signableDocumentTemplateId: r.signableDocumentTemplateId,
   // The signing parties (name + role + status) for the deal card — no links/emails leaked.
   signers: ((r.recipients as { name?: string; owner?: boolean; signed?: boolean }[] | null) ?? []).map((x) => ({
     name: x.name ?? '',
@@ -105,6 +108,8 @@ const shape = (r: {
 
 @Injectable()
 export class SignaturesService {
+  private readonly logger = new Logger(SignaturesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly spaces: SpacesService,
@@ -190,8 +195,10 @@ export class SignaturesService {
       await this.prisma.signatureRequest.update({ where: { id: row.id }, data: { recipients: updated as object } });
     }
     if (doc.status === 'COMPLETED') await this.markSigned(row);
-    else if (doc.status === 'REJECTED' || doc.status === 'CANCELLED') {
+    else if (doc.status === 'REJECTED') {
       await this.prisma.signatureRequest.update({ where: { id: row.id }, data: { status: 'declined', declinedAt: new Date() } });
+    } else if (doc.status === 'CANCELLED') {
+      await this.prisma.signatureRequest.update({ where: { id: row.id }, data: { status: 'voided', declinedAt: new Date() } });
     }
   }
 
@@ -225,11 +232,41 @@ export class SignaturesService {
 
   async remove(orgId: string, id: string) {
     const row = await this.get(orgId, id);
+    // A signed document is an immutable record — it can never be deleted (only a pending one can be voided/cancelled).
+    if (row.status === 'signed') throw new ForbiddenException('A signed document cannot be deleted.');
     // Best-effort: void the Documenso document so it isn't left orphaned/signable.
     if (row.documensoDocumentId && this.documenso.configured) {
       await this.documenso.deleteDocument(row.documensoDocumentId).catch(() => {});
     }
     await this.prisma.signatureRequest.delete({ where: { id } });
+  }
+
+  /**
+   * Void a pending request: cancel it in Documenso so it can no longer be signed, and keep the record
+   * as a **voided** document (it stays visible under the Voided filter rather than disappearing).
+   */
+  async void(orgId: string, id: string) {
+    const row = await this.get(orgId, id);
+    if (row.status === 'signed') throw new ForbiddenException('A signed document cannot be voided.');
+    // Cancel it in the signing engine so it can no longer be signed. Retryable — if a previous void
+    // couldn't reach the engine, voiding again re-attempts it. The local void applies regardless.
+    let engineVoided = false;
+    let engineError: string | null = null;
+    if (!row.documensoDocumentId) {
+      engineError = 'No linked signing-service document.';
+    } else if (!this.documenso.configured) {
+      engineError = 'Signing service not configured.';
+    } else {
+      try {
+        await this.documenso.voidDocument(row.documensoDocumentId, 'Voided from Candango');
+        engineVoided = true;
+      } catch (e) {
+        engineError = e instanceof Error ? e.message : String(e);
+        this.logger.warn(`Documenso void failed for request ${row.id} (doc ${row.documensoDocumentId}): ${engineError}`);
+      }
+    }
+    const updated = row.status === 'voided' ? row : await this.prisma.signatureRequest.update({ where: { id }, data: { status: 'voided', declinedAt: new Date() } });
+    return { ...shape(updated), engineVoided, engineError };
   }
 
   /** Re-send the signing invitation email(s) for a pending request. */
@@ -360,6 +397,10 @@ export class SignaturesService {
 
     // Who signs: the template decides one/both; builder "sender" fields only bind when both.
     const layoutFields = tpl.mode === 'builder' ? extractLayoutFields(tpl.layout) : [];
+    // A builder document must carry at least one signature/initials field — never send a blank document.
+    if (tpl.mode === 'builder' && !layoutFields.some((f) => f.fieldType === 'signature' || f.fieldType === 'initials')) {
+      throw new BadRequestException('Add at least one signature or initials field before sending this document.');
+    }
     const partiesBoth = dto.bothParties ?? tpl.parties === 'both';
     const party2 = { enabled: partiesBoth, source: (tpl.party2Source as 'owner' | 'user') ?? 'owner', userId: tpl.party2UserId ?? null };
     // Resolve the real signers, then build the {{variable}} context so receiver.*/sender.* are accurate.
@@ -469,9 +510,12 @@ export class SignaturesService {
         sourceFileKey: sourceKey,
         documensoDocumentId: sub.documentId,
         createdByUserId: userId,
+        signableDocumentTemplateId: tpl.id, // keep the pre-PDF canvas link for later duplication
         sentAt: new Date(),
       },
     });
+    // A one-off deal document becomes a sent request now — archive the draft so it leaves the deal's Drafts list.
+    if (tpl.dealId) await this.prisma.signableDocumentTemplate.update({ where: { id: tpl.id }, data: { archivedAt: new Date() } });
     return { ...shape(row), signingUrl: sub.signingUrl };
   }
 

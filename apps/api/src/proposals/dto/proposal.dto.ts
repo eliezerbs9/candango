@@ -61,4 +61,10 @@ export class UpdateProposalDto {
   @IsOptional()
   @IsIn(STATUSES)
   status?: string;
+
+  /** Reason/note — required when the user sets the status to denied or deferred. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  feedback?: string;
 }

@@ -35,6 +35,19 @@ export class EmailAutomationsController {
     return this.svc.list(u.orgId);
   }
 
+  /** Whether there are starter-kit recipes available to add (drives the "Add recipes" button). */
+  @Get('seed-status')
+  seedStatus(@CurrentUser() u: AuthContext) {
+    return this.svc.seedStatus(u.orgId);
+  }
+
+  /** Add the pre-built starter-kit automations for every available, not-yet-seeded group (idempotent). */
+  @Post('seed-recipes')
+  @UseGuards(AdminGuard)
+  seedRecipes(@CurrentUser() u: AuthContext) {
+    return this.svc.seedStarterKit(u.orgId, u.userId);
+  }
+
   @Post()
   @UseGuards(AdminGuard)
   create(@CurrentUser() u: AuthContext, @Body() dto: CreateEmailAutomationDto) {

@@ -1,6 +1,6 @@
 import { apiFetch } from './client';
 
-export type AutomationAction = 'send_email' | 'create_activity' | 'request_signature';
+export type AutomationAction = 'send_email' | 'create_activity' | 'request_signature' | 'move_stage' | 'add_tag';
 
 export type AutomationKind = 'deal' | 'marketing';
 
@@ -104,6 +104,16 @@ export function getAutomationTriggers(token: string) {
 
 export function getAutomationCategories(token: string) {
   return apiFetch<AutomationCategory[]>('/email-automations/categories', { token });
+}
+
+/** Whether there are starter-kit recipes available to add for this org. */
+export function getAutomationSeedStatus(token: string) {
+  return apiFetch<{ seedable: boolean }>('/email-automations/seed-status', { token });
+}
+
+/** Add the pre-built starter-kit automations (idempotent — each group seeds at most once). */
+export function seedAutomationRecipes(token: string) {
+  return apiFetch<{ created: number; groups: string[] }>('/email-automations/seed-recipes', { method: 'POST', token });
 }
 
 export function createEmailAutomation(token: string, body: EmailAutomationBody) {

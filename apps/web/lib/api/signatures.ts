@@ -1,7 +1,7 @@
 import { apiFetch } from './client';
 import type { DrawnField } from './signature-templates';
 
-export type SignatureStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'declined' | 'expired';
+export type SignatureStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'declined' | 'expired' | 'voided';
 
 export interface SignatureRequest {
   id: string;
@@ -14,6 +14,8 @@ export interface SignatureRequest {
   signedFileKey: string | null;
   hasSigned: boolean;
   hasInitials: boolean;
+  /** The deal builder doc this was generated from (its editable canvas), for duplication. Null for legacy/upload docs. */
+  signableDocumentTemplateId: string | null;
   /** The signing parties + their status, for the card. */
   signers: { name: string; owner: boolean; signed: boolean }[];
   /** The workspace's own signing link (both-parties), so the owner can sign their part. */
@@ -73,6 +75,17 @@ export function generateSignature(token: string, body: GenerateSignatureBody) {
 
 export function deleteSignature(token: string, id: string) {
   return apiFetch<void>(`/signatures/${id}`, { method: 'DELETE', token });
+}
+
+/** Result of voiding: the updated record + whether the signing engine (Documenso) actually cancelled it. */
+export interface VoidResult extends SignatureRequest {
+  engineVoided: boolean;
+  engineError: string | null;
+}
+
+/** Void a pending request (cancels it in Documenso) — keeps it as a voided record. */
+export function voidSignature(token: string, id: string) {
+  return apiFetch<VoidResult>(`/signatures/${id}/void`, { method: 'POST', token });
 }
 
 export function resendSignature(token: string, id: string) {

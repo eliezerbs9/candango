@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Post, Query, ServiceUnavailableException, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Post, Query, Res, ServiceUnavailableException, StreamableFile, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, type AuthContext } from '../auth/current-user.decorator';
@@ -44,6 +45,16 @@ export class UploadsController {
   async url(@CurrentUser() u: AuthContext, @Query('key') key: string) {
     this.assertOwned(u.orgId, key);
     return { url: await this.spaces.presignGet(key) };
+  }
+
+  /** Stream an object's bytes through the API (same-origin) — used to re-import a stored PDF without a CORS hop to Spaces. */
+  @Get('download')
+  async download(@CurrentUser() u: AuthContext, @Query('key') key: string, @Res({ passthrough: true }) res: Response) {
+    this.assertOwned(u.orgId, key);
+    if (!this.spaces.configured) throw new ServiceUnavailableException('File storage is not configured');
+    const bytes = await this.spaces.getBytes(key);
+    res.setHeader('Content-Type', /\.pdf$/i.test(key) ? 'application/pdf' : 'application/octet-stream');
+    return new StreamableFile(bytes);
   }
 
   @Delete()

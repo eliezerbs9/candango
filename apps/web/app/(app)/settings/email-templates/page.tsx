@@ -180,7 +180,7 @@ export default function EmailTemplatesSettingsPage() {
       ) : (
         <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
           {templates.map((t) => (
-            <Card key={t.id} withBorder radius="md" padding="md">
+            <Card key={t.id} withBorder radius="md" padding="md" style={{ cursor: 'pointer' }} onClick={() => openEdit(t)}>
               <Group justify="space-between" wrap="nowrap" align="flex-start" mb={6}>
                 <div style={{ minWidth: 0 }}>
                   <Group gap={6} wrap="wrap" align="center">
@@ -215,12 +215,12 @@ export default function EmailTemplatesSettingsPage() {
                 {isAdmin && (
                   <Menu position="bottom-end" withinPortal shadow="sm">
                     <Menu.Target>
-                      <ActionIcon variant="subtle" color="gray" aria-label="Actions">
+                      <ActionIcon variant="subtle" color="gray" aria-label="Actions" onClick={(e) => e.stopPropagation()}>
                         <IconDots size={16} />
                       </ActionIcon>
                     </Menu.Target>
                     <Menu.Dropdown>
-                      <Menu.Item leftSection={<IconPencil size={14} />} onClick={() => openEdit(t)}>
+                      <Menu.Item leftSection={<IconPencil size={14} />} onClick={(e) => { e.stopPropagation(); openEdit(t); }}>
                         Edit
                       </Menu.Item>
                       {t.system ? (
@@ -228,7 +228,7 @@ export default function EmailTemplatesSettingsPage() {
                           System template (can’t delete)
                         </Menu.Item>
                       ) : (
-                        <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={() => remove(t)}>
+                        <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={(e) => { e.stopPropagation(); remove(t); }}>
                           Delete
                         </Menu.Item>
                       )}
@@ -297,14 +297,22 @@ function SignatureModal({
   isAdmin: boolean;
 }) {
   const update = useUpdateOrganization();
-  const [html, setHtml] = useState(org.emailSignature ?? DEFAULT_SIGNATURE_HTML);
+  const [html, setHtml] = useState('');
+  const [format, setFormat] = useState<TemplateBodyFormat>('richtext');
   const editorRef = useRef<Editor | null>(null);
+  // Variables the `{`/`{{` autocomplete offers in the signature editor (same set as the Insert chips).
+  const sigVars = useMemo(() => SIGNATURE_VARIABLES.map((v) => ({ key: v.key, label: v.label })), []);
 
   useEffect(() => {
-    if (opened) setHtml(org.emailSignature ?? DEFAULT_SIGNATURE_HTML);
+    if (!opened) return;
+    setHtml(String(org.emailSignature ?? DEFAULT_SIGNATURE_HTML));
+    setFormat('richtext');
   }, [opened, org.emailSignature]);
 
-  const insertVar = (key: string) => editorRef.current?.chain().focus().insertContent(`{{${key}}}`).run();
+  const insertVar = (key: string) => {
+    if (format === 'html') return setHtml((h) => h + `{{${key}}}`);
+    editorRef.current?.chain().focus().insertContent(`{{${key}}}`).run();
+  };
 
   const save = () =>
     update.mutate(
@@ -329,7 +337,28 @@ function SignatureModal({
         </Text>
         {isAdmin ? (
           <>
-            <RichTextBody value={html} onChange={setHtml} onReady={(e) => (editorRef.current = e)} minHeight={140} />
+            <SegmentedControl
+              size="xs"
+              value={format}
+              onChange={(v) => setFormat(v as TemplateBodyFormat)}
+              data={[
+                { label: 'Rich text', value: 'richtext' },
+                { label: 'HTML', value: 'html' },
+              ]}
+            />
+            {format === 'html' ? (
+              <Textarea
+                value={html}
+                onChange={(e) => setHtml(e.currentTarget.value)}
+                autosize
+                minRows={8}
+                maxRows={18}
+                placeholder="Paste raw HTML here (inline styles only). {{variables}} still work anywhere in it."
+                styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)', fontSize: 12 } }}
+              />
+            ) : (
+              <RichTextBody value={html} onChange={setHtml} onReady={(e) => (editorRef.current = e)} minHeight={140} variables={sigVars} />
+            )}
             <Group gap={6} wrap="wrap">
               <Text size="xs" c="dimmed">
                 Insert:

@@ -207,8 +207,16 @@ export class ProposalsService {
     return shapeProposal(row);
   }
 
-  async update(orgId: string, id: string, dto: UpdateProposalDto) {
-    await this.get(orgId, id);
+  async update(orgId: string, id: string, dto: UpdateProposalDto, userId?: string) {
+    const current = await this.get(orgId, id);
+    const statusChanged = dto.status !== undefined && dto.status !== current.status;
+    const decision = statusChanged && ['accepted', 'denied', 'deferred'].includes(dto.status!) ? (dto.status as 'accepted' | 'denied' | 'deferred') : null;
+    const feedback = dto.feedback?.trim() || null;
+    // The user must give a reason when marking a proposal declined or deferred (mirrors the client flow).
+    if ((decision === 'denied' || decision === 'deferred') && !feedback) {
+      throw new BadRequestException('Add a reason when declining or deferring a proposal.');
+    }
+
     const row = await this.prisma.proposal.update({
       where: { id },
       data: {
@@ -217,8 +225,31 @@ export class ProposalsService {
         ...(dto.content !== undefined ? { content: dto.content as Prisma.InputJsonValue } : {}),
         ...(dto.theme !== undefined ? { theme: dto.theme as Prisma.InputJsonValue } : {}),
         ...(dto.status !== undefined ? { status: dto.status } : {}),
+        ...(decision ? { feedback, respondedAt: new Date() } : {}),
       },
     });
+
+    if (decision) {
+      // Roll the decision onto linked estimates' internal status (our DB only — accepted→accepted, denied→rejected).
+      const estStatus = decision === 'accepted' ? 'accepted' : decision === 'denied' ? 'rejected' : null;
+      if (estStatus && current.estimateIds.length) {
+        await this.prisma.dealEstimate.updateMany({
+          where: { id: { in: current.estimateIds }, orgId, deletedAt: null, status: { notIn: ['closed'] } },
+          data: { status: estStatus },
+        });
+      }
+      // Log the outcome on the deal timeline.
+      const author = userId ?? (await this.prisma.deal.findFirst({ where: { id: current.dealId }, select: { ownerUserId: true } }))?.ownerUserId;
+      if (author) {
+        const verb = decision === 'accepted' ? 'accepted' : decision === 'denied' ? 'declined' : 'deferred';
+        await this.prisma.note.create({
+          data: { orgId, dealId: current.dealId, authorUserId: author, body: `Proposal “${current.title}” was marked ${verb}.${feedback ? ` Reason: ${feedback}` : ''}` },
+        });
+      }
+      // Fire the automation/webhook event (accepted / declined / deferred).
+      const type = decision === 'accepted' ? 'proposal.accepted' : decision === 'denied' ? 'proposal.declined' : 'proposal.deferred';
+      this.events.emit('webhook.event', { orgId, type, data: { deal: { id: current.dealId }, proposal: { id } } });
+    }
     return shapeProposal(row);
   }
 

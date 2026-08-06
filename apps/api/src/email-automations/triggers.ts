@@ -79,6 +79,22 @@ export const AUTOMATION_TRIGGERS: TriggerDef[] = [
     fields: [],
   },
   {
+    key: 'proposal_declined',
+    label: 'Proposal declined',
+    description: 'When a proposal is declined — by the customer on the link, or marked declined by the team.',
+    kind: 'event',
+    events: ['proposal.declined'],
+    fields: [],
+  },
+  {
+    key: 'proposal_deferred',
+    label: 'Proposal deferred (decide later)',
+    description: 'When a proposal is deferred — the customer chose to decide later, or the team marked it deferred.',
+    kind: 'event',
+    events: ['proposal.deferred'],
+    fields: [],
+  },
+  {
     key: 'document_signed',
     label: 'Document signed',
     description: 'When a customer completes an e-signature request.',

@@ -5,6 +5,7 @@ import { Paper, Portal, Text } from '@mantine/core';
 import { RichTextEditor, Link } from '@mantine/tiptap';
 import { useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import { variableTrigger, variableToken } from '@/lib/variableInsert';
 
 export interface EditorVariable {
   key: string;
@@ -17,6 +18,7 @@ interface Menu {
   index: number;
   from: number;
   to: number;
+  bare: boolean;
   left: number;
   top: number;
 }
@@ -26,12 +28,15 @@ export function RichTextBody({
   value,
   onChange,
   minHeight = 220,
+  maxHeight,
   onReady,
   variables,
 }: {
   value: string;
   onChange: (html: string) => void;
   minHeight?: number;
+  /** Caps the editor's content height; content scrolls past it (keeps the sticky toolbar in view). */
+  maxHeight?: number;
   /** Receives the editor instance (e.g. to insert content at the caret). */
   onReady?: (editor: Editor | null) => void;
   /** When provided, typing `{` opens an autocomplete of these {{variables}}. */
@@ -98,22 +103,24 @@ export function RichTextBody({
       if (!sel.empty) return setMenu(null);
       const $from = sel.$from;
       const textBefore = $from.parent.textBetween(0, $from.parentOffset, undefined, '￼');
-      const match = /\{{1,2}([\w.]*)$/.exec(textBefore);
-      if (!match) return setMenu(null);
-      const query = match[1].toLowerCase();
+      const textAfter = $from.parent.textBetween($from.parentOffset, $from.parent.content.size, undefined, '￼');
+      const trig = variableTrigger(textBefore, textAfter);
+      if (!trig) return setMenu(null);
+      const query = trig.query.toLowerCase();
       const items = variables
         .filter((v) => v.key.toLowerCase().includes(query) || v.label.toLowerCase().includes(query))
         .slice(0, 8);
       if (items.length === 0) return setMenu(null);
       const to = sel.from;
-      const from = to - match[0].length;
+      const from = to - (textBefore.length - trig.from); // ProseMirror pos of the partial's start
+      const bare = trig.bare;
       const coords = editor.view.coordsAtPos(to);
       // Keep the popup on screen: clamp horizontally, flip above the caret if it would overflow below.
       const width = 300;
       const estH = Math.min(items.length, 8) * 40 + 8;
       const left = Math.max(8, Math.min(coords.left, window.innerWidth - width - 8));
       const top = coords.bottom + estH + 8 <= window.innerHeight ? coords.bottom + 4 : Math.max(8, coords.top - estH - 4);
-      setMenu((prev) => ({ items, index: prev && prev.from === from ? Math.min(prev.index, items.length - 1) : 0, from, to, left, top }));
+      setMenu((prev) => ({ items, index: prev && prev.from === from ? Math.min(prev.index, items.length - 1) : 0, from, to, bare, left, top }));
     };
     editor.on('update', recompute);
     editor.on('selectionUpdate', recompute);
@@ -125,7 +132,7 @@ export function RichTextBody({
 
   const accept = (item: EditorVariable) => {
     if (!editor || !menu) return;
-    editor.chain().focus().insertContentAt({ from: menu.from, to: menu.to }, `{{${item.key}}}`).run();
+    editor.chain().focus().insertContentAt({ from: menu.from, to: menu.to }, variableToken(item.key, menu.bare)).run();
     setMenu(null);
   };
 
@@ -164,7 +171,7 @@ export function RichTextBody({
             <RichTextEditor.Unlink />
           </RichTextEditor.ControlsGroup>
         </RichTextEditor.Toolbar>
-        <RichTextEditor.Content style={{ minHeight }} />
+        <RichTextEditor.Content style={{ minHeight, maxHeight, overflowY: maxHeight ? 'auto' : undefined }} />
       </RichTextEditor>
 
       {menu && (

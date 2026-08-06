@@ -215,6 +215,8 @@ export interface ProposalBody {
   content?: CanvasPage[];
   theme?: ProposalTheme;
   status?: ProposalStatus;
+  /** Reason — required when the user sets status to denied or deferred. */
+  feedback?: string;
 }
 
 export function getDealProposals(token: string, dealId: string) {

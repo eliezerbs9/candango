@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ActionIcon,
@@ -8,8 +8,6 @@ import {
   Badge,
   Button,
   Card,
-  Checkbox,
-  Collapse,
   FileButton,
   Group,
   Loader,
@@ -20,39 +18,35 @@ import {
   Select,
   SimpleGrid,
   Stack,
-  Switch,
   Text,
   TextInput,
+  Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconCheck, IconClock, IconDots, IconDownload, IconExternalLink, IconFileText, IconInfoCircle, IconLink, IconPencil, IconPlus, IconRefresh, IconSignature, IconTrash, IconUpload } from '@tabler/icons-react';
+import { IconBan, IconCheck, IconClock, IconCopy, IconDots, IconDownload, IconFileText, IconInfoCircle, IconPencil, IconPlus, IconRefresh, IconSend, IconSignature, IconTrash, IconUpload } from '@tabler/icons-react';
 import Link from 'next/link';
 import { ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/auth/store';
 import {
-  useAddDealParticipant,
-  useCreatePerson,
+  useCreateDealDocFromTemplate,
   useCreateSignableDocument,
-  useCreateSignature,
   useCustomFields,
-  useDeal,
-  useDealRecipients,
+  useDealDocuments,
   useDealSignatures,
+  useDeleteSignableDocument,
   useDeleteSignature,
+  useDuplicateDealDoc,
   useFileUrl,
   useResendSignature,
-  useGenerateSignature,
   useSignableDocuments,
-  useSignatureTemplates,
   useUploadFile,
-  useUsers,
+  useVoidSignature,
 } from '@/lib/api/hooks';
 import { getSignatureSignedUrl, type SignatureRequest, type SignatureStatus } from '@/lib/api/signatures';
-import type { DrawnField } from '@/lib/api/signature-templates';
-import type { SignableDocumentTemplate } from '@/lib/api/signable-documents';
+import { hasSigningField, type SignableDocumentTemplate } from '@/lib/api/signable-documents';
 import { useDealCtx } from '@/components/deals/DealContext';
-import { SignatureFieldEditor } from '@/components/deals/SignatureFieldEditor';
+import { SendDocModal } from '@/components/signatures/SendDocModal';
 
 const STATUS_COLOR: Record<SignatureStatus, string> = {
   draft: 'gray',
@@ -61,6 +55,7 @@ const STATUS_COLOR: Record<SignatureStatus, string> = {
   signed: 'teal',
   declined: 'red',
   expired: 'gray',
+  voided: 'orange',
 };
 
 const DOC_MAX = 25 * 1024 * 1024;
@@ -74,21 +69,56 @@ interface StoredDoc {
 }
 
 const fail = (e: unknown) => notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
+/** Short date + time, e.g. "8/5/26, 9:08 PM" — matches how the signing service lists documents. */
+const fmtDateTime = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+
+type FilterKey = 'all' | 'draft' | 'awaiting' | 'signed' | 'declined' | 'voided';
+const FILTER_LABEL: Record<Exclude<FilterKey, 'all'>, string> = { draft: 'Drafts', awaiting: 'Awaiting', signed: 'Signed', declined: 'Declined', voided: 'Voided' };
+/** Which filter bucket a sent request falls into. */
+const bucketOf = (s: SignatureStatus): 'awaiting' | 'signed' | 'declined' | 'voided' =>
+  s === 'signed' ? 'signed' : s === 'voided' ? 'voided' : s === 'declined' || s === 'expired' ? 'declined' : 'awaiting';
 
 export function DealSignatures({ dealId }: { dealId: string }) {
   const router = useRouter();
+  const isAdmin = useAuthStore((s) => s.user?.role === 'Admin');
   const { data: rows = [], isLoading } = useDealSignatures(dealId);
+  const { data: drafts = [] } = useDealDocuments(dealId);
   const { data: docTemplates = [] } = useSignableDocuments();
   const createDoc = useCreateSignableDocument();
+  const fromTemplate = useCreateDealDocFromTemplate();
   const [opened, ctl] = useDisclosure(false);
-  const [genOpened, genCtl] = useDisclosure(false);
+  const [filter, setFilter] = useState<FilterKey>('all');
+  const busy = createDoc.isPending || fromTemplate.isPending;
+  // The builder opens INSIDE the deal (keeps the deal header + tabs), not in Settings.
+  const openBuilder = (d: { id: string }) => router.push(`/deals/${dealId}/signatures/${d.id}`);
 
-  // "Build a new document" → a one-off document scoped to THIS deal, opened in the same builder.
+  // Every source creates a one-off document scoped to THIS deal, opened in the builder — sent from there.
   const buildNew = () =>
     createDoc.mutate(
       { name: 'Untitled document', mode: 'builder', dealId, theme: { orientation: 'portrait', paperSize: 'letter' } },
-      { onSuccess: (d) => router.push(`/settings/signatures/documents/${d.id}`), onError: fail },
+      { onSuccess: openBuilder, onError: fail },
     );
+  const useTemplate = (templateId: string) => fromTemplate.mutate({ id: templateId, dealId }, { onSuccess: openBuilder, onError: fail });
+
+  // One unified list — drafts and sent requests together — ordered by creation date (newest first).
+  const items = useMemo(
+    () =>
+      [
+        ...drafts.map((d) => ({ kind: 'draft' as const, id: d.id, bucket: 'draft' as const, createdAt: d.createdAt, doc: d })),
+        ...rows.map((r) => ({ kind: 'request' as const, id: r.id, bucket: bucketOf(r.status), createdAt: r.createdAt, r })),
+      ].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    [drafts, rows],
+  );
+  const segData = useMemo(() => {
+    const data = [{ value: 'all', label: `All (${items.length})` }];
+    (['draft', 'awaiting', 'signed', 'declined', 'voided'] as const).forEach((b) => {
+      const c = items.filter((i) => i.bucket === b).length;
+      if (c) data.push({ value: b, label: `${FILTER_LABEL[b]} (${c})` });
+    });
+    return data;
+  }, [items]);
+  const activeFilter: FilterKey = segData.some((d) => d.value === filter) ? filter : 'all';
+  const shown = activeFilter === 'all' ? items : items.filter((i) => i.bucket === activeFilter);
 
   return (
     <Card withBorder radius="md" padding="md">
@@ -96,57 +126,115 @@ export function DealSignatures({ dealId }: { dealId: string }) {
         <Text fw={600}>Signatures</Text>
         <Menu withinPortal position="bottom-end" shadow="md">
           <Menu.Target>
-            <Button size="xs" leftSection={<IconPlus size={14} />} loading={createDoc.isPending}>
+            <Button size="xs" leftSection={<IconPlus size={14} />} loading={busy}>
               Create new
             </Button>
           </Menu.Target>
           <Menu.Dropdown>
-            <Menu.Label>Create a document to sign</Menu.Label>
-            {docTemplates.length > 0 && (
-              <Menu.Item leftSection={<IconFileText size={14} />} onClick={genCtl.open}>
-                Use a saved template
-              </Menu.Item>
-            )}
+            <Menu.Label>Create a document — then edit &amp; send from the builder</Menu.Label>
+            <Menu.Item leftSection={<IconPencil size={14} />} onClick={buildNew}>
+              Build a new document (blank)
+            </Menu.Item>
             <Menu.Item leftSection={<IconUpload size={14} />} onClick={ctl.open}>
               From a deal document (PDF)
             </Menu.Item>
-            <Menu.Item leftSection={<IconPencil size={14} />} onClick={buildNew}>
-              Build a new document
-            </Menu.Item>
+            {docTemplates.length > 0 && (
+              <>
+                <Menu.Divider />
+                <Menu.Label>From a saved template</Menu.Label>
+                {docTemplates.map((t) => (
+                  <Menu.Item key={t.id} leftSection={<IconFileText size={14} />} onClick={() => useTemplate(t.id)}>
+                    {t.name}
+                  </Menu.Item>
+                ))}
+              </>
+            )}
           </Menu.Dropdown>
         </Menu>
       </Group>
 
-      {isLoading ? (
+      {items.length > 0 && segData.length > 2 && (
+        <Group mb="md">
+          <SegmentedControl size="xs" value={activeFilter} onChange={(v) => setFilter(v as FilterKey)} data={segData} />
+        </Group>
+      )}
+
+      {isLoading && items.length === 0 ? (
         <Loader size="sm" />
-      ) : rows.length === 0 ? (
+      ) : items.length === 0 ? (
         <Text size="sm" c="dimmed">
-          No signature requests yet. Pick a document from the deal and send it for signature.
+          No documents yet. Use <b>Create new</b> to build a document, then send it for signature.
         </Text>
       ) : (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
-          {rows.map((r) => (
-            <SignatureCard key={r.id} r={r} dealId={dealId} />
-          ))}
+          {shown.map((it) =>
+            it.kind === 'draft' ? (
+              <DraftCard key={it.id} doc={it.doc} dealId={dealId} isAdmin={isAdmin} onEdit={() => openBuilder({ id: it.id })} />
+            ) : (
+              <SignatureCard key={it.id} r={it.r} dealId={dealId} />
+            ),
+          )}
         </SimpleGrid>
       )}
 
-      <RequestModal opened={opened} onClose={ctl.close} dealId={dealId} />
-      <GenerateModal opened={genOpened} onClose={genCtl.close} dealId={dealId} templates={docTemplates} />
+      <ImportPdfModal opened={opened} onClose={ctl.close} dealId={dealId} />
     </Card>
   );
 }
 
-/** A signature request as a card: document preview, status, signer, and manage actions. */
+// A US-Letter-ish page thumbnail — every card shows the document's first page inside this same frame.
+const PAGE_BOX: CSSProperties = {
+  width: 96,
+  height: 124,
+  background: '#fff',
+  border: '1px solid var(--mantine-color-gray-3)',
+  borderRadius: 3,
+  boxShadow: '0 1px 6px rgba(0,0,0,0.15)',
+  overflow: 'hidden',
+  flex: 'none',
+};
+
+/** Uniform preview frame: a centered "page" (first page of the document) on a gray backdrop, plus a status badge. */
+function CardPreview({ children, onClick, badge }: { children: ReactNode; onClick?: () => void; badge: ReactNode }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        position: 'relative',
+        height: 150,
+        background: 'var(--mantine-color-gray-1)',
+        cursor: onClick ? 'pointer' : 'default',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {children}
+      {badge}
+    </div>
+  );
+}
+
+/** A signature request as a card: clicking opens the PDF; signed docs cannot be deleted (pending can be voided). */
 function SignatureCard({ r, dealId }: { r: SignatureRequest; dealId: string }) {
   const token = useAuthStore((s) => s.token);
   // Once signed, always show the signed document (preview + open).
   const { data: preview } = useFileUrl(r.hasSigned ? r.signedFileKey : r.sourceFileKey);
   const del = useDeleteSignature(dealId);
+  const voidReq = useVoidSignature(dealId);
   const resend = useResendSignature(dealId);
-  const finished = r.status === 'signed' || r.status === 'declined';
-  const when = r.signedAt ? `Signed ${new Date(r.signedAt).toLocaleDateString()}` : r.sentAt ? `Sent ${new Date(r.sentAt).toLocaleDateString()}` : 'Draft';
+  const dup = useDuplicateDealDoc();
+  // Terminal = no longer actionable; pending = still out for signature (can be resent or voided).
+  const terminal = r.status === 'signed' || r.status === 'declined' || r.status === 'expired' || r.status === 'voided';
+  const pending = !terminal;
+  // Duplicating a sent doc copies its pre-PDF canvas (its source builder doc), never the flattened/signed PDF.
+  const duplicate = () =>
+    r.signableDocumentTemplateId &&
+    dup.mutate(r.signableDocumentTemplateId, { onSuccess: (d) => notifications.show({ message: `Duplicated as “${d.name}” (draft)`, color: 'green' }), onError: fail });
 
+  const openPdf = () => {
+    if (preview?.url) window.open(preview.url, '_blank');
+  };
   const downloadSigned = async () => {
     try {
       const { url } = await getSignatureSignedUrl(token!, r.id);
@@ -156,59 +244,80 @@ function SignatureCard({ r, dealId }: { r: SignatureRequest; dealId: string }) {
     }
   };
   const doResend = () => resend.mutate(r.id, { onSuccess: () => notifications.show({ message: 'Re-sent to the signer', color: 'green' }), onError: fail });
+  // Void a pending request: cancels it in the signing service and keeps it as a "voided" record (moves to the Voided filter).
+  const doVoid = () => {
+    if (!window.confirm(`Void “${r.title}”? It can no longer be signed. It stays as a voided record.`)) return;
+    voidReq.mutate(r.id, {
+      onSuccess: (data) =>
+        notifications.show(
+          data.engineVoided
+            ? { message: 'Document voided and cancelled in the signing service', color: 'green' }
+            : { message: `Voided here, but the signing service was not cancelled: ${data.engineError ?? 'unknown error'}`, color: 'yellow', autoClose: 9000 },
+        ),
+      onError: fail,
+    });
+  };
+  // A terminal (declined/expired/voided) record can be permanently deleted; a signed one never can.
   const remove = () => {
-    if (!window.confirm(`Delete “${r.title}”? This also voids the document in the signing service.`)) return;
+    if (!window.confirm(`Delete “${r.title}” permanently?`)) return;
     del.mutate(r.id, { onSuccess: () => notifications.show({ message: 'Deleted', color: 'green' }), onError: fail });
   };
 
   return (
-    <Card withBorder radius="md" p={0} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ position: 'relative', height: 150, background: 'var(--mantine-color-gray-1)' }}>
-        {preview?.url ? (
-          <iframe src={`${preview.url}#toolbar=0&navpanes=0&view=FitH`} title={r.title} style={{ width: '100%', height: '100%', border: 0, pointerEvents: 'none' }} />
-        ) : (
-          <Group justify="center" align="center" h="100%">
-            <IconFileText size={28} color="var(--mantine-color-gray-5)" />
-          </Group>
-        )}
-        <Badge variant="filled" color={STATUS_COLOR[r.status]} style={{ position: 'absolute', top: 8, right: 8, textTransform: 'none', boxShadow: '0 1px 4px rgba(0,0,0,0.25)' }}>
-          {r.status}
-        </Badge>
-      </div>
+    <Card withBorder radius="md" p={0} h="100%" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <CardPreview
+        onClick={preview?.url ? openPdf : undefined}
+        badge={
+          <Badge variant="filled" color={STATUS_COLOR[r.status]} style={{ position: 'absolute', top: 8, right: 8, textTransform: 'none', boxShadow: '0 1px 4px rgba(0,0,0,0.25)' }}>
+            {r.status}
+          </Badge>
+        }
+      >
+        {/* The document's first page in the shared page frame — same look as a draft. */}
+        <div style={PAGE_BOX}>
+          {preview?.url ? (
+            <iframe src={`${preview.url}#toolbar=0&navpanes=0&view=FitH&page=1`} title={r.title} style={{ width: '100%', height: '100%', border: 0, pointerEvents: 'none' }} />
+          ) : (
+            <Group justify="center" align="center" h="100%">
+              <IconFileText size={26} color="var(--mantine-color-gray-5)" />
+            </Group>
+          )}
+        </div>
+      </CardPreview>
       <div style={{ padding: 12, display: 'flex', flexDirection: 'column', flex: 1 }}>
-        <Text fw={600} lineClamp={1}>
+        <Text fw={600} lineClamp={1} style={{ cursor: preview?.url ? 'pointer' : 'default' }} onClick={openPdf}>
           {r.title}
         </Text>
-        <Text size="xs" c="dimmed" lineClamp={1}>
-          {when}
-        </Text>
+        {/* Which fields the document carries — right below the name (not pills). */}
+        <Text size="xs" c="dimmed">{r.hasInitials ? 'Signature · Initials' : 'Signature'}</Text>
 
-        {/* Signing parties + who's still missing */}
-        <Stack gap={2} mt={6}>
+        {/* Dates: created → sent → signed (the final signature when both parties sign). */}
+        <Stack gap={1} mt={8}>
+          <Text size="xs" c="dimmed">Created {fmtDateTime(r.createdAt)}</Text>
+          {r.sentAt && <Text size="xs" c="dimmed">Sent {fmtDateTime(r.sentAt)}</Text>}
+          {r.signedAt && <Text size="xs" c="dimmed">Signed {fmtDateTime(r.signedAt)}</Text>}
+          {r.status === 'declined' && r.declinedAt && <Text size="xs" c="red">Declined {fmtDateTime(r.declinedAt)}</Text>}
+          {r.status === 'voided' && <Text size="xs" c="orange.7">Voided</Text>}
+        </Stack>
+
+        {/* Signers last. */}
+        <Stack gap={2} mt={8}>
+          <Text size="xs" fw={600} c="dimmed" tt="uppercase">
+            {r.signers.length > 1 ? 'Signers' : 'Signer'}
+          </Text>
           {r.signers.map((s, i) => (
             <Group key={i} gap={6} wrap="nowrap">
               {s.signed ? <IconCheck size={13} color="var(--mantine-color-teal-6)" /> : <IconClock size={13} color="var(--mantine-color-gray-5)" />}
               <Text size="xs" c={s.signed ? undefined : 'dimmed'} lineClamp={1}>
                 {s.owner ? 'You' : s.name || 'Client'}
-                {s.owner ? '' : ' (customer)'}
+                {s.owner ? ' (sender)' : ' (customer)'}
                 {s.signed ? '' : ' · pending'}
               </Text>
             </Group>
           ))}
         </Stack>
 
-        <Group gap={4} mt={6}>
-          <Badge size="xs" variant="light" color="candango" style={{ textTransform: 'none' }}>
-            Signature
-          </Badge>
-          {r.hasInitials && (
-            <Badge size="xs" variant="light" color="violet" style={{ textTransform: 'none' }}>
-              Initials
-            </Badge>
-          )}
-        </Group>
-
-        <Group justify="space-between" mt="sm" gap="xs" wrap="nowrap">
+        <Group justify="space-between" mt="auto" pt="sm" gap="xs" wrap="nowrap">
           {r.hasSigned ? (
             <Button size="compact-xs" variant="light" leftSection={<IconDownload size={13} />} onClick={downloadSigned}>
               Signed PDF
@@ -220,183 +329,141 @@ function SignatureCard({ r, dealId }: { r: SignatureRequest; dealId: string }) {
           ) : (
             <span />
           )}
-          <Menu position="bottom-end" withinPortal shadow="sm">
-            <Menu.Target>
-              <ActionIcon variant="subtle" color="gray" aria-label="Actions">
-                <IconDots size={16} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              {preview?.url && (
-                <Menu.Item leftSection={<IconExternalLink size={14} />} component="a" href={preview.url} target="_blank">
-                  View document
-                </Menu.Item>
-              )}
-              {!finished && (
-                <Menu.Item leftSection={<IconRefresh size={14} />} onClick={doResend}>
-                  Resend
-                </Menu.Item>
-              )}
-              {r.auditUrl && (
-                <Menu.Item component="a" href={r.auditUrl} target="_blank">
-                  Audit trail
-                </Menu.Item>
-              )}
-              <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={remove}>
-                Delete
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
+          {(pending || r.auditUrl || (terminal && r.status !== 'signed') || r.signableDocumentTemplateId) && (
+            <Menu position="bottom-end" withinPortal shadow="sm">
+              <Menu.Target>
+                <ActionIcon variant="subtle" color="gray" aria-label="Actions">
+                  <IconDots size={16} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
+                {/* Clicking the card already opens the PDF, so no "Open PDF" item here. */}
+                {r.signableDocumentTemplateId && (
+                  <Menu.Item leftSection={<IconCopy size={14} />} onClick={duplicate}>
+                    Duplicate as draft
+                  </Menu.Item>
+                )}
+                {pending && (
+                  <Menu.Item leftSection={<IconRefresh size={14} />} onClick={doResend}>
+                    Resend
+                  </Menu.Item>
+                )}
+                {r.auditUrl && (
+                  <Menu.Item component="a" href={r.auditUrl} target="_blank">
+                    Audit trail
+                  </Menu.Item>
+                )}
+                {/* A pending request is VOIDED (cancelled in Documenso, kept as a record); terminal ones can be deleted. Signed is immutable. */}
+                {pending && (
+                  <Menu.Item color="red" leftSection={<IconBan size={14} />} onClick={doVoid}>
+                    Void
+                  </Menu.Item>
+                )}
+                {terminal && r.status !== 'signed' && (
+                  <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={remove}>
+                    Delete
+                  </Menu.Item>
+                )}
+              </Menu.Dropdown>
+            </Menu>
+          )}
         </Group>
       </div>
     </Card>
   );
 }
 
-function GenerateModal({
-  opened,
-  onClose,
-  dealId,
-  templates,
-}: {
-  opened: boolean;
-  onClose: () => void;
-  dealId: string;
-  templates: SignableDocumentTemplate[];
-}) {
-  const generate = useGenerateSignature();
-  const { data: deal } = useDeal(dealId);
-  const { data: users = [] } = useUsers();
-  const [templateId, setTemplateId] = useState<string | null>(null);
-  const [signer, setSigner] = useState<SignerValue | null>(null);
-  const [bothParties, setBothParties] = useState(false);
-  const [sendEmail, setSendEmail] = useState(true);
-  const [link, setLink] = useState<string | null>(null);
+/** A deal document not yet sent: preview (page background or blank page), click to edit in the builder, quick-send, admin-only delete. */
+function DraftCard({ doc, dealId, isAdmin, onEdit }: { doc: SignableDocumentTemplate; dealId: string; isAdmin: boolean; onEdit: () => void }) {
+  const del = useDeleteSignableDocument();
+  const dup = useDuplicateDealDoc();
+  const [sendOpen, sendCtl] = useDisclosure(false);
+  const firstBg = Array.isArray(doc.layout) ? (doc.layout[0] as { background?: string } | undefined)?.background ?? null : null;
+  const { data: bg } = useFileUrl(firstBg);
+  const pageCount = Array.isArray(doc.layout) ? doc.layout.length : 0;
+  const canSend = hasSigningField(doc.layout); // no signature/initials field yet → can't be sent
 
-  // When the chosen template is signed by both parties, show who signs as the sender (from the template).
-  const tpl = templates.find((t) => t.id === templateId);
-  const senderLabel =
-    tpl?.parties === 'both'
-      ? tpl.party2Source === 'user'
-        ? users.find((u) => u.id === tpl.party2UserId)?.name || 'a specific workspace user'
-        : users.find((u) => u.id === deal?.ownerUserId)?.name || 'the deal owner (sales rep)'
-      : null;
-
-  const close = () => {
-    setTemplateId(null);
-    setSigner(null);
-    setBothParties(false);
-    setSendEmail(true);
-    setLink(null);
-    onClose();
+  const remove = () => {
+    if (!window.confirm(`Delete the draft “${doc.name}”?`)) return;
+    del.mutate(doc.id, { onSuccess: () => notifications.show({ message: 'Draft deleted', color: 'green' }), onError: fail });
   };
-
-  const submit = async () => {
-    if (!templateId) {
-      notifications.show({ message: 'Pick a document template', color: 'red' });
-      return;
-    }
-    if (!signer?.email) {
-      notifications.show({ message: 'Pick a signer', color: 'red' });
-      return;
-    }
-    try {
-      const res = await generate.mutateAsync({
-        dealId,
-        signableDocumentTemplateId: templateId,
-        signerName: signer.name || undefined,
-        signerEmail: signer.email,
-        receiverPersonId: signer.personId,
-        sendEmail,
-        // parties are defined by the document template
-      });
-      setLink(res.signingUrl ?? null);
-      notifications.show({ message: sendEmail ? 'Generated and sent to the signer' : 'Document generated', color: 'green' });
-    } catch (e) {
-      fail(e);
-    }
-  };
+  const duplicate = () => dup.mutate(doc.id, { onSuccess: (d) => notifications.show({ message: `Duplicated as “${d.name}”`, color: 'green' }), onError: fail });
 
   return (
-    <Modal opened={opened} onClose={close} title="Generate a document for signature" centered>
-      {link ? (
-        <Stack>
-          <Text size="sm">Signing link (share it with the signer):</Text>
-          <TextInput readOnly value={link} />
-          <Group justify="flex-end">
-            <Button variant="default" leftSection={<IconLink size={14} />} onClick={() => { navigator.clipboard.writeText(link); notifications.show({ message: 'Copied', color: 'green' }); }}>
-              Copy link
-            </Button>
-            <Button onClick={close}>Done</Button>
-          </Group>
-        </Stack>
-      ) : (
-        <Stack>
-          <Select
-            label="Document template"
-            placeholder="Pick a document to generate"
-            required
-            data={templates.map((t) => ({ value: t.id, label: t.name }))}
-            value={templateId}
-            onChange={setTemplateId}
-            data-autofocus
-          />
-          <Text size="xs" c="dimmed">
-            Content is filled from this deal.
+    <Card withBorder radius="md" p={0} h="100%" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <CardPreview
+        onClick={onEdit}
+        badge={
+          <Badge variant="light" color="gray" style={{ position: 'absolute', top: 8, right: 8, textTransform: 'none' }}>
+            Draft
+          </Badge>
+        }
+      >
+        {/* The first page in the shared page frame — the imported PDF's page image when there is one, else blank. */}
+        <div style={{ ...PAGE_BOX, background: bg?.url ? `#fff url(${bg.url}) top center / cover no-repeat` : '#fff' }} />
+      </CardPreview>
+      <div style={{ padding: 12, display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <Text fw={600} lineClamp={1} style={{ cursor: 'pointer' }} onClick={onEdit}>
+          {doc.name || 'Untitled document'}
+        </Text>
+        <Text size="xs" c="dimmed">{doc.parties === 'both' ? 'Signature · Customer + sender' : 'Signature · Customer only'}</Text>
+        <Text size="xs" c="dimmed" mt={6}>
+          Created {fmtDateTime(doc.createdAt)}
+        </Text>
+        <Text size="xs" c="dimmed">
+          {pageCount || 1} page{pageCount === 1 ? '' : 's'} · not sent yet
+        </Text>
+        {!canSend && (
+          <Text size="xs" c="orange.7" mt={4}>
+            Add a signature or initials field to send.
           </Text>
-          {senderLabel && (
-            <Alert color="candango" variant="light" py="xs">
-              <Text size="xs">
-                Both parties sign — <strong>{senderLabel}</strong> signs as the sender (set by the template).
-              </Text>
-            </Alert>
-          )}
-          <SignerFields
-            dealId={dealId}
-            companyId={deal?.companyId ?? null}
-            signer={signer}
-            onSigner={setSigner}
-            bothParties={bothParties}
-            onBothParties={setBothParties}
-            sendEmail={sendEmail}
-            onSendEmail={setSendEmail}
-            hideParties
-          />
-          <Button onClick={submit} loading={generate.isPending} disabled={!templateId || !signer}>
-            Generate &amp; send
-          </Button>
-        </Stack>
-      )}
-    </Modal>
+        )}
+        <Group justify="space-between" mt="auto" pt="sm" gap="xs" wrap="nowrap">
+          <Group gap="xs" wrap="nowrap">
+            <Button size="compact-xs" variant="light" leftSection={<IconPencil size={13} />} onClick={onEdit}>
+              Edit
+            </Button>
+            <Tooltip label="Add at least one signature or initials field first (Edit)." disabled={canSend} withArrow>
+              <Button size="compact-xs" leftSection={<IconSend size={13} />} onClick={sendCtl.open} disabled={!canSend}>
+                Send
+              </Button>
+            </Tooltip>
+          </Group>
+          <Group gap={2} wrap="nowrap">
+            <ActionIcon variant="subtle" color="gray" aria-label="Duplicate draft" onClick={duplicate} loading={dup.isPending}>
+              <IconCopy size={16} />
+            </ActionIcon>
+            {isAdmin && (
+              <ActionIcon variant="subtle" color="red" aria-label="Delete draft" onClick={remove} loading={del.isPending}>
+                <IconTrash size={16} />
+              </ActionIcon>
+            )}
+          </Group>
+        </Group>
+      </div>
+      <SendDocModal opened={sendOpen} onClose={sendCtl.close} dealId={dealId} docId={doc.id} docName={doc.name} secondSigner={doc.parties === 'both'} onSent={sendCtl.close} />
+    </Card>
   );
 }
 
-function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: () => void; dealId: string }) {
-  const { deal, form, setForm, save } = useDealCtx();
+/**
+ * Turn a PDF already on the deal into a signable document: pick the file, then open it in the
+ * document builder (each PDF page becomes a builder page background). Nothing is sent from here —
+ * the document is created, then reviewed / edited / sent from the builder.
+ */
+function ImportPdfModal({ opened, onClose, dealId }: { opened: boolean; onClose: () => void; dealId: string }) {
+  const router = useRouter();
+  const { form, setForm, save } = useDealCtx();
   const { data: allFields = [] } = useCustomFields('deal');
   const docFields = useMemo(() => allFields.filter((f) => f.type === 'document'), [allFields]);
-
-  const create = useCreateSignature();
+  const createDoc = useCreateSignableDocument();
   const upload = useUploadFile();
-  const { data: templates = [] } = useSignatureTemplates();
 
   const [fieldKey, setFieldKey] = useState<string | null>(null);
   const [fileKey, setFileKey] = useState<string | null>(null);
-  const [templateId, setTemplateId] = useState<string>(''); // '' = custom (inline options)
-  const [title, setTitle] = useState('');
-  const [signer, setSigner] = useState<SignerValue | null>(null);
-  const [bothParties, setBothParties] = useState(false);
-  const [sendEmail, setSendEmail] = useState(true);
-  const [acceptance, setAcceptance] = useState(true);
-  const [initials, setInitials] = useState(false);
-  const [drawnFields, setDrawnFields] = useState<DrawnField[]>([]);
-  const [method, setMethod] = useState<'options' | 'fields'>('options');
-  const [link, setLink] = useState<string | null>(null);
+  const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
-  const useTemplate = templateId !== '';
-  const { data: filePreview } = useFileUrl(fileKey);
 
-  // Signable documents currently held by the selected custom field.
   const files: StoredDoc[] = useMemo(() => {
     if (!fieldKey) return [];
     const raw = (form.customFields[fieldKey] as StoredDoc[]) ?? [];
@@ -406,40 +473,28 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
   const reset = () => {
     setFieldKey(null);
     setFileKey(null);
-    setTemplateId('');
-    setTitle('');
-    setSigner(null);
-    setBothParties(false);
-    setSendEmail(true);
-    setAcceptance(true);
-    setInitials(false);
-    setDrawnFields([]);
-    setMethod('options');
-    setLink(null);
+    setName('');
   };
   const close = () => {
     reset();
     onClose();
   };
 
-  // Drawn fields are page-specific to a document, so reset them whenever the document changes.
   const pickField = (key: string | null) => {
     setFieldKey(key);
     setFileKey(null);
-    setDrawnFields([]);
   };
   const pickFile = (key: string | null) => {
     setFileKey(key);
-    setDrawnFields([]);
     const doc = files.find((d) => d.key === key);
-    if (doc && !title.trim()) setTitle(doc.name.replace(/\.[^.]+$/, ''));
+    if (doc && !name.trim()) setName(doc.name.replace(/\.[^.]+$/, ''));
   };
 
   // Upload a new PDF straight into the selected document custom field, then select it.
   const uploadToField = async (file: File | null) => {
     if (!file || !fieldKey) return;
     if (!SIGNABLE.test(file.name)) {
-      notifications.show({ message: 'Only PDF documents can be sent for signature.', color: 'red' });
+      notifications.show({ message: 'Only PDF documents can be turned into a signable document.', color: 'red' });
       return;
     }
     if (file.size > DOC_MAX) {
@@ -455,7 +510,7 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
       setForm({ ...form, customFields: nextCF });
       save({ customFields: nextCF }); // persist the new document onto the deal
       setFileKey(key);
-      if (!title.trim()) setTitle(file.name.replace(/\.[^.]+$/, ''));
+      if (!name.trim()) setName(file.name.replace(/\.[^.]+$/, ''));
     } catch (e) {
       fail(e);
     } finally {
@@ -463,71 +518,30 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
     }
   };
 
-  const submit = async () => {
-    if (!fileKey || !title.trim() || !signer?.email) {
-      notifications.show({ message: 'Choose a document, a title and a signer', color: 'red' });
+  // Create a deal-scoped builder document, then open it in the builder with the PDF queued for import.
+  const openInBuilder = () => {
+    if (!fileKey || !name.trim()) {
+      notifications.show({ message: 'Choose a PDF and a name', color: 'red' });
       return;
     }
-    if (method === 'fields') {
-      if (drawnFields.length === 0) {
-        notifications.show({ message: 'Place at least one field on the document', color: 'red' });
-        return;
-      }
-    } else if (!useTemplate && !acceptance && !initials) {
-      notifications.show({ message: 'Pick a template or a signing option', color: 'red' });
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await create.mutateAsync({
-        dealId,
-        title: title.trim(),
-        fileKey,
-        signerName: signer.name || undefined,
-        signerEmail: signer.email,
-        receiverPersonId: signer.personId,
-        sendEmail,
-        bothParties,
-        // Manual field placement is exclusive with the template / acceptance-page options.
-        ...(method === 'fields'
-          ? { drawnFields, acceptance: false }
-          : useTemplate
-            ? { signatureTemplateId: templateId }
-            : { acceptance, initialsEveryPage: initials }),
-      });
-      setLink(res.signingUrl ?? null);
-      notifications.show({ message: sendEmail ? 'Sent to the signer' : 'Signature request created', color: 'green' });
-    } catch (e) {
-      fail(e);
-    } finally {
-      setBusy(false);
-    }
+    createDoc.mutate(
+      { name: name.trim(), mode: 'builder', dealId, theme: { orientation: 'portrait', paperSize: 'letter' } },
+      {
+        onSuccess: (d) => {
+          close();
+          router.push(`/deals/${dealId}/signatures/${d.id}?importPdf=${encodeURIComponent(fileKey)}`);
+        },
+        onError: fail,
+      },
+    );
   };
 
   return (
-    <Modal opened={opened} onClose={close} title="Request signature" centered size="lg">
-      {link ? (
-        <Stack>
-          <Text size="sm">Signing link (share it with the signer):</Text>
-          <TextInput readOnly value={link} />
-          <Group justify="flex-end">
-            <Button
-              variant="default"
-              leftSection={<IconLink size={14} />}
-              onClick={() => {
-                navigator.clipboard.writeText(link);
-                notifications.show({ message: 'Copied', color: 'green' });
-              }}
-            >
-              Copy link
-            </Button>
-            <Button onClick={close}>Done</Button>
-          </Group>
-        </Stack>
-      ) : docFields.length === 0 ? (
+    <Modal opened={opened} onClose={close} title="Sign a document from this deal" centered size="lg">
+      {docFields.length === 0 ? (
         <Alert icon={<IconInfoCircle size={16} />} color="gray">
           There are no <b>document</b> custom fields yet. Create one on the{' '}
-          <Link href="/settings/fields">Fields page</Link> to store documents on deals, then request a signature here.
+          <Link href="/settings/fields">Fields page</Link> to store documents on deals, then sign one here.
         </Alert>
       ) : (
         <Stack>
@@ -548,7 +562,7 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
                 </Text>
                 <FileButton onChange={uploadToField} accept="application/pdf">
                   {(props) => (
-                    <Button {...props} size="compact-xs" variant="subtle" leftSection={<IconUpload size={13} />} loading={busy && !create.isPending}>
+                    <Button {...props} size="compact-xs" variant="subtle" leftSection={<IconUpload size={13} />} loading={busy}>
                       Upload PDF
                     </Button>
                   )}
@@ -572,256 +586,18 @@ function RequestModal({ opened, onClose, dealId }: { opened: boolean; onClose: (
 
           {fileKey && <DocPreview objectKey={fileKey} />}
 
-          <TextInput label="Title" placeholder="e.g. Service Agreement" required value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
+          <TextInput label="Document name" placeholder="e.g. Service Agreement" required value={name} onChange={(e) => setName(e.currentTarget.value)} />
 
-          <SignerFields
-            dealId={dealId}
-            companyId={deal.companyId ?? null}
-            signer={signer}
-            onSigner={setSigner}
-            bothParties={bothParties}
-            onBothParties={(b) => {
-              setBothParties(b);
-              if (!b) setDrawnFields((fs) => fs.filter((f) => f.party !== 'sender'));
-            }}
-            sendEmail={sendEmail}
-            onSendEmail={setSendEmail}
-            hideParties={method === 'options' && useTemplate}
-          />
+          <Text size="xs" c="dimmed">
+            Each PDF page opens as a page in the builder. Place the signature fields, then send it from there.
+          </Text>
 
-          <div>
-            <Text size="sm" fw={500} mb={4}>
-              How to set up signing
-            </Text>
-            <SegmentedControl
-              fullWidth
-              value={method}
-              onChange={(v) => setMethod(v as 'options' | 'fields')}
-              data={[
-                { value: 'options', label: 'Signing options' },
-                { value: 'fields', label: 'Place fields manually' },
-              ]}
-            />
-            <Text size="xs" c="dimmed" mt={4}>
-              {method === 'fields'
-                ? 'Drop the exact signature/date fields onto the page — replaces the options below.'
-                : 'Reuse a saved template, or add an acceptance page / initials.'}
-            </Text>
-          </div>
-
-          {method === 'options' ? (
-            <div>
-              <Select
-                label="Signature template"
-                placeholder="Custom (choose below)"
-                data={[{ value: '', label: 'Custom (choose below)' }, ...templates.map((t) => ({ value: t.id, label: t.name }))]}
-                value={templateId}
-                onChange={(v) => setTemplateId(v ?? '')}
-                comboboxProps={{ withinPortal: true }}
-                allowDeselect={false}
-                description={templates.length === 0 ? 'Tip: save reusable recipes in Settings → Signatures.' : 'Reuse a saved signature template, or configure options below.'}
-              />
-              {!useTemplate && (
-                <Stack gap={6} mt={8}>
-                  <Checkbox
-                    label="Acceptance & Signature page"
-                    description="Appends a page with signature, date and printed name at the end."
-                    checked={acceptance}
-                    onChange={(e) => setAcceptance(e.currentTarget.checked)}
-                  />
-                  <Checkbox
-                    label="Initials on every page"
-                    description="Adds an initials field to the footer of every page."
-                    checked={initials}
-                    onChange={(e) => setInitials(e.currentTarget.checked)}
-                  />
-                </Stack>
-              )}
-            </div>
-          ) : !fileKey ? (
-            <Text size="xs" c="dimmed">
-              Pick a document above to place fields on it.
-            </Text>
-          ) : (
-            <div>
-              <Text size="sm" fw={500} mb={2}>
-                Place fields on the document {drawnFields.length > 0 && <Text span c="candango" fw={600}>· {drawnFields.length}</Text>}
-              </Text>
-              <Text size="xs" c="dimmed" mb="xs">
-                Drop <b>Customer</b> fields{bothParties ? <> and <b>Sender</b> fields</> : ''} onto exact spots — one signature per party.
-              </Text>
-              <Paper withBorder radius="md" p="sm">
-                {filePreview?.url ? (
-                  <SignatureFieldEditor fileUrl={filePreview.url} value={drawnFields} onChange={setDrawnFields} senderFields={bothParties} />
-                ) : (
-                  <Group justify="center" py="md">
-                    <Loader size="sm" />
-                  </Group>
-                )}
-              </Paper>
-            </div>
-          )}
-          <Button onClick={submit} loading={busy && create.isPending} disabled={!fileKey || !signer}>
-            Send for signature
+          <Button onClick={openInBuilder} loading={createDoc.isPending} disabled={!fileKey || !name.trim()}>
+            Open in builder
           </Button>
         </Stack>
       )}
     </Modal>
-  );
-}
-
-export interface SignerValue {
-  name: string;
-  email: string;
-  personId?: string;
-}
-
-/**
- * Signer selection for a signature request: the client is a person ON the deal (pick, or create +
- * link), and you choose whether just the client signs or both parties (the deal owner counter-signs).
- */
-function SignerFields({
-  dealId,
-  companyId,
-  signer,
-  onSigner,
-  bothParties,
-  onBothParties,
-  senderName,
-  sendEmail,
-  onSendEmail,
-  hideParties,
-}: {
-  dealId: string;
-  companyId: string | null;
-  signer: SignerValue | null;
-  onSigner: (s: SignerValue | null) => void;
-  bothParties: boolean;
-  onBothParties: (b: boolean) => void;
-  /** When both parties sign: who signs as the sender (shown read-only). */
-  senderName?: string | null;
-  sendEmail: boolean;
-  onSendEmail: (b: boolean) => void;
-  hideParties?: boolean;
-}) {
-  const { data: recipients = [] } = useDealRecipients(dealId);
-  const createPerson = useCreatePerson();
-  const addParticipant = useAddDealParticipant();
-  const [personId, setPersonId] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-  const [first, setFirst] = useState('');
-  const [last, setLast] = useState('');
-  const [email, setEmail] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const withEmail = recipients.filter((r) => r.email);
-
-  // Default the signer to the deal's primary contact (the recipients endpoint returns it first).
-  const didInit = useRef(false);
-  useEffect(() => {
-    if (didInit.current || withEmail.length === 0) return;
-    didInit.current = true;
-    setPersonId((cur) => cur ?? withEmail[0].id);
-  }, [withEmail]);
-
-  // Resolve the picked person to a signer — always "First Last" for the document (not the display format).
-  useEffect(() => {
-    const r = recipients.find((x) => x.id === personId);
-    const name = r ? `${r.firstName} ${r.lastName}`.trim() || r.name : '';
-    onSigner(r && r.email ? { name, email: r.email, personId: r.id } : null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [personId, recipients]);
-
-  const addPerson = async () => {
-    if (!first.trim() || !email.trim()) {
-      notifications.show({ message: 'First name and email are required', color: 'red' });
-      return;
-    }
-    setBusy(true);
-    try {
-      const p = await createPerson.mutateAsync({ firstName: first.trim(), lastName: last.trim(), email: email.trim(), companyIds: companyId ? [companyId] : undefined });
-      await addParticipant.mutateAsync({ dealId, personId: p.id });
-      setPersonId(p.id); // recipients refetch via invalidation; the effect resolves the signer
-      setAdding(false);
-      setFirst('');
-      setLast('');
-      setEmail('');
-    } catch (e) {
-      fail(e);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Stack gap="sm">
-      <div>
-        <Group justify="space-between" align="flex-end" mb={4}>
-          <Text size="sm" fw={500}>
-            Customer (signer) <Text span c="red">*</Text>
-          </Text>
-          <Button size="compact-xs" variant="subtle" leftSection={<IconPlus size={13} />} onClick={() => setAdding((a) => !a)}>
-            New person
-          </Button>
-        </Group>
-        <Select
-          placeholder={withEmail.length ? 'Pick a person on this deal' : 'No deal people with an email — add one'}
-          data={withEmail.map((r) => ({ value: r.id, label: `${r.name} · ${r.email}` }))}
-          value={personId}
-          onChange={setPersonId}
-          searchable
-          comboboxProps={{ withinPortal: true }}
-        />
-        <Collapse in={adding}>
-          <Paper withBorder radius="sm" p="xs" mt="xs">
-            <Group grow>
-              <TextInput size="xs" label="First name" value={first} onChange={(e) => setFirst(e.currentTarget.value)} />
-              <TextInput size="xs" label="Last name" value={last} onChange={(e) => setLast(e.currentTarget.value)} />
-            </Group>
-            <TextInput size="xs" mt="xs" label="Email" type="email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
-            <Text size="xs" c="dimmed" mt={4}>
-              Added to this deal{companyId ? ' and its company' : ''}.
-            </Text>
-            <Group justify="flex-end" mt="xs">
-              <Button size="xs" onClick={addPerson} loading={busy}>
-                Add &amp; select
-              </Button>
-            </Group>
-          </Paper>
-        </Collapse>
-      </div>
-
-      {!hideParties && (
-        <div>
-          <Text size="sm" fw={500} mb={4}>
-            Signed by
-          </Text>
-          <SegmentedControl
-            fullWidth
-            data={[
-              { value: 'one', label: 'Customer only' },
-              { value: 'both', label: 'Both parties' },
-            ]}
-            value={bothParties ? 'both' : 'one'}
-            onChange={(v) => onBothParties(v === 'both')}
-          />
-        </div>
-      )}
-
-      {bothParties && (
-        <Text size="sm">
-          <Text span fw={500}>
-            Sender:
-          </Text>{' '}
-          {senderName?.trim() || 'You (the deal owner)'}{' '}
-          <Text span c="dimmed" size="xs">
-            — signs your side; either party can sign anytime.
-          </Text>
-        </Text>
-      )}
-
-      <Switch label="Email the signer(s) now" checked={sendEmail} onChange={(e) => onSendEmail(e.currentTarget.checked)} />
-    </Stack>
   );
 }
 

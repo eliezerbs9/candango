@@ -108,6 +108,28 @@ export class EmailAutomationsExecutor {
       return;
     }
 
+    if (auto.action === 'move_stage') {
+      const stageId = String((auto.config as Record<string, unknown> | null)?.stageId ?? '');
+      // Direct stage set — no `deal.stage_changed` emit, so stage automations don't cascade/loop.
+      if (stageId) {
+        await this.prisma.deal.update({ where: { id: dealId }, data: { stageId } }).catch((e) => this.logger.warn(`automation ${auto.id} move_stage failed: ${e}`));
+        this.logger.log(`automation ${auto.id} moved deal ${dealId} to stage ${stageId}`);
+      }
+      return;
+    }
+
+    if (auto.action === 'add_tag') {
+      const tag = String((auto.config as Record<string, unknown> | null)?.tag ?? '').trim();
+      if (tag && deal.primaryPersonId) {
+        const person = await this.prisma.person.findFirst({ where: { id: deal.primaryPersonId, orgId }, select: { tags: true } });
+        if (person && !person.tags.includes(tag)) {
+          await this.prisma.person.update({ where: { id: deal.primaryPersonId }, data: { tags: { push: tag } } });
+          this.logger.log(`automation ${auto.id} tagged contact of deal ${dealId} with "${tag}"`);
+        }
+      }
+      return;
+    }
+
     // send_email
     if (!auto.template) return;
     const recipient = ctx['contact.email'];

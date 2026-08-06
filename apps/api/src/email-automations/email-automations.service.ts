@@ -9,6 +9,7 @@ import {
 } from './dto/email-automation.dto';
 import { MarketingSchedule, computeNextRun, validateSchedule } from './marketing-schedule';
 import { MarketingAudience, validateAudience } from './marketing-audience';
+import { STARTER_RECIPES, RECIPE_GROUPS_WITH_RECIPES, type RecipeGroup } from './automation-recipes';
 
 const shape = (a: {
   id: string;
@@ -82,11 +83,85 @@ export class EmailAutomationsService {
       const doc = await this.prisma.signableDocumentTemplate.findFirst({ where: { id: docId, orgId, archivedAt: null } });
       if (!doc) throw new BadRequestException('Document template not found');
     }
+    if (action === 'move_stage') {
+      const stageId = (config as Record<string, unknown> | undefined)?.stageId;
+      if (typeof stageId !== 'string' || !stageId) throw new BadRequestException('Pick the stage to move the deal to');
+      const stage = await this.prisma.stage.findFirst({ where: { id: stageId, orgId } });
+      if (!stage) throw new BadRequestException('Stage not found');
+    }
+    if (action === 'add_tag') {
+      const tag = (config as Record<string, unknown> | undefined)?.tag;
+      if (typeof tag !== 'string' || !tag.trim()) throw new BadRequestException('Enter a tag to add to the contact');
+    }
   }
 
   /** Email automations can only be enabled when the workspace has at least one connected mailbox. */
   private async orgHasMailbox(orgId: string) {
     return (await this.prisma.mailboxConnection.count({ where: { orgId } })) > 0;
+  }
+
+  /** Starter-kit groups available to this org right now: `core` always, `gmail` once a mailbox is connected. */
+  private async availableRecipeGroups(orgId: string): Promise<RecipeGroup[]> {
+    const groups: RecipeGroup[] = ['core'];
+    if (await this.orgHasMailbox(orgId)) groups.push('gmail');
+    // 'quickbooks' has no recipes yet — added in the dedicated QB pass.
+    return groups.filter((g) => RECIPE_GROUPS_WITH_RECIPES.includes(g));
+  }
+
+  /** Whether there's at least one available recipe group not yet seeded (drives the "Add recipes" button). */
+  async seedStatus(orgId: string) {
+    const org = await this.prisma.organization.findFirst({ where: { id: orgId }, select: { seededAutomationGroups: true } });
+    const seeded = new Set(org?.seededAutomationGroups ?? []);
+    const available = await this.availableRecipeGroups(orgId);
+    return { seedable: available.some((g) => !seeded.has(g)) };
+  }
+
+  /**
+   * Seed the starter-kit automations for every AVAILABLE group not yet seeded (each group at most once —
+   * reconnecting an integration never re-seeds). Gmail recipes upsert their deal email template first.
+   * Called by the "Add recipes" button and right after a Gmail connection.
+   */
+  async seedStarterKit(orgId: string, userId?: string) {
+    const org = await this.prisma.organization.findFirst({ where: { id: orgId }, select: { seededAutomationGroups: true } });
+    const seeded = new Set(org?.seededAutomationGroups ?? []);
+    const available = await this.availableRecipeGroups(orgId);
+    const toSeed = available.filter((g) => !seeded.has(g));
+    if (toSeed.length === 0) return { created: 0, groups: [] as string[] };
+
+    let created = 0;
+    for (const group of toSeed) {
+      for (const r of STARTER_RECIPES.filter((x) => x.group === group)) {
+        let templateId: string | null = null;
+        if (r.template) {
+          // Regular (NOT system) templates — deletable/editable. No systemKey; the group-seeds-once flag
+          // already prevents duplicates, so no upsert is needed.
+          const tpl = await this.prisma.emailTemplate.create({
+            data: { orgId, name: r.template.name, subject: r.template.subject, body: r.template.body, bodyFormat: 'richtext', scope: 'deal', createdByUserId: userId ?? null },
+          });
+          templateId = tpl.id;
+        }
+        // Adequate tags per recipe: a 'starter' marker + its category + 'email' for email actions.
+        const tags = Array.from(new Set(['starter', r.category, ...(r.action === 'send_email' ? ['email'] : [])]));
+        await this.prisma.emailAutomation.create({
+          data: {
+            orgId,
+            createdByUserId: userId ?? null,
+            name: r.name,
+            category: r.category,
+            tags,
+            kind: 'deal',
+            trigger: r.trigger,
+            action: r.action,
+            templateId,
+            config: (r.config ?? {}) as Prisma.InputJsonValue,
+            enabled: false, // starter automations arrive OFF — the user reviews and flips each one on
+          },
+        });
+        created++;
+      }
+    }
+    await this.prisma.organization.update({ where: { id: orgId }, data: { seededAutomationGroups: { push: toSeed } } });
+    return { created, groups: toSeed };
   }
 
   async create(orgId: string, userId: string, dto: CreateEmailAutomationDto) {
