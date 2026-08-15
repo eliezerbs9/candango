@@ -1,4 +1,47 @@
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+/** Rules that gate the deal "Mark won" button (global per workspace). */
+export class WinRequirementsDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  stageIds?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  requireAcceptedProposal?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  requireSignedDocument?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  signedTemplateIds?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  requireInvoice?: boolean;
+}
 
 export class UpdateOrganizationDto {
   @IsOptional()
@@ -39,4 +82,15 @@ export class UpdateOrganizationDto {
   @IsString()
   @MaxLength(20000)
   emailSignature?: string;
+
+  /** Win Requirements — rules that gate the deal "Mark won" button. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => WinRequirementsDto)
+  winRequirements?: WinRequirementsDto;
+
+  /** Which elements show on a pipeline deal card (booleans keyed by element). */
+  @IsOptional()
+  @IsObject()
+  dealCardConfig?: Record<string, boolean>;
 }

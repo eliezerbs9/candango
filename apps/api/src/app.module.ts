@@ -8,6 +8,8 @@ import { ProfileModule } from './profile/profile.module';
 import { OrganizationModule } from './organization/organization.module';
 import { PipelinesModule } from './pipelines/pipelines.module';
 import { DealsModule } from './deals/deals.module';
+import { DealValueModule } from './deals/deal-value.module';
+import { DealEventsModule } from './deal-events/deal-events.module';
 import { PersonsModule } from './persons/persons.module';
 import { CompaniesModule } from './companies/companies.module';
 import { ActivitiesModule } from './activities/activities.module';
@@ -54,11 +56,13 @@ import { HealthController } from './health.controller';
       },
     }),
     PrismaModule,
+    DealValueModule,
     AuthModule,
     ProfileModule,
     OrganizationModule,
     PipelinesModule,
     DealsModule,
+    DealEventsModule,
     PersonsModule,
     CompaniesModule,
     ActivitiesModule,

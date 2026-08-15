@@ -32,6 +32,7 @@ export function DocList({
   onSetStatus,
   onOpen,
   isStatusLocked,
+  inValue,
   emptyText,
   connected,
   actions,
@@ -41,6 +42,8 @@ export function DocList({
   onSetStatus: (id: string, status: string) => void;
   onOpen?: (doc: DealDoc) => void;
   isStatusLocked?: (doc: DealDoc) => boolean;
+  /** Whether this doc currently contributes to the deal value (status-tier model). */
+  inValue?: (doc: DealDoc) => boolean;
   emptyText: string;
   connected?: boolean; // show the source ("local") badge only when QuickBooks is connected
   /** The per-row actions for this doc (Send / Print / Convert / value / Delete). */
@@ -67,7 +70,7 @@ export function DocList({
                     <Text size="sm" fw={500}>
                       {d.docNumber ? `#${d.docNumber}` : 'Draft'}
                     </Text>
-                    {d.includeInValue && (
+                    {inValue?.(d) && (
                       <Badge size="xs" variant="light" color="green">
                         in value
                       </Badge>

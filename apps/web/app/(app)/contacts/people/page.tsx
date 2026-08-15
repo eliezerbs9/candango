@@ -22,8 +22,6 @@ import { PageHeader } from '@/components/primitives/PageHeader';
 import { DataTable, type Column } from '@/components/data/DataTable';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
 import { CustomFieldsEditor } from '@/components/deals/CustomFieldsEditor';
-import { AddressFields } from '@/components/deals/AddressFields';
-import type { Address } from '@/lib/api/types';
 import { ApiError } from '@/lib/api/client';
 import {
   useCompanies,
@@ -49,7 +47,6 @@ export default function PeoplePage() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState<Address>({});
   const [companyIds, setCompanyIds] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
@@ -62,7 +59,6 @@ export default function PeoplePage() {
     setLastName('');
     setEmail('');
     setPhone('');
-    setAddress({});
     setCompanyIds([]);
     setTags([]);
     setCustomFields({});
@@ -75,7 +71,6 @@ export default function PeoplePage() {
     setLastName(p.lastName ?? '');
     setEmail(p.email ?? '');
     setPhone(p.phone ?? '');
-    setAddress(p.address ?? {});
     setCompanyIds(p.companies.map((c) => c.id));
     setTags(p.tags ?? []);
     setCustomFields(p.customFields ?? {});
@@ -136,7 +131,6 @@ export default function PeoplePage() {
       lastName: lastName.trim() || undefined,
       email: email || undefined,
       phone: phone || undefined,
-      address: Object.values(address).some(Boolean) ? address : undefined,
       companyIds,
       tags,
       customFields,
@@ -199,7 +193,6 @@ export default function PeoplePage() {
           <TextInput label="Last name" value={lastName} onChange={(e) => setLastName(e.currentTarget.value)} />
           <TextInput label="Email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
           <TextInput label="Phone" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} />
-          <AddressFields label="Address" value={address} onChange={setAddress} withName={false} />
           <CreatableMultiSelect
             label="Companies"
             placeholder="Search or create companies"

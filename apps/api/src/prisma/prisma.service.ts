@@ -9,8 +9,9 @@ const TENANT_MODELS = new Set<string>([
   'CalendarEvent', 'MailboxConnection', 'Message', 'Webhook', 'WebhookDelivery',
   'EventOutbox', 'ApiKey', 'AuditLog', 'Subscription', 'Invoice',
   'CustomFieldDefinition', 'QuickBooksConnection', 'QuickBooksCustomerLink',
-  'DealEstimate', 'DealInvoice', 'EmailTemplate', 'EmailAutomation', 'AutomationRun',
+  'DealEstimate', 'DealInvoice', 'EstimateItem', 'EmailTemplate', 'EmailAutomation', 'AutomationRun',
   'ProposalTemplate', 'Proposal', 'SignatureRequest', 'SignatureTemplate', 'SignableDocumentTemplate',
+  'DealEvent',
 ]);
 
 /**

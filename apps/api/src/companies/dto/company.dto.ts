@@ -10,6 +10,10 @@ export class CreateCompanyDto {
   domain?: string;
 
   @IsOptional()
+  @IsString()
+  email?: string;
+
+  @IsOptional()
   @IsObject()
   address?: Record<string, unknown>;
 
@@ -52,6 +56,10 @@ export class UpdateCompanyDto {
   @IsOptional()
   @IsString()
   domain?: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
 
   @IsOptional()
   @IsObject()

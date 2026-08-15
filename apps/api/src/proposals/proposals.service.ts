@@ -3,10 +3,13 @@ import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { DealEventsService } from '../deal-events/deal-events.service';
 import { SpacesService } from '../uploads/spaces.service';
 import { MessagesService } from '../messages/messages.service';
 import { buildSignatureValues, buildTemplateContext, normalizeSignature, renderSignatureHtml, renderTemplate } from '../email-templates/template-vars';
 import { CreateProposalDto, SendProposalDto, UpdateProposalDto } from './dto/proposal.dto';
+import { collectProposalPricingIds, normalizeProposalFields, proposalSendBlockers } from './proposal-fields';
+import { DealValueService } from '../deals/deal-value.service';
 
 /** Walk a proposal's layout (pages → elements) and collect object keys of "fixed" image/document files. */
 function collectFixedFileKeys(content: unknown): string[] {
@@ -26,6 +29,27 @@ function collectFixedFileKeys(content: unknown): string[] {
   return keys;
 }
 
+/** Collect estimate/invoice ids referenced by pricing elements' per-element `docs` array. */
+export function collectPricingDocs(content: unknown): { estimateIds: string[]; invoiceIds: string[] } {
+  const estimateIds: string[] = [];
+  const invoiceIds: string[] = [];
+  const pages = Array.isArray(content) ? content : [];
+  for (const page of pages) {
+    const elements = (page as { elements?: unknown })?.elements;
+    if (!Array.isArray(elements)) continue;
+    for (const el of elements) {
+      const e = el as { type?: string; props?: Record<string, unknown> };
+      if (e?.type !== 'pricing' || !Array.isArray(e.props?.docs)) continue;
+      for (const d of e.props!.docs as { kind?: unknown; id?: unknown }[]) {
+        if (!d || typeof d.id !== 'string') continue;
+        if (d.kind === 'invoice') invoiceIds.push(d.id);
+        else estimateIds.push(d.id);
+      }
+    }
+  }
+  return { estimateIds, invoiceIds };
+}
+
 export const shapeProposal = (p: {
   id: string;
   dealId: string;
@@ -34,6 +58,8 @@ export const shapeProposal = (p: {
   title: string;
   theme: Prisma.JsonValue;
   content: Prisma.JsonValue;
+  fields: Prisma.JsonValue;
+  fieldValues: Prisma.JsonValue;
   estimateIds: string[];
   status: string;
   shareToken: string;
@@ -41,6 +67,7 @@ export const shapeProposal = (p: {
   sentAt: Date | null;
   viewedAt: Date | null;
   respondedAt: Date | null;
+  createdAt: Date;
   updatedAt: Date;
 }) => ({
   id: p.id,
@@ -50,6 +77,8 @@ export const shapeProposal = (p: {
   title: p.title,
   theme: (p.theme ?? {}) as Record<string, unknown>,
   content: (p.content ?? []) as unknown[],
+  fields: normalizeProposalFields(p.fields),
+  fieldValues: (p.fieldValues ?? {}) as Record<string, unknown>,
   estimateIds: p.estimateIds,
   status: p.status,
   shareToken: p.shareToken,
@@ -57,6 +86,7 @@ export const shapeProposal = (p: {
   sentAt: p.sentAt?.toISOString() ?? null,
   viewedAt: p.viewedAt?.toISOString() ?? null,
   respondedAt: p.respondedAt?.toISOString() ?? null,
+  createdAt: p.createdAt.toISOString(),
   updatedAt: p.updatedAt.toISOString(),
 });
 
@@ -68,6 +98,8 @@ export class ProposalsService {
     private readonly events: EventEmitter2,
     private readonly messages: MessagesService,
     private readonly config: ConfigService,
+    private readonly dealValue: DealValueService,
+    private readonly dealEvents: DealEventsService,
   ) {}
 
   /** The public presentation link for a proposal's share token. */
@@ -83,6 +115,24 @@ export class ProposalsService {
   async send(orgId: string, userId: string, id: string, dto: SendProposalDto) {
     const proposal = await this.prisma.proposal.findFirst({ where: { id, orgId } });
     if (!proposal) throw new NotFoundException('Proposal not found');
+
+    // Gate on internal fields before sending: required fields filled, and single-limit fields not over one.
+    // document/image resolve from the bound deal custom field; estimate/invoice from the union below.
+    const gateDeal = await this.prisma.deal.findFirst({ where: { id: proposal.dealId, orgId }, select: { customFields: true } });
+    const pFields = normalizeProposalFields(proposal.fields);
+    const pFieldValues = (proposal.fieldValues ?? {}) as Record<string, unknown>;
+    // Every estimate/invoice the proposal references: pricing elements ∪ estimate/invoice fields ∪ legacy.
+    const linkedPricing = collectProposalPricingIds(pFields, pFieldValues, collectPricingDocs(proposal.content), proposal.estimateIds);
+    const blockers = proposalSendBlockers(pFields, {
+      fieldValues: pFieldValues,
+      dealCustomFields: (gateDeal?.customFields ?? {}) as Record<string, unknown>,
+      estimateIds: linkedPricing.estimateIds,
+      invoiceIds: linkedPricing.invoiceIds,
+    });
+    if (blockers.length) {
+      throw new BadRequestException(blockers.join('; '));
+    }
+
     const link = this.shareLink(proposal.shareToken);
 
     const deal = await this.prisma.deal.findFirst({
@@ -158,23 +208,37 @@ export class ProposalsService {
       }
     }
 
+    const wasDraft = proposal.status === 'draft';
     const row = await this.prisma.proposal.update({
       where: { id },
-      data: { status: proposal.status === 'draft' ? 'sent' : proposal.status, sentAt: proposal.sentAt ?? new Date() },
+      data: { status: wasDraft ? 'sent' : proposal.status, sentAt: proposal.sentAt ?? new Date() },
     });
+
+    // Sending the proposal also sends its estimates: flip every linked draft estimate to `sent`.
+    if (wasDraft && linkedPricing.estimateIds.length) {
+      await this.prisma.dealEstimate.updateMany({
+        where: { id: { in: linkedPricing.estimateIds }, orgId, deletedAt: null, status: 'draft' },
+        data: { status: 'sent' },
+      });
+      await this.dealValue.recompute(orgId, proposal.dealId); // estimate status changed → deal value
+    }
     return { ...shapeProposal(row), link, emailed };
   }
 
   async list(orgId: string, dealId: string) {
     const rows = await this.prisma.proposal.findMany({ where: { orgId, dealId }, orderBy: { createdAt: 'desc' } });
-    // Sum each proposal's selected estimates so the list can show a value.
-    const ids = [...new Set(rows.flatMap((r) => r.estimateIds))];
+    // Each proposal's estimates come from its pricing elements ∪ estimate fields ∪ legacy estimateIds.
+    const idsByRow = rows.map((r) =>
+      collectProposalPricingIds(normalizeProposalFields(r.fields), (r.fieldValues ?? {}) as Record<string, unknown>, collectPricingDocs(r.content), r.estimateIds)
+        .estimateIds,
+    );
+    const ids = [...new Set(idsByRow.flat())];
     const estimates = ids.length
       ? await this.prisma.dealEstimate.findMany({ where: { id: { in: ids }, orgId, dealId, deletedAt: null }, select: { id: true, totalAmount: true, currency: true } })
       : [];
     const byId = new Map(estimates.map((e) => [e.id, e]));
-    return rows.map((r) => {
-      const sel = r.estimateIds.map((id) => byId.get(id)).filter((e): e is (typeof estimates)[number] => !!e);
+    return rows.map((r, i) => {
+      const sel = idsByRow[i].map((id) => byId.get(id)).filter((e): e is (typeof estimates)[number] => !!e);
       return { ...shapeProposal(r), total: sel.reduce((s, e) => s + e.totalAmount, 0), currency: sel[0]?.currency ?? 'USD' };
     });
   }
@@ -201,6 +265,8 @@ export class ProposalsService {
         title: dto.title?.trim() || deal.title,
         theme: (template?.theme ?? {}) as Prisma.InputJsonValue,
         content: (template?.layout ?? []) as Prisma.InputJsonValue, // start from the template's layout
+        // Snapshot the template's internal (client-hidden) field defs so later template edits don't retro-break this proposal.
+        fields: normalizeProposalFields(template?.fields) as unknown as Prisma.InputJsonValue,
         estimateIds: dto.estimateIds ?? [],
       },
     });
@@ -223,6 +289,7 @@ export class ProposalsService {
         ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
         ...(dto.estimateIds !== undefined ? { estimateIds: dto.estimateIds } : {}),
         ...(dto.content !== undefined ? { content: dto.content as Prisma.InputJsonValue } : {}),
+        ...(dto.fieldValues !== undefined ? { fieldValues: dto.fieldValues as Prisma.InputJsonValue } : {}),
         ...(dto.theme !== undefined ? { theme: dto.theme as Prisma.InputJsonValue } : {}),
         ...(dto.status !== undefined ? { status: dto.status } : {}),
         ...(decision ? { feedback, respondedAt: new Date() } : {}),
@@ -230,22 +297,29 @@ export class ProposalsService {
     });
 
     if (decision) {
-      // Roll the decision onto linked estimates' internal status (our DB only — accepted→accepted, denied→rejected).
+      // Roll the decision onto every linked estimate's internal status (our DB only — accepted→accepted,
+      // denied→rejected). Estimates come from the union (pricing elements ∪ estimate fields ∪ legacy).
       const estStatus = decision === 'accepted' ? 'accepted' : decision === 'denied' ? 'rejected' : null;
-      if (estStatus && current.estimateIds.length) {
-        await this.prisma.dealEstimate.updateMany({
-          where: { id: { in: current.estimateIds }, orgId, deletedAt: null, status: { notIn: ['closed'] } },
-          data: { status: estStatus },
-        });
+      if (estStatus) {
+        const linked = collectProposalPricingIds(current.fields, current.fieldValues, collectPricingDocs(current.content), current.estimateIds);
+        if (linked.estimateIds.length) {
+          await this.prisma.dealEstimate.updateMany({
+            where: { id: { in: linked.estimateIds }, orgId, deletedAt: null, status: { notIn: ['closed'] } },
+            data: { status: estStatus },
+          });
+        }
+        await this.dealValue.recompute(orgId, current.dealId); // estimate status changed → deal value
       }
-      // Log the outcome on the deal timeline.
-      const author = userId ?? (await this.prisma.deal.findFirst({ where: { id: current.dealId }, select: { ownerUserId: true } }))?.ownerUserId;
-      if (author) {
-        const verb = decision === 'accepted' ? 'accepted' : decision === 'denied' ? 'declined' : 'deferred';
-        await this.prisma.note.create({
-          data: { orgId, dealId: current.dealId, authorUserId: author, body: `Proposal “${current.title}” was marked ${verb}.${feedback ? ` Reason: ${feedback}` : ''}` },
-        });
-      }
+      // Log the outcome on the deal timeline, attributed to the team member who marked it.
+      const verb = decision === 'accepted' ? 'accepted' : decision === 'denied' ? 'declined' : 'deferred';
+      const user = userId ? await this.prisma.user.findFirst({ where: { id: userId, orgId }, select: { name: true, email: true } }) : null;
+      const actor = user ? user.name || user.email : 'A team member';
+      await this.dealEvents.log(orgId, current.dealId, {
+        kind: 'proposal',
+        title: `Proposal “${current.title}” ${verb}`,
+        body: feedback ? `Reason: ${feedback}` : null,
+        actor,
+      });
       // Fire the automation/webhook event (accepted / declined / deferred).
       const type = decision === 'accepted' ? 'proposal.accepted' : decision === 'denied' ? 'proposal.declined' : 'proposal.deferred';
       this.events.emit('webhook.event', { orgId, type, data: { deal: { id: current.dealId }, proposal: { id } } });
@@ -355,6 +429,34 @@ export class ProposalsService {
       total: estimates.reduce((sum, e) => sum + e.totalAmount, 0),
     };
 
+    // Per-element pricing: resolve every estimate/invoice a pricing element references via `props.docs`,
+    // keyed by document id, so each pricing element can show its own table (falling back to the
+    // proposal-level aggregate `pricing` above when an element has no `docs`).
+    const lineSel = { orderBy: { position: 'asc' as const }, select: { description: true, amount: true } };
+    const perDoc = collectPricingDocs(content);
+    const pricingByDoc: Record<string, { currency: string; rows: { description: string; amount: number }[]; total: number }> = {};
+    const [estDocs, invDocs] = await Promise.all([
+      perDoc.estimateIds.length
+        ? this.prisma.dealEstimate.findMany({
+            where: { id: { in: perDoc.estimateIds }, orgId, dealId, deletedAt: null },
+            select: { id: true, currency: true, totalAmount: true, lines: lineSel },
+          })
+        : [],
+      perDoc.invoiceIds.length
+        ? this.prisma.dealInvoice.findMany({
+            where: { id: { in: perDoc.invoiceIds }, orgId, dealId, deletedAt: null },
+            select: { id: true, currency: true, totalAmount: true, lines: lineSel },
+          })
+        : [],
+    ]);
+    for (const d of [...estDocs, ...invDocs]) {
+      pricingByDoc[d.id] = {
+        currency: d.currency,
+        rows: d.lines.map((l) => ({ description: l.description, amount: l.amount })),
+        total: d.totalAmount,
+      };
+    }
+
     // Template-owned "fixed" files embedded in the layout → signed URLs (org-scoped keys only).
     const fixedFilesByKey: Record<string, string> = {};
     if (this.spaces.configured) {
@@ -362,7 +464,7 @@ export class ProposalsService {
       await Promise.all(keys.map(async (k) => { fixedFilesByKey[k] = await this.spaces.presignGet(k); }));
     }
 
-    return { variables, imagesByField, documentsByField, logoUrl: org?.logoUrl ?? null, fixedFilesByKey, pricing };
+    return { variables, imagesByField, documentsByField, logoUrl: org?.logoUrl ?? null, fixedFilesByKey, pricing, pricingByDoc };
   }
 
   /** Available estimates for a deal (for the "select estimates" picker). */

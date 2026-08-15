@@ -3,12 +3,14 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProposalTemplateDto, UpdateProposalTemplateDto } from './dto/proposal-template.dto';
 import { DEFAULT_THEME, STARTER_TEMPLATES } from './proposal-blocks';
+import { normalizeProposalFields } from './proposal-fields';
 
 const shape = (t: {
   id: string;
   name: string;
   theme: Prisma.JsonValue;
   layout: Prisma.JsonValue;
+  fields: Prisma.JsonValue;
   emailTemplateId: string | null;
   systemKey: string | null;
   updatedAt: Date;
@@ -17,6 +19,7 @@ const shape = (t: {
   name: t.name,
   theme: (t.theme ?? {}) as Record<string, unknown>,
   layout: (t.layout ?? []) as unknown[],
+  fields: normalizeProposalFields(t.fields),
   emailTemplateId: t.emailTemplateId,
   systemKey: t.systemKey,
   system: t.systemKey != null,
@@ -49,6 +52,7 @@ export class ProposalTemplatesService {
         name: dto.name.trim(),
         theme: (dto.theme ?? DEFAULT_THEME) as Prisma.InputJsonValue,
         layout: (dto.layout ?? []) as Prisma.InputJsonValue,
+        fields: normalizeProposalFields(dto.fields) as unknown as Prisma.InputJsonValue,
         emailTemplateId: dto.emailTemplateId ?? null,
       },
     });
@@ -63,6 +67,7 @@ export class ProposalTemplatesService {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
         ...(dto.theme !== undefined ? { theme: dto.theme as Prisma.InputJsonValue } : {}),
         ...(dto.layout !== undefined ? { layout: dto.layout as Prisma.InputJsonValue } : {}),
+        ...(dto.fields !== undefined ? { fields: normalizeProposalFields(dto.fields) as unknown as Prisma.InputJsonValue } : {}),
         ...(dto.emailTemplateId !== undefined ? { emailTemplateId: dto.emailTemplateId || null } : {}),
       },
     });

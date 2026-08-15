@@ -34,8 +34,21 @@ import {
   IconPlus,
   IconX,
 } from '@tabler/icons-react';
-import { useCustomFields, useFileUrl, useUploadFile, useUploadStatus } from '@/lib/api/hooks';
+import {
+  useCompanies,
+  useCreateCompany,
+  useCreatePerson,
+  useCustomFields,
+  useFileUrl,
+  usePersons,
+  useUploadFile,
+  useUploadStatus,
+} from '@/lib/api/hooks';
 import { compressImage } from '@/lib/imageCompress';
+import { type Address } from '@/components/deals/AddressFields';
+import { AddressInput } from '@/components/deals/AddressInput';
+import { CreatableSelect } from '@/components/common/CreatableSelect';
+import { usePersonCreate } from '@/components/contacts/PersonCreateModal';
 import type { CustomFieldDef } from '@/lib/api/customFields';
 
 const IMAGE_MAX = 10 * 1024 * 1024;
@@ -43,14 +56,14 @@ const DOC_MAX = 25 * 1024 * 1024;
 const DOC_ACCEPT = '.pdf,.doc,.docx,.txt,.rtf,.xls,.xlsx,.csv,.ppt,.pptx,application/pdf';
 const PREVIEW_COUNT = 5;
 
-interface StoredDoc {
+export interface StoredDoc {
   name: string;
   type: string;
   key: string;
 }
 
 /** Pick a file-type icon + colour from the filename/mime. */
-function docIcon(name: string, type: string): { Icon: ComponentType<{ size?: number }>; color: string } {
+export function docIcon(name: string, type: string): { Icon: ComponentType<{ size?: number }>; color: string } {
   const ext = name.split('.').pop()?.toLowerCase() ?? '';
   const t = type.toLowerCase();
   if (ext === 'pdf' || t.includes('pdf')) return { Icon: IconFileTypePdf, color: 'red' };
@@ -66,10 +79,14 @@ export function CustomFieldsEditor({
   entity,
   values,
   onChange,
+  onCommit,
 }: {
   entity: string;
   values: Record<string, unknown>;
   onChange: (key: string, value: unknown) => void;
+  /** Called (besides onChange) when a FILE field (image/document) changes, so an upload/removal
+   *  persists immediately instead of waiting for a manual Save. Optional — omit for manual-save only. */
+  onCommit?: (key: string, value: unknown) => void;
 }) {
   const { data: fields = [] } = useCustomFields(entity);
   if (fields.length === 0) return null;
@@ -78,7 +95,14 @@ export function CustomFieldsEditor({
     <Stack gap="sm">
       <Divider label="Custom fields" labelPosition="left" />
       {fields.map((f) => (
-        <FieldInput key={f.id} entity={entity} field={f} value={values?.[f.key]} onChange={(v) => onChange(f.key, v)} />
+        <FieldInput
+          key={f.id}
+          entity={entity}
+          field={f}
+          value={values?.[f.key]}
+          onChange={(v) => onChange(f.key, v)}
+          commit={onCommit ? (v) => onCommit(f.key, v) : undefined}
+        />
       ))}
     </Stack>
   );
@@ -89,11 +113,13 @@ function FieldInput({
   field: f,
   value: v,
   onChange,
+  commit,
 }: {
   entity: string;
   field: CustomFieldDef;
   value: unknown;
   onChange: (value: unknown) => void;
+  commit?: (value: unknown) => void;
 }) {
   const required = f.required || !!f.requiredFromStageId || f.requiredForWon;
 
@@ -111,12 +137,66 @@ function FieldInput({
     );
   }
   if (f.type === 'image') {
-    return <ImageField entity={entity} label={f.label} required={required} value={(v as string[]) ?? []} onChange={onChange} />;
+    return <ImageField entity={entity} label={f.label} required={required} value={(v as string[]) ?? []} onChange={onChange} commit={commit} />;
   }
   if (f.type === 'document') {
-    return <DocumentField entity={entity} label={f.label} required={required} value={(v as StoredDoc[]) ?? []} onChange={onChange} />;
+    return <DocumentField entity={entity} label={f.label} required={required} value={(v as StoredDoc[]) ?? []} onChange={onChange} commit={commit} />;
+  }
+  if (f.type === 'address') {
+    // Clean collapsed address: summary + Edit when set, "Add address" when empty (no name/attention line).
+    return <AddressInput label={f.label} required={required} value={(v as Address) ?? {}} onChange={onChange} />;
+  }
+  if (f.type === 'person') {
+    return <PersonRefField label={f.label + (required ? ' *' : '')} value={(v as string) ?? null} onChange={onChange} />;
+  }
+  if (f.type === 'company') {
+    return <CompanyRefField label={f.label + (required ? ' *' : '')} value={(v as string) ?? null} onChange={onChange} />;
   }
   return <TextInput label={f.label} withAsterisk={required} value={(v as string) ?? ''} onChange={(e) => onChange(e.currentTarget.value)} />;
+}
+
+/** A custom field that references a contact (Person) — pick or create; stores the person id. */
+function PersonRefField({ label, value, onChange }: { label: string; value: string | null; onChange: (v: unknown) => void }) {
+  const { data: persons = [] } = usePersons();
+  const createPerson = useCreatePerson();
+  const personCreate = usePersonCreate({
+    create: async ({ firstName, lastName }) => {
+      const p = await createPerson.mutateAsync({ firstName, lastName });
+      return { value: p.id, label: p.name };
+    },
+  });
+  return (
+    <>
+      <CreatableSelect
+        label={label}
+        placeholder="Search or create a contact"
+        options={persons.map((p) => ({ value: p.id, label: p.name }))}
+        value={value}
+        onChange={onChange}
+        onCreate={personCreate.prompt}
+      />
+      {personCreate.modal}
+    </>
+  );
+}
+
+/** A custom field that references a Company — pick or create; stores the company id. */
+function CompanyRefField({ label, value, onChange }: { label: string; value: string | null; onChange: (v: unknown) => void }) {
+  const { data: companies = [] } = useCompanies();
+  const createCompany = useCreateCompany();
+  return (
+    <CreatableSelect
+      label={label}
+      placeholder="Search or create a company"
+      options={companies.map((c) => ({ value: c.id, label: c.name }))}
+      value={value}
+      onChange={onChange}
+      onCreate={async (name) => {
+        const c = await createCompany.mutateAsync({ name });
+        return { value: c.id, label: c.name };
+      }}
+    />
+  );
 }
 
 // ── Images ───────────────────────────────────────────────────────────────────
@@ -126,17 +206,25 @@ function ImageField({
   required,
   value,
   onChange,
+  commit,
 }: {
   entity: string;
   label: string;
   required: boolean;
   value: string[];
   onChange: (v: string[]) => void;
+  commit?: (v: string[]) => void;
 }) {
   const status = useUploadStatus();
   const upload = useUploadFile();
   const [viewAll, viewAllCtl] = useDisclosure(false);
   if (status.data && !status.data.configured) return <NotConfigured label={label} required={required} />;
+
+  // Apply a new value locally AND persist it immediately (files shouldn't need a manual Save).
+  const apply = (next: string[]) => {
+    onChange(next);
+    commit?.(next);
+  };
 
   const add = async (files: File[]) => {
     const keys: string[] = [];
@@ -153,9 +241,9 @@ function ImageField({
         notifications.show({ message: `Could not upload ${raw.name}`, color: 'red' });
       }
     }
-    if (keys.length) onChange([...value, ...keys]);
+    if (keys.length) apply([...value, ...keys]);
   };
-  const remove = (i: number) => onChange(value.filter((_, idx) => idx !== i));
+  const remove = (i: number) => apply(value.filter((_, idx) => idx !== i));
 
   return (
     <FieldFrame
@@ -184,7 +272,7 @@ function ImageField({
   );
 }
 
-function ImageCard({ objectKey, onRemove, big }: { objectKey: string; onRemove: () => void; big?: boolean }) {
+export function ImageCard({ objectKey, onRemove, big }: { objectKey: string; onRemove: () => void; big?: boolean }) {
   const { data } = useFileUrl(objectKey);
   const size = big ? '100%' : 84;
   return (
@@ -217,17 +305,25 @@ function DocumentField({
   required,
   value,
   onChange,
+  commit,
 }: {
   entity: string;
   label: string;
   required: boolean;
   value: StoredDoc[];
   onChange: (v: StoredDoc[]) => void;
+  commit?: (v: StoredDoc[]) => void;
 }) {
   const status = useUploadStatus();
   const upload = useUploadFile();
   const [viewAll, viewAllCtl] = useDisclosure(false);
   if (status.data && !status.data.configured) return <NotConfigured label={label} required={required} />;
+
+  // Apply a new value locally AND persist it immediately (files shouldn't need a manual Save).
+  const apply = (next: StoredDoc[]) => {
+    onChange(next);
+    commit?.(next);
+  };
 
   const add = async (files: File[]) => {
     const docs: StoredDoc[] = [];
@@ -243,9 +339,9 @@ function DocumentField({
         notifications.show({ message: `Could not upload ${file.name}`, color: 'red' });
       }
     }
-    if (docs.length) onChange([...value, ...docs]);
+    if (docs.length) apply([...value, ...docs]);
   };
-  const remove = (i: number) => onChange(value.filter((_, idx) => idx !== i));
+  const remove = (i: number) => apply(value.filter((_, idx) => idx !== i));
 
   return (
     <FieldFrame
@@ -274,7 +370,7 @@ function DocumentField({
   );
 }
 
-function DocCard({ doc, onRemove, full }: { doc: StoredDoc; onRemove: () => void; full?: boolean }) {
+export function DocCard({ doc, onRemove, full }: { doc: StoredDoc; onRemove: () => void; full?: boolean }) {
   const { data } = useFileUrl(doc.key);
   const { Icon, color } = docIcon(doc.name, doc.type);
   return (

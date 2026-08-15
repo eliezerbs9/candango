@@ -1,6 +1,17 @@
 import { apiFetch } from './client';
+import type { DealCardConfig } from './types';
 
 export type QboNameFormat = 'first_last' | 'last_first';
+
+/** Rules that gate the deal "Mark won" button (global). Empty / disabled = "Any time". */
+export interface WinRequirements {
+  enabled?: boolean;
+  stageIds?: string[];
+  requireAcceptedProposal?: boolean;
+  requireSignedDocument?: boolean;
+  signedTemplateIds?: string[];
+  requireInvoice?: boolean; // only offered/enforced while QuickBooks is connected
+}
 
 export interface Organization {
   id: string;
@@ -13,6 +24,8 @@ export interface Organization {
   taxRateBps: number;
   taxDefaultOn: boolean;
   emailSignature: string; // HTML with sender/company {{variables}}
+  winRequirements: WinRequirements;
+  dealCardConfig: DealCardConfig;
   onboardingState: Record<string, unknown>;
   createdAt: string;
 }
@@ -25,6 +38,8 @@ export interface OrganizationBody {
   taxRateBps?: number;
   taxDefaultOn?: boolean;
   emailSignature?: string;
+  winRequirements?: WinRequirements;
+  dealCardConfig?: DealCardConfig;
 }
 
 export function getOrganization(token: string) {

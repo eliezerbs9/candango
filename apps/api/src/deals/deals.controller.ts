@@ -65,11 +65,25 @@ export class DealsController {
     return this.svc.recipients(u.orgId, id);
   }
 
+  /** The deal's people (primary + company primary + participants) with addresses, for the client/Bill-Ship UI. */
+  @Get(':id/participants')
+  @Scopes('deals:read')
+  participants(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.dealParticipants(u.orgId, id);
+  }
+
   /** Link a person to the deal as a participant (e.g. a newly-created signer). */
   @Post(':id/participants')
   @Scopes('deals:write')
   addParticipant(@CurrentUser() u: AuthContext, @Param('id') id: string, @Body() body: { personId: string }) {
     return this.svc.addParticipant(u.orgId, id, body.personId);
+  }
+
+  /** Unlink a manually-added participant from the deal. */
+  @Delete(':id/participants/:personId')
+  @Scopes('deals:write')
+  removeParticipant(@CurrentUser() u: AuthContext, @Param('id') id: string, @Param('personId') personId: string) {
+    return this.svc.removeParticipant(u.orgId, id, personId);
   }
 
   @Get(':id/timeline')
@@ -88,6 +102,13 @@ export class DealsController {
   @HttpCode(204)
   remove(@CurrentUser() u: AuthContext, @Param('id') id: string) {
     return this.svc.remove(u.orgId, id);
+  }
+
+  /** Whether this deal currently meets the workspace's Win Requirements (+ the checklist). */
+  @Get(':id/win-check')
+  @Scopes('deals:read')
+  winCheck(@CurrentUser() u: AuthContext, @Param('id') id: string) {
+    return this.svc.getWinCheck(u.orgId, id);
   }
 
   @Post(':id/win')

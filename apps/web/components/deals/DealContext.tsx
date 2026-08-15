@@ -12,6 +12,7 @@ export interface DealForm {
   expectedCloseDate: string;
   shipTo: Address;
   billTo: Address;
+  tags: string[];
   customFields: Record<string, unknown>;
 }
 

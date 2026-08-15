@@ -58,6 +58,11 @@ export class UpdateProposalDto {
   @IsObject()
   theme?: Record<string, unknown>;
 
+  /** Rep-filled values for the proposal's internal (client-hidden) fields, keyed by field key. */
+  @IsOptional()
+  @IsObject()
+  fieldValues?: Record<string, unknown>;
+
   @IsOptional()
   @IsIn(STATUSES)
   status?: string;

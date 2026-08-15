@@ -20,12 +20,14 @@ import {
   useProposalMeta,
   useProposalPreviewData,
   useProposalTemplate,
+  useQuickbooksStatus,
   useTemplateVariables,
   useUpdateProposalTemplate,
   useUploadFile,
 } from '@/lib/api/hooks';
-import type { CanvasPage, ProposalTheme } from '@/lib/api/proposals';
+import type { CanvasPage, ProposalFieldDef, ProposalTheme } from '@/lib/api/proposals';
 import { ProposalCanvasEditor, toCanvasPages, type FieldOption } from '@/components/proposals/ProposalCanvasEditor';
+import { ProposalFieldDefsEditor } from '@/components/proposals/ProposalFields';
 import { buildPreviewCtx } from '@/components/proposals/previewCtx';
 
 const fail = (e: unknown) =>
@@ -53,12 +55,14 @@ export default function ProposalTemplateEditor() {
   const { data: variables = [] } = useTemplateVariables();
   const { data: dealFields = [] } = useCustomFields('deal');
   const { data: org } = useOrganization();
+  const { data: qb } = useQuickbooksStatus();
   const update = useUpdateProposalTemplate();
   const upload = useUploadFile();
 
   const [name, setName] = useState('');
   const [theme, setTheme] = useState<ProposalTheme | null>(null);
   const [pages, setPages] = useState<CanvasPage[]>([]);
+  const [fields, setFields] = useState<ProposalFieldDef[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [previewDealId, setPreviewDealId] = useState<string | null>(null);
 
@@ -99,14 +103,15 @@ export default function ProposalTemplateEditor() {
     setTheme({ orientation: 'portrait', ...template.theme });
     const p = toCanvasPages(template.layout);
     setPages(p.length ? p : [{ id: uid(), elements: [] }]);
+    setFields(template.fields ?? []);
     setHydrated(true);
   }, [template, hydrated]);
 
   const status = useAutosave(
-    { name: name.trim(), theme, layout: pages },
+    { name: name.trim(), theme, layout: pages, fields },
     async (v) => {
       try {
-        await update.mutateAsync({ id, body: v as { name: string; theme: ProposalTheme; layout: CanvasPage[] } });
+        await update.mutateAsync({ id, body: v as { name: string; theme: ProposalTheme; layout: CanvasPage[]; fields: ProposalFieldDef[] } });
       } catch (e) {
         fail(e);
         throw e;
@@ -151,6 +156,15 @@ export default function ProposalTemplateEditor() {
         previewDealId={previewDealId}
         onPreviewDealChange={setPreviewDealId}
         previewCtx={previewCtx}
+        rightPanelExtra={
+          <ProposalFieldDefsEditor
+            value={fields}
+            onChange={setFields}
+            imageFields={imageFields}
+            documentFields={documentFields}
+            qbConnected={!!qb?.connected}
+          />
+        }
       />
     </Stack>
   );

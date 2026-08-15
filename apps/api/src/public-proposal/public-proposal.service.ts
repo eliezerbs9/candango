@@ -1,7 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
-import { ProposalsService, shapeProposal } from '../proposals/proposals.service';
+import { ProposalsService, collectPricingDocs, shapeProposal } from '../proposals/proposals.service';
+import { collectProposalPricingIds, normalizeProposalFields } from '../proposals/proposal-fields';
+import { DealValueService } from '../deals/deal-value.service';
+import { DealEventsService } from '../deal-events/deal-events.service';
 import { RespondProposalDto } from '../proposals/dto/proposal.dto';
 
 /**
@@ -15,6 +18,8 @@ export class PublicProposalService {
     private readonly prisma: PrismaService,
     private readonly proposals: ProposalsService,
     private readonly events: EventEmitter2,
+    private readonly dealValue: DealValueService,
+    private readonly dealEvents: DealEventsService,
   ) {}
 
   private async byToken(token: string) {
@@ -31,7 +36,9 @@ export class PublicProposalService {
       p.status = 'viewed';
     }
     const render = await this.proposals.renderData(p.orgId, p.dealId, p.estimateIds, p.content);
-    return { ...shapeProposal(p), ...render };
+    // Internal (client-hidden) fields must NEVER reach the public page — strip them.
+    const { fields: _f, fieldValues: _fv, ...pub } = shapeProposal(p);
+    return { ...pub, ...render };
   }
 
   /**
@@ -54,30 +61,36 @@ export class PublicProposalService {
     // declined → rejected) — including the local mirror of QuickBooks-sourced estimates. This is a
     // plain DB update; nothing is pushed to QuickBooks.
     const estStatus = dto.decision === 'accepted' ? 'accepted' : dto.decision === 'denied' ? 'rejected' : null;
-    if (estStatus && p.estimateIds.length) {
-      await this.prisma.dealEstimate.updateMany({
-        where: { id: { in: p.estimateIds }, orgId: p.orgId, deletedAt: null, status: { notIn: ['closed'] } },
-        data: { status: estStatus },
-      });
+    if (estStatus) {
+      // Every estimate the proposal references: pricing elements ∪ estimate fields ∪ legacy.
+      const linked = collectProposalPricingIds(
+        normalizeProposalFields(p.fields),
+        (p.fieldValues ?? {}) as Record<string, unknown>,
+        collectPricingDocs(p.content),
+        p.estimateIds,
+      );
+      if (linked.estimateIds.length) {
+        await this.prisma.dealEstimate.updateMany({
+          where: { id: { in: linked.estimateIds }, orgId: p.orgId, deletedAt: null, status: { notIn: ['closed'] } },
+          data: { status: estStatus },
+        });
+      }
+      await this.dealValue.recompute(p.orgId, p.dealId); // estimate status changed → deal value
     }
 
-    // Log the outcome on the deal timeline (as a note authored by the proposal's creator / deal owner).
-    const author = p.createdByUserId ?? (await this.prisma.deal.findFirst({ where: { id: p.dealId }, select: { ownerUserId: true } }))?.ownerUserId;
-    if (author) {
-      const verb = dto.decision === 'accepted' ? 'accepted' : dto.decision === 'denied' ? 'declined' : 'chose to decide later on';
-      await this.prisma.note.create({
-        data: {
-          orgId: p.orgId,
-          dealId: p.dealId,
-          authorUserId: author,
-          body: `Proposal “${p.title}” was ${verb} by the customer.${feedback ? ` Note: ${feedback}` : ''}`,
-        },
-      });
-    }
+    // Log the outcome on the deal timeline, attributed to the client (it came through the public link).
+    const verb = dto.decision === 'accepted' ? 'accepted' : dto.decision === 'denied' ? 'declined' : 'deferred';
+    await this.dealEvents.log(p.orgId, p.dealId, {
+      kind: 'proposal',
+      title: `Proposal “${p.title}” ${verb}`,
+      body: feedback ? `Note: ${feedback}` : null,
+      actor: 'Client via proposal link',
+    });
 
     if (dto.decision === 'accepted') {
       this.events.emit('webhook.event', { orgId: p.orgId, type: 'proposal.accepted', data: { deal: { id: p.dealId }, proposal: { id: p.id } } });
     }
-    return shapeProposal(row);
+    const { fields: _f, fieldValues: _fv, ...pub } = shapeProposal(row);
+    return pub;
   }
 }

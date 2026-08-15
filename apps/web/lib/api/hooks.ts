@@ -15,10 +15,14 @@ import {
   archiveDeal,
   createDeal,
   getDeal,
+  getWinCheck,
   getDeals,
   addDealParticipant,
+  removeDealParticipant,
+  getDealParticipants,
   getDealRecipients,
   getStageHistory,
+  getDealEvents,
   loseDeal,
   reopenDeal,
   updateDeal,
@@ -283,12 +287,36 @@ export function useDealRecipients(id: string | null) {
   });
 }
 
+export function useDealParticipants(dealId: string) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['deal-participants', dealId],
+    queryFn: () => getDealParticipants(token!, dealId),
+    enabled: !!token && !!dealId,
+  });
+}
+
 export function useAddDealParticipant() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ dealId, personId }: { dealId: string; personId: string }) => addDealParticipant(token!, dealId, personId),
-    onSuccess: (_d, { dealId }) => qc.invalidateQueries({ queryKey: ['deal-recipients', dealId] }),
+    onSuccess: (_d, { dealId }) => {
+      qc.invalidateQueries({ queryKey: ['deal-recipients', dealId] });
+      qc.invalidateQueries({ queryKey: ['deal-participants', dealId] });
+    },
+  });
+}
+
+export function useRemoveDealParticipant() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ dealId, personId }: { dealId: string; personId: string }) => removeDealParticipant(token!, dealId, personId),
+    onSuccess: (_d, { dealId }) => {
+      qc.invalidateQueries({ queryKey: ['deal-recipients', dealId] });
+      qc.invalidateQueries({ queryKey: ['deal-participants', dealId] });
+    },
   });
 }
 
@@ -297,11 +325,25 @@ export function useDeal(id: string) {
   return useQuery({ queryKey: ['deal', id], queryFn: () => getDeal(token!, id), enabled: !!token && !!id });
 }
 
+export function useWinCheck(id: string) {
+  const token = useToken();
+  return useQuery({ queryKey: ['win-check', id], queryFn: () => getWinCheck(token!, id), enabled: !!token && !!id });
+}
+
 export function useStageHistory(dealId: string) {
   const token = useToken();
   return useQuery({
     queryKey: ['stage-history', dealId],
     queryFn: () => getStageHistory(token!, dealId),
+    enabled: !!token && !!dealId,
+  });
+}
+
+export function useDealEvents(dealId: string) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['deal-events', dealId],
+    queryFn: () => getDealEvents(token!, dealId),
     enabled: !!token && !!dealId,
   });
 }
@@ -506,6 +548,7 @@ export function useCreateDeal() {
       stageId: string;
       companyId?: string;
       primaryPersonId?: string;
+      participantIds?: string[];
     }) => createDeal(token!, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['deals'] }),
   });
@@ -533,7 +576,9 @@ export function useUpdateDeal() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['deals'] });
       qc.invalidateQueries({ queryKey: ['deal'] });
+      qc.invalidateQueries({ queryKey: ['deal-participants'] });
       qc.invalidateQueries({ queryKey: ['stage-history'] });
+      qc.invalidateQueries({ queryKey: ['win-check'] });
     },
   });
 }
@@ -1521,6 +1566,7 @@ export function useUpdateProposal() {
     onSuccess: (_d, { id }) => {
       qc.invalidateQueries({ queryKey: ['proposals'] });
       qc.invalidateQueries({ queryKey: ['proposal-render', id] });
+      qc.invalidateQueries({ queryKey: ['win-check'] }); // accepting a proposal can satisfy a win rule
     },
   });
 }
@@ -1742,6 +1788,7 @@ export function useConvertToInvoice(dealId: string) {
       qc.invalidateQueries({ queryKey: ['estimates', dealId] }); // sources become 'closed' + dropped from value
       qc.invalidateQueries({ queryKey: ['deal'] }); // value recomputed
       qc.invalidateQueries({ queryKey: ['notes'] }); // conversion is logged on the timeline
+      qc.invalidateQueries({ queryKey: ['win-check'] }); // an invoice can satisfy a win rule
     },
   });
 }

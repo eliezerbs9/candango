@@ -3,14 +3,13 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
-import { Anchor, Badge, Button, Center, Group, Loader, Stack, Tabs, Text, Title } from '@mantine/core';
+import { Anchor, Badge, Button, Center, Group, HoverCard, Loader, Select, Stack, Tabs, Text, Title } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconArrowLeft, IconMail } from '@tabler/icons-react';
+import { IconArrowLeft, IconCheck, IconMail, IconX } from '@tabler/icons-react';
 import { ComposeEmail } from '@/components/email/ComposeEmail';
 import { StatusBadge } from '@/components/primitives/StatusBadge';
 import { Money } from '@/components/primitives/Money';
-import { WinConvertModal } from '@/components/deals/quickbooks/WinConvertModal';
 import { DealProvider, type DealForm } from '@/components/deals/DealContext';
 import { ApiError } from '@/lib/api/client';
 import type { Address } from '@/components/deals/AddressFields';
@@ -19,11 +18,11 @@ import {
   useArchiveDeal,
   useCustomFields,
   useDeal,
-  useDealEstimates,
   useLoseDeal,
   useQuickbooksStatus,
   useReopenDeal,
   useUpdateDeal,
+  useWinCheck,
   useWinDeal,
 } from '@/lib/api/hooks';
 
@@ -36,16 +35,15 @@ export default function DealLayout({ children }: { children: ReactNode }) {
 
   const { data: deal, isLoading } = useDeal(id);
   const { data: stages = [] } = useAllStages();
-  const { data: dealEstimates = [] } = useDealEstimates(id);
   const { data: dealFields = [] } = useCustomFields('deal');
   const { data: qb } = useQuickbooksStatus();
+  const { data: winCheck } = useWinCheck(id);
   const update = useUpdateDeal();
   const win = useWinDeal();
   const lose = useLoseDeal();
   const reopen = useReopenDeal();
   const archive = useArchiveDeal();
   const [emailOpen, emailCtl] = useDisclosure(false);
-  const [winConvertOpen, winConvertCtl] = useDisclosure(false);
 
   const [form, setForm] = useState<DealForm | null>(null);
   useEffect(() => {
@@ -58,6 +56,7 @@ export default function DealLayout({ children }: { children: ReactNode }) {
         expectedCloseDate: deal.expectedCloseDate?.slice(0, 10) ?? '',
         shipTo: (deal.shipTo as Address) ?? {},
         billTo: (deal.billTo as Address) ?? {},
+        tags: deal.tags ?? [],
         customFields: deal.customFields ?? {},
       });
     }
@@ -71,7 +70,18 @@ export default function DealLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  const stageName = stages.find((s) => s.id === deal.stageId)?.name ?? '—';
+  const stageOptions = stages
+    .filter((s) => s.pipelineId === deal.pipelineId)
+    .sort((a, b) => a.position - b.position)
+    .map((s) => ({ value: s.id, label: s.name }));
+
+  const changeStage = (stageId: string | null) => {
+    if (!stageId || stageId === deal.stageId) return;
+    update.mutate(
+      { id: deal.id, stageId },
+      { onSuccess: () => notifications.show({ message: 'Stage updated', color: 'green' }), onError: fail },
+    );
+  };
 
   const save = (override?: Partial<DealForm>) => {
     const f = { ...form, ...override };
@@ -85,6 +95,7 @@ export default function DealLayout({ children }: { children: ReactNode }) {
         expectedCloseDate: f.expectedCloseDate || undefined,
         shipTo: f.shipTo,
         billTo: f.billTo,
+        tags: f.tags,
         customFields: f.customFields,
       },
       { onSuccess: () => notifications.show({ message: 'Deal saved', color: 'green' }), onError: fail },
@@ -127,7 +138,22 @@ export default function DealLayout({ children }: { children: ReactNode }) {
               <Money value={deal.value} currency={deal.currency} />
             </Text>
             <Text size="sm" c="dimmed">·</Text>
-            <Text size="sm">{stageName}</Text>
+            {deal.status === 'open' && !deal.archivedAt ? (
+              <Select
+                size="xs"
+                w={180}
+                data={stageOptions}
+                value={deal.stageId}
+                onChange={changeStage}
+                allowDeselect={false}
+                checkIconPosition="right"
+                comboboxProps={{ withinPortal: true }}
+                disabled={update.isPending}
+                aria-label="Stage"
+              />
+            ) : (
+              <Text size="sm">{stages.find((s) => s.id === deal.stageId)?.name ?? '—'}</Text>
+            )}
             <StatusBadge status={deal.status} />
             {deal.archivedAt && (
               <Badge color="gray" variant="light">
@@ -139,21 +165,48 @@ export default function DealLayout({ children }: { children: ReactNode }) {
         <Group gap="sm">
           {deal.status === 'open' && !deal.archivedAt && (
             <>
-              <Button
-                color="teal"
-                loading={win.isPending}
-                onClick={() =>
-                  win.mutate(deal.id, {
-                    onSuccess: () => {
-                      const openEst = dealEstimates.filter((e) => e.status !== 'closed');
-                      if (qb?.connected && deal.qbSubcustomerId && openEst.length > 0) winConvertCtl.open();
-                    },
-                    onError: fail,
-                  })
-                }
-              >
-                Mark won
-              </Button>
+              {(() => {
+                const blocked = winCheck ? !winCheck.canWin : false;
+                const markWon = (
+                  <Button
+                    color="teal"
+                    disabled={blocked}
+                    loading={win.isPending}
+                    onClick={() => win.mutate(deal.id, { onError: fail })}
+                  >
+                    Mark won
+                  </Button>
+                );
+                // When win requirements aren't met, explain why on hover (the button is disabled).
+                if (!blocked) return markWon;
+                return (
+                  <HoverCard width={280} position="bottom-end" shadow="md" openDelay={100}>
+                    <HoverCard.Target>
+                      {/* span wrapper so hover still fires over the disabled button */}
+                      <span style={{ display: 'inline-block' }}>{markWon}</span>
+                    </HoverCard.Target>
+                    <HoverCard.Dropdown>
+                      <Text size="xs" fw={700} mb={6} tt="uppercase" c="dimmed">
+                        Before you can mark won
+                      </Text>
+                      <Stack gap={6}>
+                        {winCheck?.requirements.map((r) => (
+                          <Group key={r.key} gap={8} wrap="nowrap" align="flex-start">
+                            {r.met ? (
+                              <IconCheck size={16} color="var(--mantine-color-teal-6)" style={{ flexShrink: 0, marginTop: 2 }} />
+                            ) : (
+                              <IconX size={16} color="var(--mantine-color-red-6)" style={{ flexShrink: 0, marginTop: 2 }} />
+                            )}
+                            <Text size="sm" c={r.met ? undefined : 'dimmed'}>
+                              {r.label}
+                            </Text>
+                          </Group>
+                        ))}
+                      </Stack>
+                    </HoverCard.Dropdown>
+                  </HoverCard>
+                );
+              })()}
               <Button color="red" variant="light" loading={lose.isPending} onClick={() => lose.mutate({ id: deal.id })}>
                 Mark lost
               </Button>
@@ -176,7 +229,6 @@ export default function DealLayout({ children }: { children: ReactNode }) {
       </Group>
 
       <ComposeEmail opened={emailOpen} onClose={emailCtl.close} defaultDealId={deal.id} />
-      <WinConvertModal dealId={deal.id} currency={deal.currency} opened={winConvertOpen} onClose={winConvertCtl.close} />
 
       <Tabs value={tab}>
         <Tabs.List>

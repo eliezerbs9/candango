@@ -2,18 +2,21 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../prisma/prisma.service';
 import { QuickbooksApiService, type DocInput, type NormalizedDoc } from '../../integrations/quickbooks-api.service';
+import { DealValueService } from '../deal-value.service';
 import { ConvertToInvoiceDto, CreateDocDto, LinkQuickbooksDto } from './dto/quickbooks.dto';
 
 // our estimate status <-> QBO TxnStatus
 const TO_TXN_STATUS: Record<string, string> = { accepted: 'Accepted', rejected: 'Rejected', closed: 'Closed', sent: 'Pending', draft: 'Pending' };
-const FROM_TXN_STATUS: Record<string, string> = { Accepted: 'accepted', Rejected: 'rejected', Closed: 'closed', Pending: 'sent' };
+// QBO has no "sent"/"draft" TxnStatus (both are "Pending"); a freshly created QBO estimate is Pending → draft.
+const FROM_TXN_STATUS: Record<string, string> = { Accepted: 'accepted', Rejected: 'rejected', Closed: 'closed', Pending: 'draft' };
 
 const lineSelect = { orderBy: { position: 'asc' as const } };
 type Addr = Record<string, string> | null;
 type DealForQbo = { id: string; refNumber: number | null; qbSubcustomerId: string | null; currency: string; shipTo: unknown; billTo: unknown };
 
 function dealPrivateNote(deal: DealForQbo) {
-  return `Candango deal #${deal.refNumber ?? '?'} (${deal.id})`;
+  // Internal note (QBO PrivateNote) — the readable deal ref only; no raw cuid in the memo.
+  return `Candango deal #${deal.refNumber ?? '?'}`;
 }
 
 /** Build a person's QuickBooks customer name per the org's qboNameFormat. */
@@ -28,6 +31,7 @@ export class DealQuickbooksService {
     private readonly prisma: PrismaService,
     private readonly qbo: QuickbooksApiService,
     private readonly events: EventEmitter2,
+    private readonly dealValue: DealValueService,
   ) {}
 
   private async requireDeal(orgId: string, dealId: string) {
@@ -170,24 +174,25 @@ export class DealQuickbooksService {
    * Not connected → store a native estimate locally (used to price the deal).
    */
   async createEstimate(orgId: string, dealId: string, dto: CreateDocDto) {
-    // FR-13.11: `setAsValue` or `includeInValue` mark the new estimate for the value.
-    const includeInValue = !!dto.setAsValue || !!dto.includeInValue;
+    // Deal value is now document-driven (status-tier); every estimate is a value document.
+    // QuickBooks estimate only when connected AND the deal is linked; otherwise a NATIVE estimate
+    // (fallback — so a proposal/estimate can always be created without QBO, or before linking).
     let row;
-    if (await this.isConnected(orgId)) {
-      const deal = await this.requireLinked(orgId, dealId);
+    const deal = await this.requireDeal(orgId, dealId);
+    if ((await this.isConnected(orgId)) && deal.qbSubcustomerId) {
       const doc = await this.qbo.createEstimate(orgId, this.qboDocInput(deal, dto));
       row = await this.prisma.dealEstimate.create({
         data: {
           orgId,
           dealId,
           source: 'quickbooks',
-          status: FROM_TXN_STATUS[doc.status ?? 'Pending'] ?? 'sent',
+          status: FROM_TXN_STATUS[doc.status ?? 'Pending'] ?? 'draft',
           docNumber: doc.docNumber,
           currency: deal.currency,
           totalAmount: doc.totalAmount,
           txnDate: dto.txnDate ? new Date(dto.txnDate) : null,
           notes: dto.notes ?? null,
-          includeInValue,
+          includeInValue: true,
           qbId: doc.qbId,
           qbSyncToken: doc.syncToken,
           qbSyncedAt: new Date(),
@@ -197,8 +202,7 @@ export class DealQuickbooksService {
       });
       this.events.emit('webhook.event', { orgId, type: 'quickbooks.estimate_synced', data: { dealId, estimateId: row.id } });
     } else {
-      // Native (offline) estimate — amounts computed server-side.
-      const deal = await this.requireDeal(orgId, dealId);
+      // Native (offline) estimate — amounts computed server-side. Used with no QuickBooks OR an unlinked deal.
       row = await this.prisma.dealEstimate.create({
         data: {
           orgId,
@@ -210,20 +214,13 @@ export class DealQuickbooksService {
           taxRateBps: dto.taxRateBps ?? 0,
           txnDate: dto.txnDate ? new Date(dto.txnDate) : null,
           notes: dto.notes ?? null,
-          includeInValue,
+          includeInValue: true,
           lines: { create: nativeLines(dto) },
         },
         include: { lines: lineSelect },
       });
     }
-    // "Set as the deal value" → this estimate is the sole value estimate.
-    if (dto.setAsValue) {
-      await this.prisma.dealEstimate.updateMany({
-        where: { orgId, dealId, id: { not: row.id }, deletedAt: null },
-        data: { includeInValue: false },
-      });
-    }
-    if (includeInValue) await this.recomputeDealValue(orgId, dealId);
+    await this.recomputeDealValue(orgId, dealId);
     return shapeDoc(row);
   }
 
@@ -370,24 +367,9 @@ export class DealQuickbooksService {
    * explicitly marked for value (excluding closed/rejected). Only overrides the value when there
    * is at least one such document; otherwise the manually-entered value is left alone.
    */
+  /** Deal value is document-driven (status-tier model) — see DealValueService. */
   async recomputeDealValue(orgId: string, dealId: string) {
-    const [invoices, estimates] = await Promise.all([
-      // Invoices always count toward the deal value (a made sale) — only voided ones drop out.
-      this.prisma.dealInvoice.findMany({
-        where: { orgId, dealId, deletedAt: null, status: { not: 'void' } },
-        select: { totalAmount: true },
-      }),
-      this.prisma.dealEstimate.findMany({
-        where: { orgId, dealId, deletedAt: null, includeInValue: true, status: { notIn: ['closed', 'rejected'] } },
-        select: { totalAmount: true },
-      }),
-    ]);
-    const sum = (xs: { totalAmount: number }[]) => xs.reduce((s, x) => s + x.totalAmount, 0);
-    const value = sum(invoices) + sum(estimates);
-    if (invoices.length || estimates.length) {
-      await this.prisma.deal.update({ where: { id: dealId }, data: { value, valueOverridden: true } });
-    }
-    return { value };
+    return { value: await this.dealValue.recompute(orgId, dealId) };
   }
 
   async setEstimateStatus(orgId: string, dealId: string, estimateId: string, status: string) {
@@ -533,8 +515,22 @@ export class DealQuickbooksService {
   async setInvoiceStatus(orgId: string, dealId: string, invoiceId: string, status: string) {
     const inv = await this.prisma.dealInvoice.findFirst({ where: { id: invoiceId, orgId, dealId } });
     if (!inv) throw new NotFoundException('Invoice not found');
+    // "Paid" is not a manual choice — it is derived from QuickBooks when the invoice is fully
+    // paid (balance = 0). Setting it by hand would lie about money received.
+    if (status === 'paid') {
+      throw new BadRequestException('An invoice is marked paid automatically when it is fully paid in QuickBooks — it can’t be set manually');
+    }
     await this.requireQboWritable(orgId, inv.source);
-    const row = await this.prisma.dealInvoice.update({ where: { id: invoiceId }, data: { status }, include: { lines: lineSelect } });
+    // A void must propagate to QuickBooks so the invoice is voided there too (was local-only).
+    let qbSyncToken = inv.qbSyncToken;
+    if (status === 'void' && inv.source === 'quickbooks' && inv.qbId) {
+      qbSyncToken = (await this.qbo.voidInvoice(orgId, inv.qbId)) ?? inv.qbSyncToken;
+    }
+    const row = await this.prisma.dealInvoice.update({
+      where: { id: invoiceId },
+      data: { status, qbSyncToken, ...(status === 'void' ? { qbSyncedAt: new Date() } : {}) },
+      include: { lines: lineSelect },
+    });
     await this.recomputeDealValue(orgId, dealId); // void invoices drop out of the value
     if (status === 'sent') this.emitDocSent(orgId, dealId, 'invoice');
     return shapeDoc(row);
@@ -562,6 +558,232 @@ export class DealQuickbooksService {
       // best-effort; a QBO hiccup must never break saving a deal
     }
   }
+
+  // --- Inbound QuickBooks webhooks (someone changed an estimate/invoice directly in QBO) ---
+
+  /**
+   * Apply a QuickBooks change-notification batch to our local mirror. Keyed by `realmId` (→ orgId).
+   * Idempotent + best-effort: each entity is re-read from QBO and upserted; one failing entity
+   * never aborts the batch. Only Estimates and Invoices are mirrored.
+   */
+  async handleQboWebhook(payload: QboWebhookPayload): Promise<void> {
+    for (const note of payload?.eventNotifications ?? []) {
+      const orgId = await this.qbo.orgIdForRealm(note.realmId);
+      if (!orgId) continue; // no connected tenant owns this QBO company
+      for (const ent of note.dataChangeEvent?.entities ?? []) {
+        try {
+          if (ent.name === 'Estimate') await this.reconcileEstimate(orgId, ent.id, ent.operation);
+          else if (ent.name === 'Invoice') await this.reconcileInvoice(orgId, ent.id, ent.operation);
+        } catch {
+          // best-effort per entity — log-and-continue so the rest of the batch still applies
+        }
+      }
+    }
+  }
+
+  /** The (non-deleted) deal whose QBO sub-customer matches this doc's CustomerRef, if any. */
+  private async dealForQbCustomer(orgId: string, qbCustomerId: string | null) {
+    if (!qbCustomerId) return null;
+    return this.prisma.deal.findFirst({
+      where: { orgId, deletedAt: null, qbSubcustomerId: qbCustomerId },
+      select: { id: true, currency: true, ownerUserId: true },
+    });
+  }
+
+  /**
+   * An invoice pulled/updated from QBO may have been created FROM one or more estimates
+   * (LinkedTxn). Mirror the in-app conversion: close those source estimates, link them on the
+   * invoice, and — only when we actually close something (i.e. this is the first time we see the
+   * conversion, so it wasn't done in-app) — log it on the deal timeline. Idempotent.
+   */
+  private async applyQboInvoiceLinks(
+    orgId: string,
+    dealId: string,
+    invoice: { id: string; docNumber: string | null },
+    doc: NormalizedDoc,
+    authorUserId: string,
+  ) {
+    const estTxnIds = doc.linkedTxns.filter((t) => t.txnType === 'Estimate').map((t) => t.txnId);
+    if (!estTxnIds.length) return;
+    const ests = await this.prisma.dealEstimate.findMany({
+      where: { orgId, dealId, source: 'quickbooks', qbId: { in: estTxnIds }, deletedAt: null },
+    });
+    if (!ests.length) return;
+    await this.prisma.dealInvoice.update({
+      where: { id: invoice.id },
+      data: { sourceEstimateId: ests[0].id, sourceEstimateIds: ests.map((e) => e.id) },
+    });
+    const toClose = ests.filter((e) => e.status !== 'closed');
+    if (!toClose.length) return; // already converted (e.g. an in-app conversion we're echoing) — nothing to log
+    await this.prisma.dealEstimate.updateMany({
+      where: { id: { in: toClose.map((e) => e.id) } },
+      data: { status: 'closed', includeInValue: false },
+    });
+    const estLabel = toClose.map((e) => (e.docNumber ? `#${e.docNumber}` : 'estimate')).join(', ');
+    const invLabel = invoice.docNumber ? `#${invoice.docNumber}` : 'invoice';
+    await this.prisma.note.create({
+      data: { orgId, dealId, authorUserId, body: `🧾 Converted estimate ${estLabel} to invoice ${invLabel} (in QuickBooks).` },
+    });
+  }
+
+  private async reconcileEstimate(orgId: string, qbId: string, operation: string) {
+    const existing = await this.prisma.dealEstimate.findFirst({ where: { orgId, source: 'quickbooks', qbId } });
+    if (operation === 'Delete') {
+      if (existing && !existing.deletedAt) {
+        await this.prisma.dealEstimate.update({ where: { id: existing.id }, data: { deletedAt: new Date() } });
+        await this.recomputeDealValue(orgId, existing.dealId);
+      }
+      return;
+    }
+    const doc = await this.qbo.getEstimate(orgId, qbId);
+    if (!doc) {
+      // Gone in QBO — soft-delete our copy so it drops out of the value.
+      if (existing && !existing.deletedAt) {
+        await this.prisma.dealEstimate.update({ where: { id: existing.id }, data: { deletedAt: new Date() } });
+        await this.recomputeDealValue(orgId, existing.dealId);
+      }
+      return;
+    }
+    if (existing) {
+      const status = this.deriveEstimateStatus(doc, existing.status);
+      await this.prisma.dealEstimate.update({
+        where: { id: existing.id },
+        data: {
+          status,
+          docNumber: doc.docNumber,
+          totalAmount: doc.totalAmount,
+          txnDate: doc.txnDate ? new Date(doc.txnDate) : existing.txnDate,
+          qbSyncToken: doc.syncToken,
+          qbSyncedAt: new Date(),
+          deletedAt: null, // a QBO update resurrects a doc we'd soft-deleted
+          lines: { deleteMany: {}, create: linesFromDoc(doc) },
+        },
+      });
+      await this.recomputeDealValue(orgId, existing.dealId);
+      this.events.emit('webhook.event', { orgId, type: 'quickbooks.estimate_updated', data: { dealId: existing.dealId, estimateId: existing.id } });
+      return;
+    }
+    // New estimate created directly in QBO — attach it to the deal that owns its customer.
+    const deal = await this.dealForQbCustomer(orgId, doc.qbCustomerId);
+    if (!deal) return;
+    const row = await this.prisma.dealEstimate.create({
+      data: {
+        orgId,
+        dealId: deal.id,
+        source: 'quickbooks',
+        status: FROM_TXN_STATUS[doc.status ?? 'Pending'] ?? 'draft',
+        docNumber: doc.docNumber,
+        currency: deal.currency,
+        totalAmount: doc.totalAmount,
+        txnDate: doc.txnDate ? new Date(doc.txnDate) : null,
+        includeInValue: true,
+        qbId: doc.qbId,
+        qbSyncToken: doc.syncToken,
+        qbSyncedAt: new Date(),
+        lines: { create: linesFromDoc(doc) },
+      },
+    });
+    await this.recomputeDealValue(orgId, deal.id);
+    this.events.emit('webhook.event', { orgId, type: 'quickbooks.estimate_synced', data: { dealId: deal.id, estimateId: row.id } });
+  }
+
+  /**
+   * Estimate status from a re-read QBO doc. QBO has no draft/sent distinction (both are `Pending`),
+   * so a re-sync must NOT downgrade a locally-`sent` estimate to draft; a converted (`closed`) one
+   * is never reopened. Only an explicit QBO Accepted/Rejected/Closed moves the status.
+   */
+  private deriveEstimateStatus(doc: NormalizedDoc, current: string): string {
+    if (current === 'closed') return 'closed';
+    const mapped = FROM_TXN_STATUS[doc.status ?? 'Pending'] ?? current;
+    if (mapped === 'draft') return current === 'sent' ? 'sent' : 'draft'; // Pending = draft|sent — keep local
+    return mapped; // accepted | rejected | closed
+  }
+
+  /** Invoice status from a re-read QBO doc: fully paid (balance 0) → paid; void stays void. */
+  private deriveInvoiceStatus(doc: NormalizedDoc, current: string): string {
+    if (current === 'void') return 'void';
+    if (doc.totalAmount > 0 && doc.balance === 0) return 'paid';
+    if (current === 'paid') return 'sent'; // a payment was reversed → no longer paid
+    return current === 'draft' ? 'draft' : 'sent';
+  }
+
+  private async reconcileInvoice(orgId: string, qbId: string, operation: string) {
+    const existing = await this.prisma.dealInvoice.findFirst({ where: { orgId, source: 'quickbooks', qbId } });
+    if (operation === 'Delete') {
+      if (existing && !existing.deletedAt) {
+        await this.prisma.dealInvoice.update({ where: { id: existing.id }, data: { deletedAt: new Date() } });
+        await this.recomputeDealValue(orgId, existing.dealId);
+      }
+      return;
+    }
+    if (operation === 'Void') {
+      if (existing && existing.status !== 'void') {
+        await this.prisma.dealInvoice.update({ where: { id: existing.id }, data: { status: 'void', qbSyncedAt: new Date() } });
+        await this.recomputeDealValue(orgId, existing.dealId);
+        this.events.emit('webhook.event', { orgId, type: 'quickbooks.invoice_updated', data: { dealId: existing.dealId, invoiceId: existing.id } });
+      }
+      return;
+    }
+    const doc = await this.qbo.getInvoice(orgId, qbId);
+    if (!doc) {
+      if (existing && !existing.deletedAt) {
+        await this.prisma.dealInvoice.update({ where: { id: existing.id }, data: { deletedAt: new Date() } });
+        await this.recomputeDealValue(orgId, existing.dealId);
+      }
+      return;
+    }
+    if (existing) {
+      await this.prisma.dealInvoice.update({
+        where: { id: existing.id },
+        data: {
+          status: this.deriveInvoiceStatus(doc, existing.status),
+          docNumber: doc.docNumber,
+          totalAmount: doc.totalAmount,
+          txnDate: doc.txnDate ? new Date(doc.txnDate) : existing.txnDate,
+          qbSyncToken: doc.syncToken,
+          qbSyncedAt: new Date(),
+          deletedAt: null,
+          lines: { deleteMany: {}, create: linesFromDoc(doc) },
+        },
+      });
+      await this.recomputeDealValue(orgId, existing.dealId);
+      this.events.emit('webhook.event', { orgId, type: 'quickbooks.invoice_updated', data: { dealId: existing.dealId, invoiceId: existing.id } });
+      return;
+    }
+    // New invoice created directly in QBO — attach it to the deal that owns its customer.
+    const deal = await this.dealForQbCustomer(orgId, doc.qbCustomerId);
+    if (!deal) return;
+    const row = await this.prisma.dealInvoice.create({
+      data: {
+        orgId,
+        dealId: deal.id,
+        source: 'quickbooks',
+        status: this.deriveInvoiceStatus(doc, 'sent'),
+        docNumber: doc.docNumber,
+        currency: deal.currency,
+        totalAmount: doc.totalAmount,
+        txnDate: doc.txnDate ? new Date(doc.txnDate) : null,
+        qbId: doc.qbId,
+        qbSyncToken: doc.syncToken,
+        qbSyncedAt: new Date(),
+        lines: { create: linesFromDoc(doc) },
+      },
+    });
+    // If this invoice was created FROM estimates in QBO, close them + log the conversion (like the in-app flow).
+    await this.applyQboInvoiceLinks(orgId, deal.id, { id: row.id, docNumber: row.docNumber }, doc, deal.ownerUserId);
+    await this.recomputeDealValue(orgId, deal.id);
+    this.events.emit('webhook.event', { orgId, type: 'quickbooks.invoice_created', data: { dealId: deal.id, invoiceId: row.id } });
+  }
+}
+
+/** Shape of an Intuit/QuickBooks Online webhook payload (only the fields we consume). */
+export interface QboWebhookPayload {
+  eventNotifications?: {
+    realmId: string;
+    dataChangeEvent?: {
+      entities?: { name: string; id: string; operation: string; lastUpdated?: string }[];
+    };
+  }[];
 }
 
 function linesFromDoc(doc: NormalizedDoc) {

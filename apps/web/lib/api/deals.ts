@@ -16,12 +16,40 @@ export interface StageEvent {
   createdAt: string;
 }
 
+export interface WinRequirement {
+  key: 'fields' | 'stage' | 'proposal' | 'signed' | 'invoice';
+  label: string;
+  met: boolean;
+}
+export interface WinCheck {
+  canWin: boolean;
+  requirements: WinRequirement[];
+}
+
 export function getDeal(token: string, id: string) {
   return apiFetch<ApiDeal>(`/deals/${id}`, { token });
 }
 
+export function getWinCheck(token: string, id: string) {
+  return apiFetch<WinCheck>(`/deals/${id}/win-check`, { token });
+}
+
 export function getStageHistory(token: string, id: string) {
   return apiFetch<StageEvent[]>(`/deals/${id}/stage-history`, { token });
+}
+
+/** A system/automation event on the deal (automation ran, proposal responded, signature lifecycle). */
+export interface DealEvent {
+  id: string;
+  kind: 'automation' | 'proposal' | 'signature' | 'email';
+  title: string;
+  body: string | null;
+  actor: string | null;
+  createdAt: string;
+}
+
+export function getDealEvents(token: string, id: string) {
+  return apiFetch<DealEvent[]>(`/deals/${id}/events`, { token });
 }
 
 export function getDeals(token: string, filters: DealFilters = {}) {
@@ -47,9 +75,31 @@ export function getDealRecipients(token: string, dealId: string) {
   return apiFetch<DealRecipient[]>(`/deals/${dealId}/recipients`, { token });
 }
 
+/** A deal participant with address, for the client/Bill-Ship UI. */
+export interface DealParticipant {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  address: Address | null;
+  customFields: Record<string, unknown>;
+  source: 'deal-primary' | 'company-primary' | 'participant' | 'field';
+  removable: boolean;
+}
+
+/** The deal's people (primary + company primary + participants) with addresses. */
+export function getDealParticipants(token: string, dealId: string) {
+  return apiFetch<DealParticipant[]>(`/deals/${dealId}/participants`, { token });
+}
+
 /** Link a person to the deal as a participant. */
 export function addDealParticipant(token: string, dealId: string, personId: string) {
   return apiFetch<{ ok: boolean }>(`/deals/${dealId}/participants`, { method: 'POST', token, body: JSON.stringify({ personId }) });
+}
+
+/** Unlink a manually-added participant. */
+export function removeDealParticipant(token: string, dealId: string, personId: string) {
+  return apiFetch<{ ok: boolean }>(`/deals/${dealId}/participants/${personId}`, { method: 'DELETE', token });
 }
 
 export function createDeal(
@@ -62,6 +112,7 @@ export function createDeal(
     stageId: string;
     companyId?: string;
     primaryPersonId?: string;
+    participantIds?: string[];
   },
 ) {
   return apiFetch<ApiDeal>('/deals', { method: 'POST', token, body: JSON.stringify(body) });
@@ -81,6 +132,7 @@ export function updateDeal(
     customFields: Record<string, unknown>;
     shipTo: Address;
     billTo: Address;
+    tags: string[];
   }>,
 ) {
   return apiFetch<ApiDeal>(`/deals/${id}`, { method: 'PATCH', token, body: JSON.stringify(body) });

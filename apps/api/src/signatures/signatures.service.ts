@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
+import { DealEventsService } from '../deal-events/deal-events.service';
 import { SpacesService } from '../uploads/spaces.service';
 import { type DocusealField } from './docuseal.service';
 import { DocumensoService } from './documenso.service';
@@ -117,6 +118,7 @@ export class SignaturesService {
     private readonly gotenberg: GotenbergService,
     private readonly messages: MessagesService,
     private readonly events: EventEmitter2,
+    private readonly dealEvents: DealEventsService,
   ) {}
 
   /** True when the deal owner has a connected mailbox (so Candango can send the invite itself). */
@@ -197,8 +199,10 @@ export class SignaturesService {
     if (doc.status === 'COMPLETED') await this.markSigned(row);
     else if (doc.status === 'REJECTED') {
       await this.prisma.signatureRequest.update({ where: { id: row.id }, data: { status: 'declined', declinedAt: new Date() } });
+      await this.dealEvents.log(row.orgId, row.dealId, { kind: 'signature', title: `“${row.title}” declined`, actor: row.signerName || row.signerEmail || 'the customer' });
     } else if (doc.status === 'CANCELLED') {
       await this.prisma.signatureRequest.update({ where: { id: row.id }, data: { status: 'voided', declinedAt: new Date() } });
+      await this.dealEvents.log(row.orgId, row.dealId, { kind: 'signature', title: `“${row.title}” voided` });
     }
   }
 
@@ -215,12 +219,8 @@ export class SignaturesService {
       }
     }
     await this.prisma.signatureRequest.update({ where: { id: row.id }, data: { status: 'signed', signedAt: new Date(), signedFileKey } });
-    const author = row.createdByUserId ?? (await this.prisma.deal.findFirst({ where: { id: row.dealId }, select: { ownerUserId: true } }))?.ownerUserId;
-    if (author) {
-      await this.prisma.note.create({
-        data: { orgId: row.orgId, dealId: row.dealId, authorUserId: author, body: `“${row.title}” was signed by ${row.signerName || row.signerEmail || 'the customer'}.` },
-      });
-    }
+    const signer = row.signerName || row.signerEmail || 'the customer';
+    await this.dealEvents.log(row.orgId, row.dealId, { kind: 'signature', title: `“${row.title}” signed`, actor: signer });
     this.events.emit('webhook.event', { orgId: row.orgId, type: 'document.signed', data: { deal: { id: row.dealId }, signature: { id: row.id } } });
   }
 
@@ -266,6 +266,7 @@ export class SignaturesService {
       }
     }
     const updated = row.status === 'voided' ? row : await this.prisma.signatureRequest.update({ where: { id }, data: { status: 'voided', declinedAt: new Date() } });
+    if (row.status !== 'voided') await this.dealEvents.log(orgId, row.dealId, { kind: 'signature', title: `“${row.title}” voided` });
     return { ...shape(updated), engineVoided, engineError };
   }
 
@@ -386,6 +387,7 @@ export class SignaturesService {
         sentAt: new Date(),
       },
     });
+    await this.dealEvents.log(orgId, dto.dealId, { kind: 'signature', title: `Sent “${dto.title}” for signature`, body: dto.signerEmail ? `To ${dto.signerName || dto.signerEmail}` : null });
     return { ...shape(row), signingUrl: sub.signingUrl };
   }
 
@@ -514,6 +516,7 @@ export class SignaturesService {
         sentAt: new Date(),
       },
     });
+    await this.dealEvents.log(orgId, dto.dealId, { kind: 'signature', title: `Sent “${tpl.name}” for signature`, body: signerEmail ? `To ${signerName || signerEmail}` : null });
     // A one-off deal document becomes a sent request now — archive the draft so it leaves the deal's Drafts list.
     if (tpl.dealId) await this.prisma.signableDocumentTemplate.update({ where: { id: tpl.id }, data: { archivedAt: new Date() } });
     return { ...shape(row), signingUrl: sub.signingUrl };

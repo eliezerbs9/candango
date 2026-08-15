@@ -1,7 +1,7 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import { pageAspectCss, type CanvasElement, type CanvasPage, type ProposalPage, type ProposalRow, type ProposalTheme } from '@/lib/api/proposals';
+import { pageAspectCss, type CanvasElement, type CanvasPage, type PricingDocRef, type ProposalPage, type ProposalRow, type ProposalTheme } from '@/lib/api/proposals';
 
 /**
  * Renders a proposal — free-canvas pages of absolutely-positioned elements (with a legacy flow
@@ -28,11 +28,15 @@ export interface ProposalDocOpts {
   /** When set (template-owned "fixed" source), render exactly these documents. */
   docs?: { name?: string; url: string }[];
 }
+export interface ProposalPricingOpts {
+  /** The documents (estimates/invoices) this pricing element references; empty ⇒ proposal aggregate. */
+  docs?: PricingDocRef[];
+}
 export interface ProposalRenderCtx {
   resolveText: (s: string) => string;
   image: (opts: ProposalImageOpts) => React.ReactNode;
   document: (opts: ProposalDocOpts) => React.ReactNode;
-  pricing: () => React.ReactNode;
+  pricing: (opts?: ProposalPricingOpts) => React.ReactNode;
   logo: (opts?: { fit?: 'contain' | 'cover' }) => React.ReactNode;
   /** Resolve a stored object key to a signed URL (for template-owned uploaded files). */
   fileUrl: (key: string) => string | undefined;
@@ -132,7 +136,11 @@ export function ElementView({ element, theme, ctx }: { element: CanvasElement; t
         </div>
       );
     case 'pricing':
-      return <div style={{ ...base, fontSize: s.fontSize ?? 14 }}>{ctx.pricing()}</div>;
+      return (
+        <div style={{ ...base, fontSize: s.fontSize ?? 14 }}>
+          {ctx.pricing({ docs: element.props.docs as PricingDocRef[] | undefined })}
+        </div>
+      );
     case 'logo':
       return <div style={base}>{ctx.logo({ fit: (element.props.fit as 'contain' | 'cover' | undefined) ?? 'contain' })}</div>;
     case 'divider':

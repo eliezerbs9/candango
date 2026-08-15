@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsDateString,
   IsInt,
   IsObject,
@@ -36,6 +37,12 @@ export class CreateDealDto {
   @IsString()
   companyId?: string;
 
+  /** Extra people to link to the deal as participants on creation (besides the primary contact). */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  participantIds?: string[];
+
   @IsOptional()
   @IsDateString()
   expectedCloseDate?: string;
@@ -47,6 +54,11 @@ export class CreateDealDto {
   @IsOptional()
   @IsObject()
   billTo?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
 
   @IsOptional()
   @IsObject()
@@ -95,6 +107,11 @@ export class UpdateDealDto {
   @IsOptional()
   @IsObject()
   billTo?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
 
   @IsOptional()
   @IsObject()

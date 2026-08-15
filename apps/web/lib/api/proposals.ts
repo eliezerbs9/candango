@@ -107,11 +107,35 @@ export interface ProposalTheme {
   presentBg?: string;
 }
 
+/** An internal (rep-filled, client-hidden) proposal field — defined on a template, snapshotted per proposal. */
+export type ProposalFieldType =
+  | 'text'
+  | 'number'
+  | 'date'
+  | 'select'
+  | 'image'
+  | 'document'
+  | 'signature_template'
+  | 'estimate'
+  | 'invoice';
+export interface ProposalFieldDef {
+  key: string;
+  label: string;
+  type: ProposalFieldType;
+  required?: boolean;
+  options?: string[];
+  /** For `document`/`image` fields: the deal custom-field key this binds to (its value lives on the deal). */
+  customFieldKey?: string;
+  /** For file/pricing fields: allow more than one (default true). `false` = exactly one. */
+  multiple?: boolean;
+}
+
 export interface ProposalTemplate {
   id: string;
   name: string;
   theme: ProposalTheme;
   layout: CanvasPage[];
+  fields: ProposalFieldDef[];
   emailTemplateId: string | null;
   systemKey: string | null;
   system: boolean;
@@ -128,6 +152,7 @@ export interface ProposalTemplateBody {
   name?: string;
   theme?: ProposalTheme;
   layout?: CanvasPage[];
+  fields?: ProposalFieldDef[];
   emailTemplateId?: string;
 }
 
@@ -170,6 +195,8 @@ export interface Proposal {
   title: string;
   theme: ProposalTheme;
   content: CanvasPage[];
+  fields: ProposalFieldDef[];
+  fieldValues: Record<string, unknown>;
   estimateIds: string[];
   status: ProposalStatus;
   shareToken: string;
@@ -177,6 +204,7 @@ export interface Proposal {
   sentAt: string | null;
   viewedAt: string | null;
   respondedAt: string | null;
+  createdAt: string;
   updatedAt: string;
   /** Sum of the selected estimates (cents) — present on the deal list response. */
   total?: number;
@@ -193,6 +221,16 @@ export interface ProposalDocFile {
   url: string;
 }
 
+/** A resolved pricing table (line-item rows + total) for a document or the aggregate. */
+export interface PricingTable {
+  currency: string;
+  rows: { description: string; amount: number }[];
+  total: number;
+}
+
+/** A document a pricing element pulls in (stored in the element's `props.docs`). */
+export type PricingDocRef = { kind: 'estimate' | 'invoice'; id: string };
+
 /** The resolved render data (no proposal fields) — enough to build a render context. */
 export interface ProposalRenderCore {
   variables: Record<string, string>;
@@ -201,7 +239,10 @@ export interface ProposalRenderCore {
   logoUrl: string | null;
   /** Signed URLs for template-owned uploaded files (image/document "fixed" source), keyed by object key. */
   fixedFilesByKey: Record<string, string>;
-  pricing: { currency: string; rows: { description: string; amount: number }[]; total: number };
+  /** Proposal-level aggregate pricing (fallback for pricing elements without their own `docs`). */
+  pricing: PricingTable;
+  /** Per-document pricing (estimate/invoice) keyed by id — for pricing elements that reference specific docs. */
+  pricingByDoc: Record<string, PricingTable>;
 }
 
 /** A proposal + the resolved render data (variables, signed file URLs, pricing). */
@@ -214,6 +255,8 @@ export interface ProposalBody {
   estimateIds?: string[];
   content?: CanvasPage[];
   theme?: ProposalTheme;
+  /** Rep-filled values for the proposal's internal (client-hidden) fields. */
+  fieldValues?: Record<string, unknown>;
   status?: ProposalStatus;
   /** Reason — required when the user sets status to denied or deferred. */
   feedback?: string;

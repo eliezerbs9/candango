@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActionIcon,
   Button,
@@ -173,6 +173,10 @@ export interface ProposalCanvasEditorProps {
   senderFields?: boolean;
   /** Resolve a page-background file key (e.g. an imported PDF page) to a displayable URL. */
   resolveFileUrl?: (key: string) => string | undefined;
+  /** Deal builder only: render the estimate/invoice picker for a selected pricing element. */
+  renderPricingDocs?: (el: CanvasElement, onProp: (key: string, value: unknown) => void) => ReactNode;
+  /** Extra content pinned in the right sidebar, below the "Add element" palette (e.g. proposal internal fields). */
+  rightPanelExtra?: ReactNode;
 }
 
 /** Placeable signature fields (signable-document builder only). */
@@ -203,6 +207,8 @@ export function ProposalCanvasEditor({
   signatureFields = false,
   senderFields = false,
   resolveFileUrl,
+  renderPricingDocs,
+  rightPanelExtra,
 }: ProposalCanvasEditorProps) {
   // At most ONE signature field per party per document — once placed, disable that party's Signature button.
   const sigByParty = useMemo(() => {
@@ -749,6 +755,7 @@ export function ProposalCanvasEditor({
                 imageFilesByField={imageFilesByField}
                 documentFilesByField={documentFilesByField}
                 onUploadFile={onUploadFile}
+                renderPricingDocs={renderPricingDocs}
               />
             </Card>
           ) : selIds.length > 1 ? (
@@ -775,6 +782,9 @@ export function ProposalCanvasEditor({
               Add or select an element to edit it. Drag to move; drag the corner to resize. Shift-click or drag a box to select several.
             </Text>
           )}
+
+          {/* Internal fields pinned to the bottom so the selected element's settings sit right under the palette. */}
+          {rightPanelExtra}
         </Stack>
       </Group>
 
@@ -1002,6 +1012,7 @@ function ElementSettings({
   imageFilesByField,
   documentFilesByField,
   onUploadFile,
+  renderPricingDocs,
 }: {
   el: CanvasElement;
   fonts: string[];
@@ -1017,6 +1028,7 @@ function ElementSettings({
   imageFilesByField: Record<string, ProposalImageFile[]>;
   documentFilesByField: Record<string, ProposalDocFile[]>;
   onUploadFile?: (file: File) => Promise<{ key: string; name: string }>;
+  renderPricingDocs?: (el: CanvasElement, onProp: (key: string, value: unknown) => void) => ReactNode;
 }) {
   const s = el.style ?? {};
   const textLike = el.type === 'text' || el.type === 'heading';
@@ -1189,11 +1201,14 @@ function ElementSettings({
           </Text>
         </div>
       )}
-      {el.type === 'pricing' && (
-        <Text size="xs" c="dimmed">
-          Fills from the estimate(s) selected on the proposal.
-        </Text>
-      )}
+      {el.type === 'pricing' &&
+        (renderPricingDocs ? (
+          renderPricingDocs(el, onProp)
+        ) : (
+          <Text size="xs" c="dimmed">
+            Fills from the estimate(s) selected on the proposal.
+          </Text>
+        ))}
 
       {textLike && (
         <>

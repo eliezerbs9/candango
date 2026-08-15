@@ -10,13 +10,15 @@ const EVENT_TO_TRIGGER: Record<string, string> = {
   'deal.lost': 'deal_lost',
   'deal.doc_sent': 'doc_sent',
   'proposal.accepted': 'proposal_accepted',
+  'proposal.declined': 'proposal_declined',
+  'proposal.deferred': 'proposal_deferred',
   'document.signed': 'document_signed',
 };
 
 interface WebhookEvent {
   orgId: string;
   type: string;
-  data?: { deal?: { id?: string; stageId?: string }; docKind?: string } & Record<string, unknown>;
+  data?: { deal?: { id?: string; stageId?: string }; proposal?: { id?: string }; docKind?: string } & Record<string, unknown>;
 }
 
 /**
@@ -44,10 +46,11 @@ export class EmailAutomationsRunner {
         where: { orgId: payload.orgId, archivedAt: null, enabled: true, trigger },
         include: { template: { select: { subject: true, body: true } } },
       });
+      const proposalId = payload.data?.proposal?.id;
       for (const auto of autos) {
         if (!this.matches(auto, payload)) continue;
         await this.executor
-          .fireForDeal(payload.orgId, dealId, auto)
+          .fireForDeal(payload.orgId, dealId, auto, proposalId)
           .catch((e) => this.logger.warn(`automation ${auto.id} failed: ${e instanceof Error ? e.message : String(e)}`));
       }
     } catch (e) {

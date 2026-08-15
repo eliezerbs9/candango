@@ -38,6 +38,8 @@ model Organization {
   taxRateBps      Int      @default(0) // sales-tax rate for LOCAL estimates, in basis points (700 = 7.00%); 0 = no tax
   taxDefaultOn    Boolean  @default(false) // pre-select "apply tax" when creating a new estimate/invoice
   seededAutomationGroups String[] @default([]) // starter-kit recipe groups already seeded (core|gmail|quickbooks) — each seeds at most once
+  winRequirements Json    @default("{}") // rules that gate the deal "Mark won" button: { enabled, stageIds[], requireAcceptedProposal, requireSignedDocument, signedTemplateIds[] }. {} / disabled = "Any time"
+  dealCardConfig  Json    @default("{}") // which elements show on a pipeline deal card: { company, primaryContact, value, owner, daysInStage, created, lastActivity, tags }. {} = defaults (company+contact+value)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   deletedAt       DateTime?
@@ -219,6 +221,7 @@ model Deal {
   lostReason         String?
   expectedCloseDate  DateTime?
   stageChangedAt     DateTime @default(now())
+  tags               String[] @default([]) // deal labels/flags — filtering + pipeline card
   customFields       Json     @default("{}")
   // QuickBooks (optional; null when QBO not connected)
   qbSubcustomerId    String?  // QBO sub-customer (Job) id for this deal
@@ -241,6 +244,7 @@ model Deal {
   notes        Note[]
   messages     Message[]
   stageEvents  DealStageEvent[]
+  events       DealEvent[]
   estimates    DealEstimate[]
   invoices     DealInvoice[]
   proposals    Proposal[]
@@ -289,6 +293,7 @@ model Company {
   orgId        String
   name         String
   domain       String?
+  email        String?  // general company email
   address      Json?    // structured { line1, line2, city, state, postalCode, country }
   phone        String?
   ownerUserId  String?
@@ -375,6 +380,23 @@ model DealStageEvent {
   toStageId       String
   changedByUserId String?
   createdAt       DateTime @default(now())
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId, createdAt])
+}
+
+// System/automation activity on a deal (automations firing, proposal responses, signature
+// lifecycle, …) surfaced on the deal Activity timeline alongside notes/activities/messages.
+model DealEvent {
+  id        String   @id @default(cuid())
+  orgId     String
+  dealId    String
+  kind      String // automation | proposal | signature | email
+  title     String
+  body      String?
+  actor     String? // "Automation · <name>", "Client via proposal link", a signer's name/email
+  createdAt DateTime @default(now())
 
   deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
 
@@ -897,6 +919,7 @@ model ProposalTemplate {
   name            String
   theme           Json      @default("{}") // { primaryColor, accentColor, fontHeading, fontBody, coverStyle }
   layout          Json      @default("[]") // rows: [{ id, columns: [{ id, width, block: { type, props } | null }] }]
+  fields          Json      @default("[]") // internal (rep-filled, client-hidden) field defs: [{ key, label, type, required, options? }] — feed automations
   emailTemplateId String? // EmailTemplate used for the covering email when a proposal is sent
   systemKey       String? // non-null = protected built-in starter
   createdByUserId String?
@@ -921,6 +944,8 @@ model Proposal {
   title           String
   theme           Json      @default("{}")
   content         Json      @default("[]") // resolved layout snapshot (stable once sent)
+  fields          Json      @default("[]") // snapshot of the template's internal field DEFS at creation (client-hidden)
+  fieldValues     Json      @default("{}") // rep-filled values for the internal fields, keyed by field key (client-hidden)
   estimateIds     String[]  @default([]) // the DealEstimate ids included in the pricing block
   status          String    @default("draft") // draft | sent | viewed | accepted | denied | deferred
   shareToken      String    @unique @default(cuid()) // public presentation link token

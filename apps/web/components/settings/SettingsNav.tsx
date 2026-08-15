@@ -10,6 +10,7 @@ const SECTIONS = [
   { label: 'Members', href: '/settings/members' },
   { label: 'Roles', href: '/settings/roles' },
   { label: 'Fields', href: '/settings/custom-fields' },
+  { label: 'Deals', href: '/settings/deals' },
   { label: 'Proposals', href: '/settings/proposals' },
   { label: 'Signatures', href: '/settings/signatures' },
   { label: 'Invoicing', href: '/settings/invoicing' },

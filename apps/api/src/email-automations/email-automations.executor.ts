@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MessagesService } from '../messages/messages.service';
 import { MailService } from '../mail/mail.service';
 import { SignaturesService } from '../signatures/signatures.service';
+import { DealEventsService } from '../deal-events/deal-events.service';
 import {
   buildSignatureValues,
   buildTemplateContext,
@@ -15,6 +16,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface AutomationRow {
   id: string;
+  name: string;
   action: string;
   config: unknown;
   templateId: string | null;
@@ -62,9 +64,10 @@ export class EmailAutomationsExecutor {
     private readonly messages: MessagesService,
     private readonly mail: MailService,
     private readonly signatures: SignaturesService,
+    private readonly dealEvents: DealEventsService,
   ) {}
 
-  async fireForDeal(orgId: string, dealId: string, auto: AutomationRow): Promise<void> {
+  async fireForDeal(orgId: string, dealId: string, auto: AutomationRow, proposalId?: string): Promise<void> {
     const deal = await this.prisma.deal.findFirst({
       where: { id: dealId, orgId },
       select: {
@@ -98,13 +101,31 @@ export class EmailAutomationsExecutor {
       workspace: org,
     });
 
+    // Proposal-triggered automations can read the proposal's internal (client-hidden) field values —
+    // scalars are exposed as `{{proposal.field.<key>}}` for templates; all values feed the signature action.
+    let proposalFieldValues: Record<string, unknown> | null = null;
+    if (proposalId) {
+      const p = await this.prisma.proposal.findFirst({ where: { id: proposalId, orgId }, select: { fieldValues: true } });
+      if (p) {
+        proposalFieldValues = (p.fieldValues ?? {}) as Record<string, unknown>;
+        for (const [k, val] of Object.entries(proposalFieldValues)) {
+          if (typeof val === 'string' || typeof val === 'number') ctx[`proposal.field.${k}`] = String(val);
+        }
+      }
+    }
+
+    const byAuto = `Automation · ${auto.name}`;
+
     if (auto.action === 'create_activity') {
       await this.createActivity(orgId, dealId, deal.ownerUserId, deal.primaryPersonId, auto, ctx);
+      await this.dealEvents.log(orgId, dealId, { kind: 'automation', title: 'Created a follow-up activity', actor: byAuto });
       return;
     }
 
     if (auto.action === 'request_signature') {
-      await this.requestSignature(orgId, dealId, deal.ownerUserId, auto, ctx);
+      // The signature-sent event is logged by SignaturesService; here we mark the automation firing.
+      await this.requestSignature(orgId, dealId, deal.ownerUserId, auto, ctx, proposalFieldValues);
+      await this.dealEvents.log(orgId, dealId, { kind: 'signature', title: 'Requested a signature', actor: byAuto });
       return;
     }
 
@@ -114,6 +135,8 @@ export class EmailAutomationsExecutor {
       if (stageId) {
         await this.prisma.deal.update({ where: { id: dealId }, data: { stageId } }).catch((e) => this.logger.warn(`automation ${auto.id} move_stage failed: ${e}`));
         this.logger.log(`automation ${auto.id} moved deal ${dealId} to stage ${stageId}`);
+        const stage = await this.prisma.stage.findFirst({ where: { id: stageId, orgId }, select: { name: true } });
+        await this.dealEvents.log(orgId, dealId, { kind: 'automation', title: `Moved to stage ${stage?.name ?? ''}`.trim(), actor: byAuto });
       }
       return;
     }
@@ -125,6 +148,7 @@ export class EmailAutomationsExecutor {
         if (person && !person.tags.includes(tag)) {
           await this.prisma.person.update({ where: { id: deal.primaryPersonId }, data: { tags: { push: tag } } });
           this.logger.log(`automation ${auto.id} tagged contact of deal ${dealId} with "${tag}"`);
+          await this.dealEvents.log(orgId, dealId, { kind: 'automation', title: `Tagged the contact “${tag}”`, actor: byAuto });
         }
       }
       return;
@@ -149,6 +173,7 @@ export class EmailAutomationsExecutor {
     try {
       await this.messages.send(orgId, deal.ownerUserId, { to: [recipient], subject, body, html: true, dealId });
       this.logger.log(`automation ${auto.id} sent to ${recipient} for deal ${dealId}`);
+      await this.dealEvents.log(orgId, dealId, { kind: 'email', title: `Sent email: ${subject}`, body: `To ${recipient}`, actor: byAuto });
     } catch (err) {
       await this.handleEmailError(orgId, auto.id, err);
     }
@@ -230,10 +255,33 @@ export class EmailAutomationsExecutor {
     }
   }
 
-  /** Generate a document from the automation's document template and send it to the deal's contact. */
-  private async requestSignature(orgId: string, dealId: string, ownerUserId: string, auto: AutomationRow, ctx: Record<string, string>): Promise<void> {
+  /**
+   * Generate a document and send it to the deal's contact for signature. The document template is
+   * either fixed on the automation (`source:'template'`, default) or resolved from a proposal's
+   * internal `signature_template` field (`source:'proposal_field'`) — the doc the rep attached to
+   * this proposal, so one automation sends whatever each proposal carries.
+   */
+  private async requestSignature(
+    orgId: string,
+    dealId: string,
+    ownerUserId: string,
+    auto: AutomationRow,
+    ctx: Record<string, string>,
+    proposalFieldValues?: Record<string, unknown> | null,
+  ): Promise<void> {
     const config = (auto.config ?? {}) as Record<string, unknown>;
-    const docId = String(config.signableDocumentTemplateId ?? '');
+    let docId = '';
+    if (String(config.source ?? 'template') === 'proposal_field') {
+      const key = String(config.proposalFieldKey ?? '');
+      const v = key && proposalFieldValues ? proposalFieldValues[key] : undefined;
+      if (typeof v === 'string') docId = v;
+      if (!docId) {
+        this.logger.log(`automation ${auto.id}: proposal field "${key}" empty — signature skipped`);
+        return;
+      }
+    } else {
+      docId = String(config.signableDocumentTemplateId ?? '');
+    }
     if (!docId) return;
     if (!ctx['contact.email']) {
       this.logger.log(`automation ${auto.id}: deal ${dealId} has no contact email — signature skipped`);

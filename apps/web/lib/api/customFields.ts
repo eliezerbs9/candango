@@ -1,6 +1,6 @@
 import { apiFetch } from './client';
 
-export type CustomFieldType = 'text' | 'number' | 'date' | 'select' | 'image' | 'document';
+export type CustomFieldType = 'text' | 'number' | 'date' | 'select' | 'image' | 'document' | 'address' | 'person' | 'company';
 
 export interface CustomFieldDef {
   id: string;

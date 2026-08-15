@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import {
-  IconCurrencyDollar,
   IconFileInvoice,
   IconInfoCircle,
   IconPlus,
@@ -14,7 +13,6 @@ import {
   IconReceipt,
   IconSend,
   IconTrash,
-  IconX,
 } from '@tabler/icons-react';
 import {
   useCreateEstimate,
@@ -23,7 +21,6 @@ import {
   useOrganization,
   useDealInvoices,
   useDeleteEstimate,
-  useIncludeEstimatesInValue,
   useQbItems,
   useQuickbooksStatus,
   useSetEstimateStatus,
@@ -47,7 +44,9 @@ import type { EmailAttachment } from '@/lib/api/messages';
 
 // 'closed' is terminal (set only by converting to an invoice) — not user-selectable.
 const ESTIMATE_STATUSES = ['draft', 'sent', 'accepted', 'rejected'];
-const INVOICE_STATUSES = ['draft', 'sent', 'paid', 'void'];
+// 'paid' is not user-selectable — QuickBooks marks an invoice paid when its balance hits zero.
+// (The status badge still renders 'paid' from the doc's own status when QBO reports it.)
+const INVOICE_STATUSES = ['draft', 'sent', 'void'];
 
 const fail = (e: unknown) =>
   notifications.show({ message: e instanceof ApiError ? e.message : 'Something went wrong', color: 'red' });
@@ -85,7 +84,6 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   const updateInvoice = useUpdateInvoice(deal.id);
   const setEstStatus = useSetEstimateStatus(deal.id);
   const setInvStatus = useSetInvoiceStatus(deal.id);
-  const includeEstimates = useIncludeEstimatesInValue(deal.id);
 
   const [estEditing, setEstEditing] = useState<DealDoc | null>(null);
   const [invEditing, setInvEditing] = useState<DealDoc | null>(null);
@@ -117,6 +115,20 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
   // Show the invoices section while connected, OR when disconnected docs were kept (read-only).
   const showInvoices = mode === 'qbo' || invoiceDocs.length > 0;
   const hasKeptQboDocs = !connected && [...estimateDocs, ...invoiceDocs].some((d) => d.source === 'quickbooks');
+
+  // Which docs actually count toward the deal value — mirrors the API's status-tier model
+  // (DealValueService): every non-void invoice counts; among estimates, only those in the single
+  // highest tier present (accepted > sent > draft; closed/rejected excluded) count. A lower tier is
+  // ignored while a higher one exists — so a draft doesn't count once any estimate is sent/accepted.
+  const valueTier = (() => {
+    const live = estimateDocs.filter((e) => e.status !== 'closed' && e.status !== 'rejected');
+    if (live.some((e) => e.status === 'accepted')) return 'accepted';
+    if (live.some((e) => e.status === 'sent')) return 'sent';
+    if (live.some((e) => e.status === 'draft')) return 'draft';
+    return null;
+  })();
+  const estimateInValue = (d: DealDoc) => d.status === valueTier;
+  const invoiceInValue = (d: DealDoc) => d.status !== 'void';
 
   // Connected → open the actual QuickBooks PDF; otherwise our own print page.
   const openDoc = async (doc: DealDoc, kind: 'estimate' | 'invoice') => {
@@ -185,14 +197,6 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
     }
   };
 
-  const valueToast = (include: boolean) => ({
-    onSuccess: () =>
-      notifications.show({ message: include ? 'Added to deal value' : 'Removed from deal value', color: 'green' }),
-    onError: fail,
-  });
-  const markEstimates = (ids: string[], include: boolean) =>
-    includeEstimates.mutate({ estimateIds: ids, include }, valueToast(include));
-
   const deleteEstimate = useDeleteEstimate(deal.id);
   const removeEstimate = (doc: DealDoc) => {
     if (!window.confirm(`Delete estimate ${doc.docNumber ? `#${doc.docNumber}` : ''}? This can't be undone.`)) return;
@@ -229,13 +233,6 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
     if (mode === 'qbo' && live)
       acts.push({ key: 'convert', label: 'Convert to invoice', icon: <IconReceipt size={14} />, onClick: () => { setConvertDoc(d); convertCtl.open(); } });
     if (live) {
-      if (d.includeInValue) {
-        // The value must stay backed by ≥1 estimate — only allow removing when there's more than one.
-        if (estimateDocs.length > 1)
-          acts.push({ key: 'value', label: 'Remove from deal value', icon: <IconX size={14} />, onClick: () => markEstimates([d.id], false) });
-      } else {
-        acts.push({ key: 'value', label: 'Add to deal value', icon: <IconCurrencyDollar size={14} />, onClick: () => markEstimates([d.id], true) });
-      }
       acts.push({ key: 'delete', label: 'Delete', icon: <IconTrash size={14} />, color: 'red', onClick: () => removeEstimate(d) });
     }
     return acts;
@@ -292,6 +289,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
               onSetStatus={(id, status) => setEstStatus.mutate({ id, status }, { onError: fail })}
               onOpen={(doc) => setView({ doc, kind: 'Estimate' })}
               isStatusLocked={(d) => d.status === 'closed' || isReadOnlyDoc(d)}
+              inValue={estimateInValue}
               emptyText={mode === 'link' ? 'Link the deal to add estimates.' : 'No estimates yet.'}
               connected={connected}
               actions={estimateActions}
@@ -308,6 +306,7 @@ export function QuickbooksPanel({ deal }: { deal: ApiDeal }) {
                 onSetStatus={(id, status) => setInvStatus.mutate({ id, status }, { onSuccess: () => stageCtl.open(), onError: fail })}
                 onOpen={(doc) => setView({ doc, kind: 'Invoice' })}
                 isStatusLocked={(d) => isReadOnlyDoc(d)}
+                inValue={invoiceInValue}
                 emptyText="No invoices yet — convert an estimate (⋯ → Convert to invoice)."
                 connected={connected}
                 actions={mode === 'qbo' ? invoiceActions : undefined}

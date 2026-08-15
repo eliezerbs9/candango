@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { summarizeDocuments } from '../common/document-summary';
 import { CreatePersonDto, UpdatePersonDto } from './dto/person.dto';
 import { formatPersonName } from './name-format';
 
@@ -157,6 +158,7 @@ export class PersonsService {
           value: true,
           currency: true,
           status: true,
+          qbSubcustomerId: true,
           stage: { select: { name: true } },
         },
       }),
@@ -187,6 +189,7 @@ export class PersonsService {
     return {
       ...person,
       qbCustomerId: qbLink?.qbCustomerId ?? null,
+      documentsSummary: summarizeDocuments(documents, deals),
       deals: deals.map((d) => ({
         id: d.id,
         refNumber: d.refNumber,

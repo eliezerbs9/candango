@@ -22,8 +22,6 @@ import { PageHeader } from '@/components/primitives/PageHeader';
 import { DataTable, type Column } from '@/components/data/DataTable';
 import { CreatableMultiSelect } from '@/components/common/CreatableMultiSelect';
 import { CustomFieldsEditor } from '@/components/deals/CustomFieldsEditor';
-import { AddressFields } from '@/components/deals/AddressFields';
-import type { Address } from '@/lib/api/types';
 import { ApiError } from '@/lib/api/client';
 import {
   useCompanies,
@@ -47,7 +45,6 @@ export default function CompaniesPage() {
   const [editing, setEditing] = useState<ApiCompany | null>(null);
   const [name, setName] = useState('');
   const [domain, setDomain] = useState('');
-  const [address, setAddress] = useState<Address>({});
   const [phone, setPhone] = useState('');
   const [contactIds, setContactIds] = useState<string[]>([]);
   const [contactTitles, setContactTitles] = useState<Record<string, string>>({});
@@ -60,7 +57,6 @@ export default function CompaniesPage() {
     setEditing(null);
     setName('');
     setDomain('');
-    setAddress({});
     setPhone('');
     setContactIds([]);
     setContactTitles({});
@@ -73,7 +69,6 @@ export default function CompaniesPage() {
     setEditing(c);
     setName(c.name);
     setDomain(c.domain ?? '');
-    setAddress(c.address ?? {});
     setPhone(c.phone ?? '');
     setContactIds(c.contacts.map((p) => p.id));
     setContactTitles(Object.fromEntries(c.contacts.map((p) => [p.id, p.title ?? ''])));
@@ -135,7 +130,6 @@ export default function CompaniesPage() {
     const body = {
       name: name.trim(),
       domain: domain || undefined,
-      address: Object.values(address).some(Boolean) ? address : undefined,
       phone: phone || undefined,
       contactIds,
       contactTitles,
@@ -199,7 +193,6 @@ export default function CompaniesPage() {
             onChange={(e) => setDomain(e.currentTarget.value)}
           />
           <TextInput label="Phone" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} />
-          <AddressFields label="Address" value={address} onChange={setAddress} withName={false} />
           <CreatableMultiSelect
             label="Contact people"
             placeholder="Search or create people"
@@ -228,7 +221,7 @@ export default function CompaniesPage() {
                         size="xs"
                         placeholder="e.g. Procurement Manager"
                         value={contactTitles[id] ?? ''}
-                        onChange={(e) => setContactTitles((t) => ({ ...t, [id]: e.currentTarget.value }))}
+                        onChange={(e) => { const v = e.currentTarget.value; setContactTitles((t) => ({ ...t, [id]: v })); }}
                         style={{ flex: 1 }}
                       />
                     </Group>

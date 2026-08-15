@@ -15,6 +15,10 @@ export class CreateProposalTemplateDto {
   layout?: unknown[];
 
   @IsOptional()
+  @IsArray()
+  fields?: unknown[];
+
+  @IsOptional()
   @IsString()
   emailTemplateId?: string;
 }
@@ -33,6 +37,10 @@ export class UpdateProposalTemplateDto {
   @IsOptional()
   @IsArray()
   layout?: unknown[];
+
+  @IsOptional()
+  @IsArray()
+  fields?: unknown[];
 
   @IsOptional()
   @IsString()

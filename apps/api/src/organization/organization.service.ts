@@ -16,6 +16,8 @@ const PUBLIC_FIELDS = {
   taxRateBps: true,
   taxDefaultOn: true,
   emailSignature: true,
+  winRequirements: true,
+  dealCardConfig: true,
   onboardingState: true,
   createdAt: true,
 } as const;
@@ -62,6 +64,12 @@ export class OrganizationService {
         taxDefaultOn: dto.taxDefaultOn,
         ...(dto.emailSignature !== undefined
           ? { emailSignature: dto.emailSignature as unknown as Prisma.InputJsonValue }
+          : {}),
+        ...(dto.dealCardConfig !== undefined
+          ? { dealCardConfig: dto.dealCardConfig as unknown as Prisma.InputJsonValue }
+          : {}),
+        ...(dto.winRequirements !== undefined
+          ? { winRequirements: dto.winRequirements as unknown as Prisma.InputJsonValue }
           : {}),
       },
       select: PUBLIC_FIELDS,

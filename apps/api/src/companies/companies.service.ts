@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { summarizeDocuments } from '../common/document-summary';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
 
 const withContacts = {
@@ -12,6 +13,7 @@ type CompanyRow = {
   id: string;
   name: string;
   domain: string | null;
+  email: string | null;
   address: Prisma.JsonValue;
   phone: string | null;
   primaryContactId: string | null;
@@ -25,6 +27,7 @@ function shape(c: CompanyRow) {
     id: c.id,
     name: c.name,
     domain: c.domain,
+    email: c.email,
     address: c.address,
     phone: c.phone,
     primaryContactId: c.primaryContactId,
@@ -69,6 +72,7 @@ export class CompaniesService {
         orgId,
         name: dto.name,
         domain: dto.domain ?? null,
+        email: dto.email ?? null,
         address: (dto.address ?? undefined) as Prisma.InputJsonValue | undefined,
         phone: dto.phone ?? null,
         primaryContactId,
@@ -89,6 +93,13 @@ export class CompaniesService {
       include: withContacts,
     });
     if (!row) throw new NotFoundException('Company not found');
+    // Invariant: a company with contacts always has a primary. Self-heal legacy/edge rows
+    // (e.g. a contact linked from the person side without setting a primary).
+    if (!row.primaryContactId && row.contacts.length) {
+      const first = row.contacts[0].person.id;
+      await this.prisma.company.update({ where: { id }, data: { primaryContactId: first } });
+      row.primaryContactId = first;
+    }
     return shape(row);
   }
 
@@ -106,6 +117,7 @@ export class CompaniesService {
           value: true,
           currency: true,
           status: true,
+          qbSubcustomerId: true,
           stage: { select: { name: true } },
         },
       }),
@@ -136,6 +148,7 @@ export class CompaniesService {
     return {
       ...company,
       qbCustomerId: qbLink?.qbCustomerId ?? null,
+      documentsSummary: summarizeDocuments(documents, deals),
       deals: deals.map((d) => ({
         id: d.id,
         refNumber: d.refNumber,
@@ -197,24 +210,33 @@ export class CompaniesService {
   }
 
   async update(orgId: string, id: string, dto: UpdateCompanyDto) {
-    await this.get(orgId, id);
+    const existing = await this.get(orgId, id);
+
+    // The final contact set after this update (for the always-a-primary rule below).
+    const finalContactIds =
+      dto.contactIds !== undefined ? await this.validPersonIds(orgId, dto.contactIds) : existing.contacts.map((c) => c.id);
+    // Every company with contacts keeps a valid primary: the requested one if still a contact,
+    // else the current one if still valid, else the first contact (never null while contacts exist).
+    const requested = dto.primaryContactId !== undefined ? dto.primaryContactId || null : existing.primaryContactId;
+    const primaryContactId = requested && finalContactIds.includes(requested) ? requested : (finalContactIds[0] ?? null);
 
     const data: Prisma.CompanyUncheckedUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.domain !== undefined) data.domain = dto.domain;
+    if (dto.email !== undefined) data.email = dto.email;
     if (dto.address !== undefined) data.address = dto.address as Prisma.InputJsonValue;
     if (dto.phone !== undefined) data.phone = dto.phone;
     if (dto.tags !== undefined) data.tags = cleanTags(dto.tags);
     if (dto.customFields !== undefined) data.customFields = dto.customFields as Prisma.InputJsonValue;
-    if (dto.primaryContactId !== undefined) data.primaryContactId = dto.primaryContactId || null;
+    data.primaryContactId = primaryContactId;
     await this.prisma.company.update({ where: { id }, data });
 
     if (dto.contactIds !== undefined) {
-      const personIds = await this.validPersonIds(orgId, dto.contactIds);
       await this.prisma.companyContact.deleteMany({ where: { companyId: id } });
-      if (personIds.length) {
+      if (finalContactIds.length) {
         await this.prisma.companyContact.createMany({
-          data: personIds.map((personId) => ({ companyId: id, personId, title: dto.contactTitles?.[personId]?.trim() ?? '' })),
+          data: finalContactIds.map((personId) => ({ companyId: id, personId, title: dto.contactTitles?.[personId]?.trim() ?? '' })),
+          skipDuplicates: true,
         });
       }
     } else if (dto.contactTitles !== undefined) {

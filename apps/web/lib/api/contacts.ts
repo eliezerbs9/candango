@@ -27,6 +27,7 @@ export interface ApiCompany {
   id: string;
   name: string;
   domain: string | null;
+  email: string | null;
   address: Address | null;
   phone: string | null;
   primaryContactId: string | null;
@@ -70,11 +71,24 @@ export interface ContactDocument {
   dealTitle: string | null;
 }
 
+/** Aggregate estimate/invoice stats shown in the QuickBooks header (synced data, not a live QBO read). */
+export interface DocumentSummary {
+  subAccounts: number;
+  estimates: number;
+  estimatesAccepted: number;
+  invoices: number;
+  invoicesPaid: number;
+  invoicesUnpaid: number;
+  invoicesTotal: number; // minor units (cents)
+  currency: string;
+}
+
 export interface ApiPersonDetail extends ApiPerson {
   /** QuickBooks customer id (when linked). */
   qbCustomerId: string | null;
   deals: ContactDeal[];
   documents: ContactDocument[];
+  documentsSummary: DocumentSummary;
   messages: ContactMessage[];
 }
 
@@ -82,6 +96,7 @@ export interface ApiCompanyDetail extends ApiCompany {
   qbCustomerId: string | null;
   deals: ContactDeal[];
   documents: ContactDocument[];
+  documentsSummary: DocumentSummary;
   messages: ContactMessage[];
 }
 
@@ -101,6 +116,7 @@ export interface PersonBody {
 export interface CompanyBody {
   name: string;
   domain?: string;
+  email?: string;
   address?: Address;
   phone?: string;
   contactIds?: string[];

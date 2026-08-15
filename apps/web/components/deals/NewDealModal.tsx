@@ -1,20 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Button, Modal, NumberInput, Select, Stack, TextInput } from '@mantine/core';
+import { Button, Divider, Modal, NumberInput, Select, Stack, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { ApiError } from '@/lib/api/client';
-import { CreatableSelect } from '@/components/common/CreatableSelect';
-import { usePersonCreate } from '@/components/contacts/PersonCreateModal';
-import {
-  useCompanies,
-  useCreateCompany,
-  useCreateDeal,
-  useCreatePerson,
-  usePersons,
-  usePipelines,
-  useStages,
-} from '@/lib/api/hooks';
+import { ClientPicker, type ClientValue } from '@/components/deals/ClientPicker';
+import { useCreateDeal, usePipelines, useStages } from '@/lib/api/hooks';
 
 export function NewDealModal({
   opened,
@@ -26,33 +17,16 @@ export function NewDealModal({
   defaultPipelineId?: string;
 }) {
   const { data: pipelines = [] } = usePipelines();
-  const { data: companies = [] } = useCompanies();
-  const { data: persons = [] } = usePersons();
   const create = useCreateDeal();
-  const createCompany = useCreateCompany();
-  const createPerson = useCreatePerson();
 
   const [pipelineId, setPipelineId] = useState<string | null>(null);
   const [stageId, setStageId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [value, setValue] = useState<number | string>('');
-  const [companyId, setCompanyId] = useState<string | null>(null);
-  const [primaryPersonId, setPrimaryPersonId] = useState<string | null>(null);
+  const [client, setClient] = useState<ClientValue>({ companyId: null, primaryPersonId: null });
+  const [participantIds, setParticipantIds] = useState<string[]>([]);
 
   const { data: stages = [] } = useStages(pipelineId ?? '');
-
-  // Type-and-create a contact → captures First + Last (prefilled from the typed text).
-  const personCreate = usePersonCreate({
-    linkLabel: companyId ? companies.find((c) => c.id === companyId)?.name : undefined,
-    create: async ({ firstName, lastName, link }) => {
-      const p = await createPerson.mutateAsync({
-        firstName,
-        lastName,
-        companyIds: link && companyId ? [companyId] : undefined,
-      });
-      return { value: p.id, label: p.name };
-    },
-  });
 
   useEffect(() => {
     if (opened) {
@@ -60,8 +34,8 @@ export function NewDealModal({
       setPipelineId(def);
       setTitle('');
       setValue('');
-      setCompanyId(null);
-      setPrimaryPersonId(null);
+      setClient({ companyId: null, primaryPersonId: null });
+      setParticipantIds([]);
     }
   }, [opened, defaultPipelineId, pipelines]);
 
@@ -74,6 +48,11 @@ export function NewDealModal({
       notifications.show({ message: 'Title, pipeline and stage are required', color: 'red' });
       return;
     }
+    // A deal must have a client contact — the person we bill/deal with (required per product decision).
+    if (!client.primaryPersonId) {
+      notifications.show({ message: 'Pick or create a primary contact for the deal', color: 'red' });
+      return;
+    }
     const cents = Math.round(Number(value || 0) * 100);
     create.mutate(
       {
@@ -81,8 +60,9 @@ export function NewDealModal({
         value: cents,
         pipelineId,
         stageId,
-        companyId: companyId ?? undefined,
-        primaryPersonId: primaryPersonId ?? undefined,
+        companyId: client.companyId ?? undefined,
+        primaryPersonId: client.primaryPersonId ?? undefined,
+        participantIds: participantIds.length ? participantIds : undefined,
       },
       {
         onSuccess: () => {
@@ -106,26 +86,14 @@ export function NewDealModal({
           required
         />
         <NumberInput label="Value (USD)" min={0} prefix="$" thousandSeparator="," value={value} onChange={setValue} />
-        <CreatableSelect
-          label="Company"
-          placeholder="Search or create a company"
-          options={companies.map((c) => ({ value: c.id, label: c.name }))}
-          value={companyId}
-          onChange={setCompanyId}
-          onCreate={async (name) => {
-            // Link the deal's contact as the new company's primary contact, so it never lands without one.
-            const c = await createCompany.mutateAsync(primaryPersonId ? { name, contactIds: [primaryPersonId], primaryContactId: primaryPersonId } : { name });
-            return { value: c.id, label: c.name };
-          }}
+        <Divider label="Client" labelPosition="left" />
+        <ClientPicker
+          value={client}
+          onChange={setClient}
+          participantIds={participantIds}
+          onParticipantsChange={setParticipantIds}
         />
-        <CreatableSelect
-          label="Primary contact"
-          placeholder="Search or create a contact"
-          options={persons.map((p) => ({ value: p.id, label: p.name }))}
-          value={primaryPersonId}
-          onChange={setPrimaryPersonId}
-          onCreate={personCreate.prompt}
-        />
+        <Divider label="Pipeline" labelPosition="left" />
         <Select
           label="Pipeline"
           data={pipelines.map((p) => ({ value: p.id, label: p.name }))}
@@ -144,7 +112,6 @@ export function NewDealModal({
           Create deal
         </Button>
       </Stack>
-      {personCreate.modal}
     </Modal>
   );
 }

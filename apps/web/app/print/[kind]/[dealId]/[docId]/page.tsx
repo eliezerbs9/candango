@@ -108,12 +108,17 @@ function DocPrint({ kind, dealId, docId }: { kind: 'estimate' | 'invoice'; dealI
   if (!deal || !doc) return <div style={{ padding: 40, fontFamily: 'Inter, sans-serif' }}>Loading…</div>;
 
   const title = kind === 'invoice' ? 'INVOICE' : 'ESTIMATE';
+  // Cancelled docs get a diagonal watermark, mirroring the native QuickBooks PDF.
+  const watermark = doc.status === 'void' ? 'VOID' : doc.status === 'rejected' ? 'REJECTED' : null;
 
   return (
     <div className="sheet">
       <style>{`
         body { background: #fff; }
-        .sheet { max-width: 720px; margin: 0 auto; padding: 48px; color: #111; font-family: Inter, Arial, sans-serif; font-size: 13px; }
+        .sheet { position: relative; max-width: 720px; margin: 0 auto; padding: 48px; color: #111; font-family: Inter, Arial, sans-serif; font-size: 13px; }
+        .watermark { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 10; }
+        .watermark span { transform: rotate(-30deg); font-size: 120px; font-weight: 800; letter-spacing: 8px; color: rgba(200, 30, 30, 0.14); border: 8px solid rgba(200, 30, 30, 0.14); border-radius: 12px; padding: 8px 40px; white-space: nowrap; }
+        @media print { .watermark span { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
         .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
         h1 { font-size: 26px; margin: 0; letter-spacing: 1px; }
         .muted { color: #666; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; }
@@ -133,6 +138,12 @@ function DocPrint({ kind, dealId, docId }: { kind: 'estimate' | 'invoice'; dealI
         .totals .grand { border-top: 2px solid #111; margin-top: 6px; padding-top: 8px; color: #111; font-size: 16px; font-weight: 700; }
         @media print { .toolbar { display: none; } .sheet { padding: 0; } }
       `}</style>
+
+      {watermark && (
+        <div className="watermark">
+          <span>{watermark}</span>
+        </div>
+      )}
 
       <div className="toolbar">
         <button onClick={() => window.print()}>Print</button>

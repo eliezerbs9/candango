@@ -9,7 +9,6 @@ import {
   Group,
   Modal,
   NumberInput,
-  SegmentedControl,
   Select,
   Stack,
   Table,
@@ -69,14 +68,11 @@ export function DocEditorModal({
   const [txnDate, setTxnDate] = useState('');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<LineRow[]>([blankLine()]);
-  // How a NEW estimate affects the deal value (FR-13.11). Edit mode ignores it.
-  const [valueChoice, setValueChoice] = useState<'set' | 'add' | 'none'>('set');
   const [taxOn, setTaxOn] = useState(false);
 
   // (Re)initialise whenever the modal opens.
   useEffect(() => {
     if (!opened) return;
-    setValueChoice('set');
     setTaxOn(initial ? !!initial.taxRateBps : !!taxDefaultOn);
     if (initial) {
       setTxnDate(initial.txnDate?.slice(0, 10) ?? '');
@@ -136,21 +132,12 @@ export function DocEditorModal({
       notifications.show({ message: 'Add at least one line item with a description', color: 'red' });
       return;
     }
-    // New estimate: how it counts toward the deal value (not on edit).
-    const valueFlags = initial
-      ? {}
-      : valueChoice === 'set'
-        ? { setAsValue: true }
-        : valueChoice === 'add'
-          ? { includeInValue: true }
-          : {};
     try {
       await onSubmit({
         txnDate: txnDate || undefined,
         notes: notes || undefined,
         lines: clean,
         ...(canTax ? { taxRateBps } : {}),
-        ...valueFlags,
       });
       onClose();
     } catch (e) {
@@ -275,27 +262,9 @@ export function DocEditorModal({
         <Textarea label="Memo" autosize minRows={2} value={notes} onChange={(e) => setNotes(e.currentTarget.value)} />
 
         {!initial && (
-          <Stack gap={4}>
-            <Text size="sm" fw={500}>
-              Deal value
-            </Text>
-            <SegmentedControl
-              value={valueChoice}
-              onChange={(v) => setValueChoice(v as 'set' | 'add' | 'none')}
-              data={[
-                { value: 'set', label: 'Set as deal value' },
-                { value: 'add', label: 'Add to deal value' },
-                { value: 'none', label: "Don't count" },
-              ]}
-            />
-            <Text size="xs" c="dimmed">
-              {valueChoice === 'set'
-                ? "This estimate becomes the deal's value (unmarks the others)."
-                : valueChoice === 'add'
-                  ? 'Added to the deal value (summed with the other estimates counted).'
-                  : "Won't affect the deal value."}
-            </Text>
-          </Stack>
+          <Text size="xs" c="dimmed">
+            The deal value updates automatically from its estimates &amp; invoices.
+          </Text>
         )}
 
         <Group justify="flex-end" mt="xs">

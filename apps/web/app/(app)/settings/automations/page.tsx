@@ -16,6 +16,7 @@ import {
   Menu,
   Modal,
   NumberInput,
+  SegmentedControl,
   Select,
   SimpleGrid,
   Stack,
@@ -45,6 +46,7 @@ import {
   useEmailTemplates,
   useGoogleStatus,
   useOrganization,
+  useProposalTemplates,
   useSignableDocuments,
   useTemplateVariables,
   useUpdateEmailAutomation,
@@ -141,6 +143,13 @@ export default function AutomationsSettingsPage() {
       );
     }
     if (a.action === 'request_signature') {
+      if (String(c.source ?? 'template') === 'proposal_field') {
+        return (
+          <>
+            request a signature on <b>the document from the proposal&apos;s field</b> from the primary contact
+          </>
+        );
+      }
       const docName = signableDocs.find((d) => d.id === c.signableDocumentTemplateId)?.name;
       return (
         <>
@@ -450,6 +459,21 @@ function AutomationModal({
   const [tags, setTags] = useState<string[]>([]);
   const [action, setAction] = useState<'send_email' | 'create_activity' | 'request_signature' | 'move_stage' | 'add_tag'>('send_email');
   const { data: signableDocs = [] } = useSignableDocuments();
+  const { data: proposalTemplates = [] } = useProposalTemplates();
+  // Union of `signature_template` internal fields across proposal templates (for the "from a proposal field" source).
+  const proposalSigFields = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { value: string; label: string }[] = [];
+    for (const t of proposalTemplates) {
+      for (const f of t.fields ?? []) {
+        if (f.type === 'signature_template' && !seen.has(f.key)) {
+          seen.add(f.key);
+          out.push({ value: f.key, label: `${f.label} · ${t.name}` });
+        }
+      }
+    }
+    return out;
+  }, [proposalTemplates]);
   // The Deal/Marketing "type" applies only to a Send-email action (an activity is always deal-side).
   const [kind, setKind] = useState<AutomationKind>('deal');
   const [trigger, setTrigger] = useState<string | null>(null);
@@ -519,8 +543,11 @@ function AutomationModal({
       notifications.show({ message: 'Give the task a subject', color: 'red' });
       return;
     }
-    if (action === 'request_signature' && !config.signableDocumentTemplateId) {
-      notifications.show({ message: 'Pick a document template to send for signature', color: 'red' });
+    if (
+      action === 'request_signature' &&
+      (String(config.source ?? 'template') === 'proposal_field' ? !config.proposalFieldKey : !config.signableDocumentTemplateId)
+    ) {
+      notifications.show({ message: 'Pick the document to send for signature', color: 'red' });
       return;
     }
     if (action === 'move_stage' && !config.stageId) {
@@ -716,20 +743,38 @@ function AutomationModal({
               />
             ) : action === 'request_signature' ? (
               <>
-                <Select
-                  label="Generate & send this document"
-                  required
-                  description="Sent to the deal's primary contact for signature"
-                  placeholder={signableDocs.length === 0 ? 'Create a document template in Settings → Signatures' : 'Pick a document template'}
-                  data={signableDocs.map((d) => ({ value: d.id, label: d.name }))}
-                  value={(config.signableDocumentTemplateId as string) ?? null}
-                  onChange={(v) => setCfg('signableDocumentTemplateId', v ?? undefined)}
+                <SegmentedControl
+                  fullWidth
+                  size="xs"
+                  value={(config.source as string) ?? 'template'}
+                  onChange={(v) => setCfg('source', v)}
+                  data={[
+                    { value: 'template', label: 'A fixed document template' },
+                    { value: 'proposal_field', label: 'The document from a proposal field' },
+                  ]}
                 />
-                <Switch
-                  label="Email the signer now"
-                  checked={config.sendEmail !== false}
-                  onChange={(e) => setCfg('sendEmail', e.currentTarget.checked)}
-                />
+                {String(config.source ?? 'template') === 'proposal_field' ? (
+                  <Select
+                    label="Use the document attached to this proposal field"
+                    required
+                    description="The signature document the rep attached to the proposal's internal field. Use with a proposal trigger (accepted / declined / deferred)."
+                    placeholder={proposalSigFields.length === 0 ? 'Add a “Signature document” field on a proposal template' : 'Pick a proposal field'}
+                    data={proposalSigFields}
+                    value={(config.proposalFieldKey as string) ?? null}
+                    onChange={(v) => setCfg('proposalFieldKey', v ?? undefined)}
+                  />
+                ) : (
+                  <Select
+                    label="Generate & send this document"
+                    required
+                    description="Sent to the deal's primary contact for signature"
+                    placeholder={signableDocs.length === 0 ? 'Create a document template in Settings → Signatures' : 'Pick a document template'}
+                    data={signableDocs.map((d) => ({ value: d.id, label: d.name }))}
+                    value={(config.signableDocumentTemplateId as string) ?? null}
+                    onChange={(v) => setCfg('signableDocumentTemplateId', v ?? undefined)}
+                  />
+                )}
+                {/* This automation always emails the signer immediately — no opt-out toggle. */}
               </>
             ) : action === 'move_stage' ? (
               <Select

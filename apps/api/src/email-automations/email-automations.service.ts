@@ -78,10 +78,18 @@ export class EmailAutomationsService {
       }
     }
     if (action === 'request_signature') {
-      const docId = (config as Record<string, unknown> | undefined)?.signableDocumentTemplateId;
-      if (typeof docId !== 'string' || !docId) throw new BadRequestException('Pick a document template for the signature action');
-      const doc = await this.prisma.signableDocumentTemplate.findFirst({ where: { id: docId, orgId, archivedAt: null } });
-      if (!doc) throw new BadRequestException('Document template not found');
+      const cfg = (config as Record<string, unknown> | undefined) ?? {};
+      if (String(cfg.source ?? 'template') === 'proposal_field') {
+        // The document comes from a proposal's internal `signature_template` field (resolved at run time).
+        if (typeof cfg.proposalFieldKey !== 'string' || !cfg.proposalFieldKey) {
+          throw new BadRequestException('Pick the proposal field that holds the document to sign');
+        }
+      } else {
+        const docId = cfg.signableDocumentTemplateId;
+        if (typeof docId !== 'string' || !docId) throw new BadRequestException('Pick a document template for the signature action');
+        const doc = await this.prisma.signableDocumentTemplate.findFirst({ where: { id: docId, orgId, archivedAt: null } });
+        if (!doc) throw new BadRequestException('Document template not found');
+      }
     }
     if (action === 'move_stage') {
       const stageId = (config as Record<string, unknown> | undefined)?.stageId;

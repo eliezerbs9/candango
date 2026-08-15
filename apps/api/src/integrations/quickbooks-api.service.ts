@@ -57,8 +57,12 @@ export interface NormalizedLine {
 export interface NormalizedDoc {
   qbId: string;
   docNumber: string | null;
-  status: string | null;
+  status: string | null; // QBO TxnStatus (estimates only; invoices have none)
   totalAmount: number; // minor units (QBO TotalAmt — source of truth incl. tax)
+  balance: number; // minor units (QBO Balance — invoices; 0 when fully paid)
+  qbCustomerId: string | null; // CustomerRef.value — used to match a doc back to a deal
+  txnDate: string | null; // QBO TxnDate (YYYY-MM-DD)
+  linkedTxns: { txnId: string; txnType: string }[]; // e.g. the estimate(s) an invoice was created from
   syncToken: string;
   lines: NormalizedLine[];
 }
@@ -370,6 +374,10 @@ export class QuickbooksApiService {
       docNumber: doc.DocNumber ?? null,
       status: doc.TxnStatus ?? null,
       totalAmount: fromQbAmount(doc.TotalAmt),
+      balance: fromQbAmount(doc.Balance),
+      qbCustomerId: doc.CustomerRef?.value ?? null,
+      txnDate: doc.TxnDate ?? null,
+      linkedTxns: (doc.LinkedTxn ?? []).map((t: any) => ({ txnId: t.TxnId, txnType: t.TxnType })),
       syncToken: doc.SyncToken,
       lines,
     };
@@ -451,6 +459,19 @@ export class QuickbooksApiService {
     return this.deleteDoc(orgId, 'estimate', qbId);
   }
 
+  /**
+   * Void an invoice in QuickBooks (re-reads SyncToken; no-op if it's already gone).
+   * QBO's `?operation=void` zeroes the invoice's lines and stamps it "Voided" (keeps the
+   * record + doc number for the audit trail), unlike delete which removes it entirely.
+   * Returns the new SyncToken so the caller can persist it.
+   */
+  async voidInvoice(orgId: string, qbId: string): Promise<string | null> {
+    const syncToken = await this.currentSyncToken(orgId, 'Invoice', qbId);
+    if (syncToken == null) return null; // already gone in QBO
+    const r = await this.request(orgId, 'POST', 'invoice?operation=void', { Id: qbId, SyncToken: syncToken });
+    return r?.Invoice?.SyncToken ?? null;
+  }
+
   private async listDocs(orgId: string, resource: 'Estimate' | 'Invoice', customerId: string): Promise<NormalizedDoc[]> {
     const r = await this.query(orgId, `select * from ${resource} where CustomerRef = '${customerId}'`);
     return (r?.QueryResponse?.[resource] ?? []).map((d: any) => this.normalizeDoc(d));
@@ -460,6 +481,28 @@ export class QuickbooksApiService {
   }
   listInvoices(orgId: string, customerId: string) {
     return this.listDocs(orgId, 'Invoice', customerId);
+  }
+
+  /** Fetch a single estimate/invoice by its QBO id (used to re-sync one changed doc from a webhook). */
+  private async getDoc(orgId: string, resource: 'Estimate' | 'Invoice', qbId: string): Promise<NormalizedDoc | null> {
+    const r = await this.query(orgId, `select * from ${resource} where Id = '${qbId.replace(/'/g, '')}'`);
+    const doc = r?.QueryResponse?.[resource]?.[0];
+    return doc ? this.normalizeDoc(doc) : null;
+  }
+  getEstimate(orgId: string, qbId: string) {
+    return this.getDoc(orgId, 'Estimate', qbId);
+  }
+  getInvoice(orgId: string, qbId: string) {
+    return this.getDoc(orgId, 'Invoice', qbId);
+  }
+
+  /** Reverse-lookup the tenant that owns a QBO company (realmId) — webhooks are keyed by realmId. */
+  async orgIdForRealm(realmId: string): Promise<string | null> {
+    const conn = await this.prisma.quickBooksConnection.findFirst({
+      where: { realmId, status: 'connected' },
+      select: { orgId: true },
+    });
+    return conn?.orgId ?? null;
   }
 
   /** Fetch the official QuickBooks PDF for an estimate/invoice. */

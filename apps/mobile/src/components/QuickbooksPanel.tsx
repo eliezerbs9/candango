@@ -17,7 +17,6 @@ import {
   useDealEstimates,
   useDealInvoices,
   useDeleteEstimate,
-  useIncludeEstimatesInValue,
   useQuickbooksStatus,
   useSetEstimateStatus,
   useSetInvoiceStatus,
@@ -28,7 +27,9 @@ import { formatMoney } from '@/lib/format';
 import { colors, fonts, fontSize, radius, shadow, space } from '@/theme';
 
 const ESTIMATE_STATUSES = ['draft', 'sent', 'accepted', 'rejected'];
-const INVOICE_STATUSES = ['draft', 'sent', 'paid', 'void'];
+// 'paid' is not user-selectable — QuickBooks marks an invoice paid when its balance hits zero
+// (the status label still shows 'paid' from the doc's own status when QBO reports it).
+const INVOICE_STATUSES = ['draft', 'sent', 'void'];
 
 export function QuickbooksPanel({
   dealId,
@@ -54,7 +55,6 @@ export function QuickbooksPanel({
   const updateEstimate = useUpdateEstimate(dealId);
   const setEstStatus = useSetEstimateStatus(dealId);
   const setInvStatus = useSetInvoiceStatus(dealId);
-  const includeInValue = useIncludeEstimatesInValue(dealId);
   const deleteEstimate = useDeleteEstimate(dealId);
   const convert = useConvertToInvoice(dealId);
 
@@ -79,6 +79,19 @@ export function QuickbooksPanel({
 
   const estimateDocs = estimates.data ?? [];
   const invoiceDocs = invoices.data ?? [];
+
+  // Which docs count toward the deal value — mirrors the API's status-tier model (DealValueService)
+  // and the web panel: every non-void invoice counts; among estimates only those in the single
+  // highest tier present (accepted > sent > draft; closed/rejected excluded) count.
+  const valueTier = (() => {
+    const live = estimateDocs.filter((e) => e.status !== 'closed' && e.status !== 'rejected');
+    if (live.some((e) => e.status === 'accepted')) return 'accepted';
+    if (live.some((e) => e.status === 'sent')) return 'sent';
+    if (live.some((e) => e.status === 'draft')) return 'draft';
+    return null;
+  })();
+  const estimateInValue = (d: DealDoc) => d.status === valueTier;
+  const invoiceInValue = (d: DealDoc) => d.status !== 'void';
 
   function newEstimate() {
     setEditing(null);
@@ -134,15 +147,9 @@ export function QuickbooksPanel({
             key={doc.id}
             doc={doc}
             currency={currency}
+            inValue={estimateInValue(doc)}
             onEdit={() => editEstimate(doc)}
             onStatus={() => setStatusFor({ doc, kind: 'estimate' })}
-            onToggleValue={
-              // The value must stay backed by ≥1 estimate: only offer "remove from
-              // value" when there's more than one estimate.
-              doc.includeInValue && estimateDocs.length <= 1
-                ? undefined
-                : () => includeInValue.mutate({ estimateIds: [doc.id], include: !doc.includeInValue })
-            }
             onConvert={mode === 'qbo' && doc.status !== 'closed' ? () => doConvert(doc.id) : undefined}
             onDelete={isDeletable(doc) ? () => removeEstimate(doc) : undefined}
             converting={convert.isPending}
@@ -157,7 +164,7 @@ export function QuickbooksPanel({
           <View style={styles.divider} />
           <Text style={styles.sectionTitle}>Invoices</Text>
           {invoiceDocs.map((doc) => (
-            <DocRow key={doc.id} doc={doc} currency={currency} onStatus={() => setStatusFor({ doc, kind: 'invoice' })} />
+            <DocRow key={doc.id} doc={doc} currency={currency} inValue={invoiceInValue(doc)} onStatus={() => setStatusFor({ doc, kind: 'invoice' })} />
           ))}
         </>
       ) : null}
@@ -204,18 +211,18 @@ export function QuickbooksPanel({
 function DocRow({
   doc,
   currency,
+  inValue,
   onEdit,
   onStatus,
-  onToggleValue,
   onConvert,
   onDelete,
   converting,
 }: {
   doc: DealDoc;
   currency: string;
+  inValue?: boolean;
   onEdit?: () => void;
   onStatus?: () => void;
-  onToggleValue?: () => void;
   onConvert?: () => void;
   onDelete?: () => void;
   converting?: boolean;
@@ -225,7 +232,7 @@ function DocRow({
       <Pressable style={styles.rowMain} onPress={onEdit} disabled={!onEdit}>
         <View style={{ flex: 1 }}>
           <Text style={styles.docTitle}>{doc.docNumber ? `#${doc.docNumber}` : 'Estimate'}</Text>
-          {doc.includeInValue ? <Text style={styles.inValue}>In deal value</Text> : null}
+          {inValue ? <Text style={styles.inValue}>In deal value</Text> : null}
         </View>
         <Text style={styles.docTotal}>{formatMoney(doc.totalAmount, currency)}</Text>
       </Pressable>
@@ -236,12 +243,6 @@ function DocRow({
           <Text style={styles.statusText}>{doc.status}</Text>
           {onStatus ? <Icon name="chevronDown" size={12} color={colors.primary} /> : null}
         </Pressable>
-        {onToggleValue ? (
-          <Pressable style={styles.miniBtn} onPress={onToggleValue}>
-            <Icon name={doc.includeInValue ? 'remove' : 'add'} size={13} color={colors.textMuted} />
-            <Text style={styles.miniBtnText}>Value</Text>
-          </Pressable>
-        ) : null}
         {onConvert ? (
           <Pressable style={styles.miniBtn} onPress={onConvert} disabled={converting}>
             {converting ? (

@@ -32,12 +32,45 @@ export interface ApiDeal {
   lostReason: string | null;
   expectedCloseDate: string | null;
   stageChangedAt: string;
+  tags: string[];
   customFields: Record<string, unknown>;
   shipTo: Address | null;
   billTo: Address | null;
   qbSubcustomerId: string | null;
   refNumber: number | null;
   archivedAt: string | null;
+  createdAt: string;
+  /** Latest activity timestamp (for the pipeline card) — present on the board/list response. */
+  lastActivityAt: string | null;
+}
+
+/** Which elements show on a pipeline deal card (workspace-configurable). */
+export interface DealCardConfig {
+  company?: boolean;
+  primaryContact?: boolean;
+  value?: boolean;
+  owner?: boolean;
+  daysInStage?: boolean;
+  created?: boolean;
+  lastActivity?: boolean;
+  tags?: boolean;
+}
+
+/** Defaults when a workspace hasn't customised the card (matches the pre-config layout). */
+export const DEAL_CARD_DEFAULTS: DealCardConfig = {
+  company: true,
+  primaryContact: true,
+  value: true,
+  owner: false,
+  daysInStage: false,
+  created: false,
+  lastActivity: false,
+  tags: false,
+};
+
+/** Merge a stored (possibly empty) config over the defaults. */
+export function resolveDealCard(cfg: DealCardConfig | undefined | null): Required<DealCardConfig> {
+  return { ...DEAL_CARD_DEFAULTS, ...(cfg ?? {}) } as Required<DealCardConfig>;
 }
 
 export type DocSource = 'native' | 'quickbooks';

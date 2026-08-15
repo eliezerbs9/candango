@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Anchor, Badge, Button, Card, Checkbox, Group, Paper, ScrollArea, Stack, Text, Textarea, ThemeIcon, Timeline } from '@mantine/core';
+import { Anchor, Badge, Button, Card, Checkbox, Group, Paper, Stack, Text, Textarea, ThemeIcon, Timeline } from '@mantine/core';
+import { HintedScrollArea } from '@/components/common/HintedScrollArea';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import {
@@ -13,12 +14,16 @@ import {
   IconPhone,
   IconChecklist,
   IconPlus,
+  IconBolt,
+  IconFileText,
+  IconSignature,
 } from '@tabler/icons-react';
 import { ActivityForm } from '@/components/activities/ActivityForm';
 import { ApiError } from '@/lib/api/client';
 import {
   useActivities,
   useCreateNote,
+  useDealEvents,
   useDealMessages,
   useNotes,
   useStageHistory,
@@ -27,21 +32,23 @@ import {
 import type { ApiActivity } from '@/lib/api/activities';
 import type { ApiNote } from '@/lib/api/notes';
 import type { ApiMessage } from '@/lib/api/messages';
-import type { StageEvent } from '@/lib/api/deals';
+import type { DealEvent, StageEvent } from '@/lib/api/deals';
 
 type Item =
   | { kind: 'note'; date: Date; data: ApiNote }
   | { kind: 'activity'; date: Date; data: ApiActivity }
   | { kind: 'message'; date: Date; data: ApiMessage }
-  | { kind: 'stage'; date: Date; data: StageEvent };
+  | { kind: 'stage'; date: Date; data: StageEvent }
+  | { kind: 'event'; date: Date; data: DealEvent };
 
 const fmt = (d: Date) => d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
-export function DealTimeline({ dealId }: { dealId: string }) {
+export function DealTimeline({ dealId, fill }: { dealId: string; fill?: boolean }) {
   const { data: activities = [] } = useActivities({ dealId });
   const { data: notes = [] } = useNotes(dealId);
   const { data: messages = [] } = useDealMessages(dealId);
   const { data: stages = [] } = useStageHistory(dealId);
+  const { data: events = [] } = useDealEvents(dealId);
   const createNote = useCreateNote();
   const updateActivity = useUpdateActivity();
   const toggleActivity = (a: ApiActivity) => updateActivity.mutate({ id: a.id, done: !a.done });
@@ -66,8 +73,9 @@ export function DealTimeline({ dealId }: { dealId: string }) {
     );
     messages.forEach((m) => out.push({ kind: 'message', date: new Date(m.sentAt ?? m.createdAt), data: m }));
     stages.forEach((s) => out.push({ kind: 'stage', date: new Date(s.createdAt), data: s }));
+    events.forEach((e) => out.push({ kind: 'event', date: new Date(e.createdAt), data: e }));
     return out.sort((a, b) => b.date.getTime() - a.date.getTime());
-  }, [activities, notes, messages, stages]);
+  }, [activities, notes, messages, stages, events]);
 
   const addNote = () => {
     if (!noteBody.trim()) return;
@@ -84,9 +92,27 @@ export function DealTimeline({ dealId }: { dealId: string }) {
     );
   };
 
+  const timeline = (
+    <Timeline active={-1} bulletSize={26} lineWidth={2} pr="xs">
+      {items.map((it) => (
+        <Timeline.Item key={`${it.kind}-${itemKey(it)}`} bullet={bullet(it)} title={titleOf(it, toggleActivity, openEditActivity)}>
+          <Text size="xs" c="dimmed">
+            {fmt(it.date)}
+          </Text>
+          {bodyOf(it)}
+        </Timeline.Item>
+      ))}
+    </Timeline>
+  );
+
   return (
-    <Card withBorder radius="md" padding="md">
-      <Stack gap="md">
+    <Card
+      withBorder
+      radius="md"
+      padding="md"
+      style={fill ? { height: '100%', display: 'flex', flexDirection: 'column' } : undefined}
+    >
+      <Stack gap="md" style={fill ? { flex: 1, minHeight: 0 } : undefined}>
       <Text fw={600}>Activity</Text>
       {/* Composer */}
       <Paper withBorder radius="md" p="sm">
@@ -116,20 +142,12 @@ export function DealTimeline({ dealId }: { dealId: string }) {
         <Text c="dimmed" size="sm">
           No history yet. Add a note or log an activity.
         </Text>
+      ) : fill ? (
+        // Desktop: fill the leftover column height (matched to the Details column) and scroll inside.
+        <HintedScrollArea fill>{timeline}</HintedScrollArea>
       ) : (
-        // Cap the height so a long history scrolls inside the card instead of stretching the page.
-        <ScrollArea.Autosize mah="clamp(240px, calc(100vh - 430px), 640px)" type="hover" offsetScrollbars>
-          <Timeline active={-1} bulletSize={26} lineWidth={2} pr="xs">
-            {items.map((it) => (
-              <Timeline.Item key={`${it.kind}-${itemKey(it)}`} bullet={bullet(it)} title={titleOf(it, toggleActivity, openEditActivity)}>
-                <Text size="xs" c="dimmed">
-                  {fmt(it.date)}
-                </Text>
-                {bodyOf(it)}
-              </Timeline.Item>
-            ))}
-          </Timeline>
-        </ScrollArea.Autosize>
+        // Mobile: cap the height so a long history scrolls inside the card instead of stretching the page.
+        <HintedScrollArea mah="clamp(360px, calc(100vh - 280px), 900px)">{timeline}</HintedScrollArea>
       )}
 
       <ActivityForm opened={actOpen} onClose={actCtl.close} defaultDealId={dealId} activity={editing} />
@@ -143,6 +161,16 @@ function itemKey(it: Item): string {
 }
 
 function bullet(it: Item) {
+  if (it.kind === 'event') {
+    const icon =
+      it.data.kind === 'proposal' ? <IconFileText size={14} /> : it.data.kind === 'signature' ? <IconSignature size={14} /> : it.data.kind === 'email' ? <IconMail size={14} /> : <IconBolt size={14} />;
+    const c = it.data.kind === 'proposal' ? 'grape' : it.data.kind === 'signature' ? 'orange' : 'candango';
+    return (
+      <ThemeIcon size={26} radius="xl" variant="light" color={c}>
+        {icon}
+      </ThemeIcon>
+    );
+  }
   const map = {
     note: <IconNote size={14} />,
     message: <IconMail size={14} />,
@@ -209,6 +237,13 @@ function titleOf(
           </Badge>
         </Group>
       );
+    case 'event':
+      return (
+        <Text fw={500} size="sm">
+          {it.data.title}
+          {it.data.actor ? <Text span c="dimmed" fw={400}> · {it.data.actor}</Text> : null}
+        </Text>
+      );
   }
 }
 
@@ -241,5 +276,9 @@ function bodyOf(it: Item): React.ReactNode {
         </Stack>
       );
     }
+    case 'event':
+      return it.data.body ? (
+        <Text size="sm" mt={2} c="dimmed">{it.data.body}</Text>
+      ) : null;
   }
 }

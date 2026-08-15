@@ -76,8 +76,20 @@ export function buildDealCtx(data: ProposalRenderCore): ProposalRenderCtx {
       ) : (
         <div style={{ width: '100%', height: '100%', minHeight: 40, background: '#f1f3f5', borderRadius: 8 }} />
       ),
-    pricing: () => {
-      const { rows, total, currency } = data.pricing;
+    pricing: (opts) => {
+      // Element-scoped docs (its own estimates/invoices) sum into one table; else the proposal aggregate.
+      const docs = opts?.docs ?? [];
+      let rows: { description: string; amount: number }[];
+      let total: number;
+      let currency: string;
+      if (docs.length > 0) {
+        const tables = docs.map((d) => data.pricingByDoc?.[d.id]).filter((t): t is NonNullable<typeof t> => !!t);
+        rows = tables.flatMap((t) => t.rows);
+        total = tables.reduce((sum, t) => sum + t.total, 0);
+        currency = tables[0]?.currency ?? data.pricing.currency;
+      } else {
+        ({ rows, total, currency } = data.pricing);
+      }
       if (rows.length === 0 && total === 0) return <div style={{ color: '#868e96', fontSize: 13 }}>No estimate selected.</div>;
       return (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>

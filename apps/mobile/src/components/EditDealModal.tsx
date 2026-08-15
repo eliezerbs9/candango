@@ -44,6 +44,10 @@ export function EditDealModal({ visible, deal, onClose }: { visible: boolean; de
   const [valueText, setValueText] = useState(String(deal.value / 100));
   const [companyId, setCompanyId] = useState<string | null>(deal.companyId);
   const [personId, setPersonId] = useState<string | null>(deal.primaryPersonId);
+  // A deal already linked for billing: changing the company/contact is allowed but won't move the
+  // existing billing account, so we just warn (no hard lock).
+  const linked = !!deal.qbSubcustomerId;
+  const clientChanged = linked && (companyId !== deal.companyId || personId !== deal.primaryPersonId);
   const [closeDate, setCloseDate] = useState<Date | null>(deal.expectedCloseDate ? new Date(deal.expectedCloseDate) : null);
   const [showDate, setShowDate] = useState(false);
   const [shipTo, setShipTo] = useState<Address>(deal.shipTo ?? {});
@@ -160,6 +164,11 @@ export function EditDealModal({ visible, deal, onClose }: { visible: boolean; de
 
             <Field label="Company" value={companyLabel} onPress={() => setPicker('company')} />
             <Field label="Primary contact" value={personLabel} onPress={() => setPicker('person')} />
+            {clientChanged ? (
+              <Text style={styles.fieldHint}>
+                This deal already has a billing account. Changing the company or contact here won’t update that account — review it under Estimates &amp; invoices.
+              </Text>
+            ) : null}
 
             {(customFields.data ?? []).map((def) => (
               <CustomField key={def.id} def={def} value={cf[def.key] ?? ''} onChange={(v) => setCf((p) => ({ ...p, [def.key]: v }))} />
@@ -227,16 +236,17 @@ function CustomField({ def, value, onChange }: { def: CustomFieldDef; value: str
   );
 }
 
-function Field({ label, value, onPress }: { label: string; value: string; onPress: () => void }) {
+function Field({ label, value, onPress, disabled, hint }: { label: string; value: string; onPress: () => void; disabled?: boolean; hint?: string }) {
   return (
     <>
       <Text style={styles.label}>{label}</Text>
-      <Pressable style={styles.field} onPress={onPress}>
-        <Text style={styles.fieldValue} numberOfLines={1}>
+      <Pressable style={[styles.field, disabled && styles.fieldDisabled]} onPress={onPress} disabled={disabled}>
+        <Text style={[styles.fieldValue, disabled && styles.fieldValueDisabled]} numberOfLines={1}>
           {value}
         </Text>
-        <Text style={styles.chevron}>›</Text>
+        {!disabled ? <Text style={styles.chevron}>›</Text> : null}
       </Pressable>
+      {disabled && hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
     </>
   );
 }
@@ -284,7 +294,10 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     backgroundColor: colors.surface,
   },
+  fieldDisabled: { backgroundColor: '#f4f4f5', opacity: 0.8 },
   fieldValue: { fontFamily: fonts.regular, fontSize: fontSize.lg, color: colors.ink, flexShrink: 1 },
+  fieldValueDisabled: { color: colors.textMuted },
+  fieldHint: { fontFamily: fonts.regular, fontSize: fontSize.xs, color: colors.textSubtle, marginTop: 4 },
   chevron: { fontFamily: fonts.regular, fontSize: 22, color: colors.textSubtle },
   clear: { paddingHorizontal: 12, paddingVertical: 13 },
   clearText: { fontFamily: fonts.medium, color: colors.textMuted },

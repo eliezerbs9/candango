@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   CloseButton,
   Combobox,
@@ -15,6 +15,8 @@ import { IconPlus } from '@tabler/icons-react';
 export interface Option {
   value: string;
   label: string;
+  /** Secondary dimmed text shown under the label (e.g. a person's company), also searchable. */
+  description?: string;
 }
 
 /**
@@ -31,6 +33,9 @@ export function CreatableSelect({
   value,
   onChange,
   onCreate,
+  disabled,
+  description,
+  openOnFocus,
 }: {
   label: string;
   placeholder?: string;
@@ -38,6 +43,10 @@ export function CreatableSelect({
   value: string | null;
   onChange: (value: string | null) => void;
   onCreate: (name: string) => Promise<Option | null>;
+  disabled?: boolean;
+  description?: ReactNode;
+  /** Show the full option list on focus/click (for small curated lists), not only while typing. */
+  openOnFocus?: boolean;
 }) {
   const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
   const [creating, setCreating] = useState(false);
@@ -54,10 +63,15 @@ export function CreatableSelect({
   }, [selectedLabel]);
 
   const query = search.trim();
+  const q = query.toLowerCase();
+  // Suggestions: filtered by the typed text (name + description). With `openOnFocus`, the full list
+  // shows on focus (small curated lists); otherwise nothing until the user types (large lists).
   const filtered = query
-    ? all.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()))
-    : all;
-  const exactMatch = all.some((o) => o.label.toLowerCase() === query.toLowerCase());
+    ? all.filter((o) => o.label.toLowerCase().includes(q) || (o.description ?? '').toLowerCase().includes(q))
+    : openOnFocus
+      ? all
+      : [];
+  const exactMatch = all.some((o) => o.label.toLowerCase() === q);
 
   async function handleCreate() {
     setCreating(true);
@@ -75,7 +89,12 @@ export function CreatableSelect({
 
   const optionNodes = filtered.map((o) => (
     <Combobox.Option value={o.value} key={o.value}>
-      {o.label}
+      <Text size="sm">{o.label}</Text>
+      {o.description ? (
+        <Text size="xs" c="dimmed">
+          {o.description}
+        </Text>
+      ) : null}
     </Combobox.Option>
   ));
 
@@ -97,11 +116,13 @@ export function CreatableSelect({
         <InputBase
           label={label}
           placeholder={placeholder}
+          description={description}
           value={search}
+          disabled={disabled}
           rightSection={
             creating ? (
               <Loader size="xs" />
-            ) : value ? (
+            ) : value && !disabled ? (
               <CloseButton
                 size="sm"
                 onMouseDown={(e) => e.preventDefault()}
@@ -115,14 +136,26 @@ export function CreatableSelect({
               <Combobox.Chevron />
             )
           }
-          rightSectionPointerEvents={value && !creating ? 'all' : 'none'}
+          rightSectionPointerEvents={value && !creating && !disabled ? 'all' : 'none'}
           onChange={(e) => {
-            combobox.openDropdown();
-            combobox.updateSelectedOptionIndex();
-            setSearch(e.currentTarget.value);
+            if (disabled) return;
+            const v = e.currentTarget.value;
+            setSearch(v);
+            // Reveal suggestions once there's typed text (or always, with openOnFocus).
+            if (v.trim() || openOnFocus) {
+              combobox.openDropdown();
+              combobox.updateSelectedOptionIndex();
+            } else {
+              combobox.closeDropdown();
+            }
           }}
-          onClick={() => combobox.openDropdown()}
-          onFocus={() => combobox.openDropdown()}
+          // Focus clears the field so the user types to search; with openOnFocus, also show the list.
+          onFocus={() => {
+            if (disabled) return;
+            setSearch('');
+            if (openOnFocus) combobox.openDropdown();
+          }}
+          onClick={() => openOnFocus && !disabled && combobox.openDropdown()}
           onBlur={() => {
             combobox.closeDropdown();
             setSearch(selectedLabel);
