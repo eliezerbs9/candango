@@ -11,7 +11,7 @@ const TENANT_MODELS = new Set<string>([
   'CustomFieldDefinition', 'QuickBooksConnection', 'QuickBooksCustomerLink',
   'DealEstimate', 'DealInvoice', 'EstimateItem', 'EmailTemplate', 'EmailAutomation', 'AutomationRun',
   'ProposalTemplate', 'Proposal', 'SignatureRequest', 'SignatureTemplate', 'SignableDocumentTemplate',
-  'DealEvent',
+  'DealEvent', 'CompanyCamConnection', 'CompanyCamProjectLink',
 ]);
 
 /**

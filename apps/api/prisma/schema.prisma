@@ -67,6 +67,8 @@ model Organization {
   customFieldDefinitions CustomFieldDefinition[]
   quickbooksConnection QuickBooksConnection?
   quickbooksCustomerLinks QuickBooksCustomerLink[]
+  companyCamConnection CompanyCamConnection?
+  companyCamProjectLinks CompanyCamProjectLink[]
   dealEstimates  DealEstimate[]
   dealInvoices   DealInvoice[]
   proposalTemplates ProposalTemplate[]
@@ -249,6 +251,7 @@ model Deal {
   invoices     DealInvoice[]
   proposals    Proposal[]
   signatureRequests SignatureRequest[]
+  companyCamProject CompanyCamProjectLink?
 
   @@unique([orgId, refNumber])
   @@index([orgId, stageId])
@@ -703,6 +706,44 @@ model QuickBooksConnection {
   updatedAt    DateTime @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// CompanyCam Integration (optional, per-tenant — system never depends on it)
+// ---------------------------------------------------------------------------
+
+model CompanyCamConnection {
+  id           String   @id @default(cuid())
+  orgId        String   @unique
+  accessToken  String   // encrypted at rest
+  refreshToken String   // encrypted at rest
+  // CompanyCam access tokens live ~2h and the refresh token ROTATES on every refresh, so both are
+  // rewritten on each renewal and refresh-on-use is mandatory (not just the daily keep-alive).
+  tokenExpiry  DateTime?
+  lastRefreshAt DateTime?
+  lastError    String?
+  status       String   @default("connected") // connected | reauth_required | disconnected
+  connectedBy  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
+}
+
+// Links a deal to the CompanyCam project that documents it (one project per deal).
+model CompanyCamProjectLink {
+  id          String   @id @default(cuid())
+  orgId       String
+  dealId      String   @unique
+  projectId   String   // CompanyCam project id
+  projectName String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  deal         Deal         @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
 }
 
 // Links a client (Company or Person) to its QBO parent Customer.

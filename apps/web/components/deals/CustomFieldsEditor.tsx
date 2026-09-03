@@ -52,6 +52,8 @@ import { usePersonCreate } from '@/components/contacts/PersonCreateModal';
 import type { CustomFieldDef } from '@/lib/api/customFields';
 
 const IMAGE_MAX = 10 * 1024 * 1024;
+/** Human-readable size for the "optimized" notice. */
+const mb = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 const DOC_MAX = 25 * 1024 * 1024;
 const DOC_ACCEPT = '.pdf,.doc,.docx,.txt,.rtf,.xls,.xlsx,.csv,.ppt,.pptx,application/pdf';
 const PREVIEW_COUNT = 5;
@@ -228,8 +230,12 @@ function ImageField({
 
   const add = async (files: File[]) => {
     const keys: string[] = [];
+    let before = 0;
+    let after = 0;
     for (const raw of files) {
-      // Shrink big photos before upload to save storage; falls back to the original on failure.
+      // Compress up front so the 10 MB cap is checked against what actually gets stored — a 12 MB
+      // photo that shrinks to 800 KB should be accepted. `uploadFile` compresses too, but this file
+      // is already marked as handled, so it isn't re-encoded.
       const file = await compressImage(raw);
       if (file.size > IMAGE_MAX) {
         notifications.show({ message: `${raw.name} is larger than 10 MB`, color: 'red' });
@@ -237,11 +243,17 @@ function ImageField({
       }
       try {
         keys.push(await upload.mutateAsync({ entity, file }));
+        before += raw.size;
+        after += file.size;
       } catch {
         notifications.show({ message: `Could not upload ${raw.name}`, color: 'red' });
       }
     }
     if (keys.length) apply([...value, ...keys]);
+    // Only worth saying when the saving is real; silent for small files.
+    if (before - after > 1024 * 1024) {
+      notifications.show({ message: `Photos optimized — ${mb(before)} → ${mb(after)}`, color: 'green' });
+    }
   };
   const remove = (i: number) => apply(value.filter((_, idx) => idx !== i));
 

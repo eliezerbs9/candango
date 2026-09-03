@@ -1,6 +1,12 @@
 import { apiFetch } from './client';
 
-export type AutomationAction = 'send_email' | 'create_activity' | 'request_signature' | 'move_stage' | 'add_tag';
+export type AutomationAction =
+  | 'send_email'
+  | 'create_activity'
+  | 'request_signature'
+  | 'move_stage'
+  | 'add_tag'
+  | 'create_companycam_project';
 
 export type AutomationKind = 'deal' | 'marketing';
 

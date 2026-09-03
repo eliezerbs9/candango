@@ -19,6 +19,7 @@ import {
   useCustomFields,
   useDeal,
   useLoseDeal,
+  useCompanyCamStatus,
   useQuickbooksStatus,
   useReopenDeal,
   useUpdateDeal,
@@ -37,6 +38,7 @@ export default function DealLayout({ children }: { children: ReactNode }) {
   const { data: stages = [] } = useAllStages();
   const { data: dealFields = [] } = useCustomFields('deal');
   const { data: qb } = useQuickbooksStatus();
+  const { data: cc } = useCompanyCamStatus();
   const { data: winCheck } = useWinCheck(id);
   const update = useUpdateDeal();
   const win = useWinDeal();
@@ -237,6 +239,8 @@ export default function DealLayout({ children }: { children: ReactNode }) {
           {tabLink('proposals', 'Proposals', `/deals/${id}/proposals`)}
           {tabLink('signatures', 'Signatures', `/deals/${id}/signatures`)}
           {tabLink('estimates', qb?.connected ? 'Estimates & invoices' : 'Estimates', `/deals/${id}/estimates`)}
+          {/* Only worth a tab once the workspace actually uses CompanyCam. */}
+          {cc?.connected && tabLink('photos', 'Photos', `/deals/${id}/photos`)}
         </Tabs.List>
       </Tabs>
 

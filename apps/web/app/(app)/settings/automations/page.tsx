@@ -44,6 +44,7 @@ import {
   useAutomationSeedStatus,
   useSeedAutomations,
   useEmailTemplates,
+  useCompanyCamStatus,
   useGoogleStatus,
   useOrganization,
   useProposalTemplates,
@@ -53,6 +54,7 @@ import {
   useUpdateMarketingAutomation,
 } from '@/lib/api/hooks';
 import type {
+  AutomationAction,
   AutomationKind,
   AutomationTrigger,
   EmailAutomation,
@@ -129,6 +131,7 @@ export default function AutomationsSettingsPage() {
   // Human-readable "then …" clause describing the action + its config.
   const actionText = (a: EmailAutomation) => {
     const c = a.config;
+    if (a.action === 'create_companycam_project') return <>create a CompanyCam project for the deal</>;
     if (a.action === 'create_activity') {
       const type = (c.activityType as string) || 'task';
       const kind = type === 'call' ? 'Call' : type === 'meeting' ? 'Meeting' : null; // a plain task = a generic activity
@@ -447,6 +450,7 @@ function AutomationModal({
   const marketingTemplates = useMemo(() => templates.filter((t) => t.scope === 'marketing'), [templates]);
   const { data: stages = [] } = useAllStages();
   const { data: google } = useGoogleStatus();
+  const { data: companyCam } = useCompanyCamStatus();
   const { data: org } = useOrganization();
   const { data: allVariables = [] } = useTemplateVariables();
   // Deal-scoped variables for the activity-subject field (contact / company / deal / sender / workspace).
@@ -457,7 +461,7 @@ function AutomationModal({
 
   const [name, setName] = useState('');
   const [tags, setTags] = useState<string[]>([]);
-  const [action, setAction] = useState<'send_email' | 'create_activity' | 'request_signature' | 'move_stage' | 'add_tag'>('send_email');
+  const [action, setAction] = useState<AutomationAction>('send_email');
   const { data: signableDocs = [] } = useSignableDocuments();
   const { data: proposalTemplates = [] } = useProposalTemplates();
   // Union of `signature_template` internal fields across proposal templates (for the "from a proposal field" source).
@@ -651,6 +655,7 @@ function AutomationModal({
                 { value: 'request_signature', label: 'Request a signature' },
                 { value: 'move_stage', label: 'Move the deal to a stage' },
                 { value: 'add_tag', label: 'Tag the contact' },
+                ...(companyCam?.connected ? [{ value: 'create_companycam_project', label: 'Create a CompanyCam project' }] : []),
               ]}
               value={action}
               onChange={(v) => setAction((v as typeof action) ?? 'send_email')}

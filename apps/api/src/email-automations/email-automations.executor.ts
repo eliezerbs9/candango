@@ -4,6 +4,7 @@ import { MessagesService } from '../messages/messages.service';
 import { MailService } from '../mail/mail.service';
 import { SignaturesService } from '../signatures/signatures.service';
 import { DealEventsService } from '../deal-events/deal-events.service';
+import { CompanyCamApiService } from '../integrations/companycam-api.service';
 import {
   buildSignatureValues,
   buildTemplateContext,
@@ -55,6 +56,13 @@ const escapeText = (s: string) =>
  * owner's mailbox, with the workspace signature) or creating an activity/task on the deal. Shared
  * by the event-driven runner and the time-based scan. Every call is best-effort and self-contained.
  */
+/** Flatten the deal's job-site address JSON into the single line CompanyCam expects. */
+function companyCamAddress(shipTo: unknown): string | null {
+  const a = (shipTo ?? {}) as Record<string, string>;
+  const line = [a.line1, a.line2, a.city, a.state, a.postalCode].filter(Boolean).join(', ');
+  return line || null;
+}
+
 @Injectable()
 export class EmailAutomationsExecutor {
   private readonly logger = new Logger(EmailAutomationsExecutor.name);
@@ -65,6 +73,7 @@ export class EmailAutomationsExecutor {
     private readonly mail: MailService,
     private readonly signatures: SignaturesService,
     private readonly dealEvents: DealEventsService,
+    private readonly companyCam: CompanyCamApiService,
   ) {}
 
   async fireForDeal(orgId: string, dealId: string, auto: AutomationRow, proposalId?: string): Promise<void> {
@@ -76,6 +85,7 @@ export class EmailAutomationsExecutor {
         currency: true,
         ownerUserId: true,
         primaryPersonId: true,
+        shipTo: true, // job-site address — used when creating a CompanyCam project
         primaryPerson: { select: { firstName: true, lastName: true, name: true, emails: true, phones: true } },
         company: { select: { name: true } },
       },
@@ -137,6 +147,31 @@ export class EmailAutomationsExecutor {
         this.logger.log(`automation ${auto.id} moved deal ${dealId} to stage ${stageId}`);
         const stage = await this.prisma.stage.findFirst({ where: { id: stageId, orgId }, select: { name: true } });
         await this.dealEvents.log(orgId, dealId, { kind: 'automation', title: `Moved to stage ${stage?.name ?? ''}`.trim(), actor: byAuto });
+      }
+      return;
+    }
+
+    if (auto.action === 'create_companycam_project') {
+      // Skipped (not failed) when CompanyCam isn't connected or the deal already has a project —
+      // an automation must never break the event that triggered it.
+      const linked = await this.prisma.companyCamProjectLink.findFirst({ where: { orgId, dealId } });
+      if (linked) return;
+      try {
+        const project = await this.companyCam.createProject(orgId, {
+          name: deal.title,
+          address: companyCamAddress(deal.shipTo),
+        });
+        await this.prisma.companyCamProjectLink.create({
+          data: { orgId, dealId, projectId: project.id, projectName: project.name },
+        });
+        await this.dealEvents.log(orgId, dealId, {
+          kind: 'automation',
+          title: 'Created a CompanyCam project',
+          body: project.name,
+          actor: byAuto,
+        });
+      } catch (e) {
+        this.logger.warn(`automation ${auto.id} create_companycam_project failed: ${e instanceof Error ? e.message : e}`);
       }
       return;
     }

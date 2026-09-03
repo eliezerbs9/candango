@@ -7,6 +7,7 @@ import { EmailProcessor } from './email.processor';
 import { CalendarSyncProcessor } from './calendar-sync.processor';
 import { GmailSyncProcessor } from './gmail-sync.processor';
 import { QboRefreshProcessor } from './qbo-refresh.processor';
+import { CompanyCamRefreshProcessor } from './companycam-refresh.processor';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { QboRefreshProcessor } from './qbo-refresh.processor';
     BullModule.registerQueue({ name: 'calendar-sync' }),
     BullModule.registerQueue({ name: 'gmail-sync' }),
     BullModule.registerQueue({ name: 'qbo-refresh' }),
+    BullModule.registerQueue({ name: 'companycam-refresh' }),
   ],
   providers: [
     PrismaService,
@@ -40,6 +42,7 @@ import { QboRefreshProcessor } from './qbo-refresh.processor';
     CalendarSyncProcessor,
     GmailSyncProcessor,
     QboRefreshProcessor,
+    CompanyCamRefreshProcessor,
   ],
 })
 export class WorkerModule {}

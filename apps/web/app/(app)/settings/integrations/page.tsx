@@ -4,11 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Badge, Button, Card, Group, Modal, SimpleGrid, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconBrandGoogle, IconInfoCircle, IconReceipt } from '@tabler/icons-react';
+import { IconBrandGoogle, IconCamera, IconInfoCircle, IconReceipt } from '@tabler/icons-react';
 import { ApiError } from '@/lib/api/client';
 import {
+  useCompanyCamStatus,
+  useConnectCompanyCam,
   useConnectGoogle,
   useConnectQuickbooks,
+  useDisconnectCompanyCam,
   useDisconnectGoogle,
   useDisconnectQuickbooks,
   useGoogleStatus,
@@ -170,6 +173,55 @@ function QuickbooksCard() {
   );
 }
 
+function CompanyCamCard() {
+  const { data: status, isLoading } = useCompanyCamStatus();
+  const connect = useConnectCompanyCam();
+  const disconnect = useDisconnectCompanyCam();
+  const connected = !!status?.connected;
+
+  useOAuthResultToast('companycam', 'CompanyCam');
+
+  const onConnect = async () => {
+    try {
+      const { url } = await connect.mutateAsync();
+      window.location.href = url;
+    } catch (e) {
+      notifications.show({ message: e instanceof ApiError ? e.message : 'Could not start', color: 'red' });
+    }
+  };
+
+  return (
+    <Card withBorder radius="md" padding="lg">
+      <Group justify="space-between" mb="xs">
+        <Group gap="sm">
+          <IconCamera size={20} />
+          <Text fw={600}>CompanyCam</Text>
+        </Group>
+        <Badge color={connected ? 'green' : status?.status === 'reauth_required' ? 'orange' : 'gray'} variant="light">
+          {connected ? 'Connected' : status?.status === 'reauth_required' ? 'Reconnect needed' : 'Not connected'}
+        </Badge>
+      </Group>
+      <Text size="sm" c="dimmed" mb="md">
+        See a job&apos;s photos on its deal, and create the CompanyCam project without retyping it.
+      </Text>
+      {/* Nothing to connect to until the deployment has the CompanyCam app credentials. */}
+      {status && !status.configured ? (
+        <Text size="sm" c="dimmed">
+          Not available on this workspace yet.
+        </Text>
+      ) : connected ? (
+        <Button variant="default" loading={disconnect.isPending} onClick={() => disconnect.mutate()}>
+          Disconnect
+        </Button>
+      ) : (
+        <Button loading={connect.isPending || isLoading} onClick={onConnect}>
+          Connect
+        </Button>
+      )}
+    </Card>
+  );
+}
+
 export default function IntegrationsPage() {
   return (
     <Stack>
@@ -183,6 +235,7 @@ export default function IntegrationsPage() {
       <SimpleGrid cols={{ base: 1, sm: 2 }}>
         <GoogleCard />
         <QuickbooksCard />
+        <CompanyCamCard />
       </SimpleGrid>
     </Stack>
   );

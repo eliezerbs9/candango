@@ -174,6 +174,15 @@ import { getBilling, openPortal, startCheckout } from './billing';
 import {
   disconnectGoogle,
   disconnectQuickbooks,
+  createDealCompanyCamProject,
+  disconnectCompanyCam,
+  getCompanyCamConnectUrl,
+  getCompanyCamStatus,
+  getDealCompanyCamLink,
+  getDealCompanyCamPhotos,
+  linkDealCompanyCamProject,
+  searchCompanyCamProjects,
+  unlinkDealCompanyCamProject,
   getGoogleConnectUrl,
   getGoogleStatus,
   getQuickbooksConnectUrl,
@@ -1220,6 +1229,87 @@ export function useDisconnectQuickbooks() {
     mutationFn: () => disconnectQuickbooks(token!),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['integrations', 'quickbooks'] }),
   });
+}
+
+// --- CompanyCam (job-site photos) ---
+
+export function useCompanyCamStatus() {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['integrations', 'companycam'],
+    queryFn: () => getCompanyCamStatus(token!),
+    enabled: !!token,
+  });
+}
+
+export function useConnectCompanyCam() {
+  const token = useToken();
+  return useMutation({ mutationFn: () => getCompanyCamConnectUrl(token!) });
+}
+
+export function useDisconnectCompanyCam() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => disconnectCompanyCam(token!),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['integrations', 'companycam'] }),
+  });
+}
+
+/** Project search for the deal picker (and for spotting a duplicate before creating one). */
+export function useCompanyCamProjectSearch(q: string, enabled: boolean) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['companycam', 'projects', q],
+    queryFn: () => searchCompanyCamProjects(token!, q),
+    enabled: !!token && enabled,
+  });
+}
+
+export function useDealCompanyCamLink(dealId: string) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['companycam', 'deal', dealId],
+    queryFn: () => getDealCompanyCamLink(token!, dealId),
+    enabled: !!token && !!dealId,
+  });
+}
+
+export function useDealCompanyCamPhotos(dealId: string, enabled: boolean) {
+  const token = useToken();
+  return useQuery({
+    queryKey: ['companycam', 'photos', dealId],
+    queryFn: () => getDealCompanyCamPhotos(token!, dealId),
+    enabled: !!token && !!dealId && enabled,
+  });
+}
+
+/** Link / unlink / create all invalidate the deal's link + photos together. */
+function useCompanyCamDealMutation<TVars>(dealId: string, fn: (token: string, vars: TVars) => Promise<unknown>) {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: TVars) => fn(token!, vars),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['companycam', 'deal', dealId] });
+      qc.invalidateQueries({ queryKey: ['companycam', 'photos', dealId] });
+      qc.invalidateQueries({ queryKey: ['deal-events', dealId] });
+    },
+  });
+}
+
+export function useLinkCompanyCamProject(dealId: string) {
+  return useCompanyCamDealMutation<{ projectId: string; projectName?: string }>(dealId, (token, body) =>
+    linkDealCompanyCamProject(token, dealId, body),
+  );
+}
+
+export function useUnlinkCompanyCamProject(dealId: string) {
+  return useCompanyCamDealMutation<void>(dealId, (token) => unlinkDealCompanyCamProject(token, dealId));
+}
+
+export function useCreateCompanyCamProject(dealId: string) {
+  return useCompanyCamDealMutation<void>(dealId, (token) => createDealCompanyCamProject(token, dealId));
 }
 
 // --- Custom fields (admin-defined) ---
