@@ -59,16 +59,29 @@ export class UsersService {
   async invite(orgId: string, dto: InviteUserDto) {
     await this.ensureRole(orgId, dto.roleId);
     const existing = await this.prisma.user.findFirst({ where: { orgId, email: dto.email } });
-    if (existing) throw new ConflictException('A member with this email already exists');
+    // Only a live, ACTIVE member is a real conflict. Any other state — still `invited`, or
+    // `deactivated`, or soft-deleted — is re-invitable, and re-inviting is also how an invite gets
+    // resent. Without this the address is locked out of the workspace forever: `deactivate()` only
+    // flips the status and keeps the row, so "remove the member and invite again" cannot work.
+    if (existing && existing.status === 'active' && !existing.deletedAt) {
+      throw new ConflictException('A member with this email already exists');
+    }
 
     const org = await this.prisma.organization.findFirst({
       where: { id: orgId },
       select: { name: true, onboardingState: true },
     });
-    const user = await this.prisma.user.create({
-      data: { orgId, email: dto.email, name: dto.name ?? null, roleId: dto.roleId ?? null, status: 'invited' },
-      include: { role: true },
-    });
+    // Re-inviting keeps whatever the row already had unless this call overrides it, so resending an
+    // invite never silently blanks a name or drops a role.
+    const fields = {
+      name: dto.name ?? existing?.name ?? null,
+      roleId: dto.roleId ?? existing?.roleId ?? null,
+      status: 'invited',
+      deletedAt: null,
+    };
+    const user = existing
+      ? await this.prisma.user.update({ where: { id: existing.id }, data: fields, include: { role: true } })
+      : await this.prisma.user.create({ data: { orgId, email: dto.email, ...fields }, include: { role: true } });
 
     // Only email the invite once onboarding is complete — invites created during onboarding are
     // dispatched together when the owner finishes setup (see sendPendingInvites / onboarding.completed).

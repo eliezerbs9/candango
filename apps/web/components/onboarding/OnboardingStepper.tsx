@@ -201,7 +201,15 @@ export function OnboardingStepper() {
 
   return (
     <>
-      <Stepper active={active} onStepClick={goTo} orientation={isMobile ? 'vertical' : 'horizontal'}>
+      {/* wrap={false}: six steps overflow the md container and Mantine would break them onto a
+          second row with a stretched connector. Keep one row and let the steps compress. */}
+      <Stepper
+        active={active}
+        onStepClick={goTo}
+        orientation={isMobile ? 'vertical' : 'horizontal'}
+        wrap={false}
+        size="sm"
+      >
         {/* 1 — Workspace */}
         <Stepper.Step label="Workspace" description="Name & timezone">
           <Stack mt="md" gap="sm">
@@ -313,6 +321,11 @@ export function OnboardingStepper() {
                 </ThemeIcon>
                 <Title order={5}>Connect Google to unlock the full app</Title>
               </Group>
+              <Text size="sm">
+                <b>Signing in with Google isn&apos;t this.</b> That only confirmed who you are. This is a separate
+                permission that lets Candango send email from your address and manage your calendar for you — so it
+                has to be granted once, here.
+              </Text>
               <Text size="sm">
                 Candango is best with <b>both Google and QuickBooks</b>. Google powers your email &amp; calendar —{' '}
                 <b>without it, email features are unavailable</b>, so you won&apos;t be able to:
