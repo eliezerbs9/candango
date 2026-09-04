@@ -44,9 +44,11 @@ export function LoginForm() {
       notifications.show({
         color: 'red',
         message:
-          error === 'google'
-            ? "Google sign-in failed — no account for that email. Sign up first, or check it's verified."
-            : 'Sign-in failed.',
+          error === 'google_exists'
+            ? 'That email already has a Candango account — sign in instead of signing up.'
+            : error === 'google'
+              ? "Google sign-in failed — no account for that email. Sign up first, or check it's verified."
+              : 'Sign-in failed.',
       });
       router.replace('/login');
     } else if (token) {

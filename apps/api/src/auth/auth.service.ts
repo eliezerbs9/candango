@@ -38,8 +38,12 @@ export class AuthService {
    * email/password and Google sign-up paths.
    */
   private async assertEmailAvailable(email: string) {
+    // `deactivated` must not count as an existing account — it is exactly what the Google sign-in
+    // lookup already ignores (see GoogleAuthService.handleCallback). When the two disagreed, a
+    // deactivated member was locked out of both paths: sign-in said "no account", signup said
+    // "already registered". Removing someone from a workspace can't cost them their own signup.
     const existing = await this.prisma.user.findFirst({
-      where: { email, deletedAt: null },
+      where: { email, deletedAt: null, status: { not: 'deactivated' } },
       select: { id: true },
     });
     if (existing) {

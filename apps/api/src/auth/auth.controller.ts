@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, ConflictException, Controller, Get, HttpCode, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
@@ -60,8 +60,11 @@ export class AuthController {
         return res.redirect(`${redirect}${sep}token=${encodeURIComponent(token)}`);
       }
       return res.redirect(`${appUrl}/login?token=${encodeURIComponent(token)}`);
-    } catch {
-      return res.redirect(`${appUrl}/login?error=google`);
+    } catch (e) {
+      // Don't collapse every failure into one code: a ConflictException means the email *does* have
+      // an account, and reporting "no account for that email" sent us hunting in the wrong direction.
+      const code = e instanceof ConflictException ? 'google_exists' : 'google';
+      return res.redirect(`${appUrl}/login?error=${code}`);
     }
   }
 
